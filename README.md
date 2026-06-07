@@ -1,59 +1,98 @@
-# Worker + D1 Database
+# Jarvis — a voice assistant for Meta AI glasses
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/templates/tree/main/d1-template)
+A Cloudflare Worker that gives your Meta (Ray-Ban) AI glasses a J.A.R.V.I.S.-style
+voice assistant: dry-witted, concise, and built for speech. It answers with
+[Claude](https://www.anthropic.com/) and remembers your conversation in
+[D1](https://developers.cloudflare.com/d1/).
 
-![Worker + D1 Template Preview](https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/cb7cb0a9-6102-4822-633c-b76b7bb25900/public)
+The glasses are a closed platform — there's no SDK to install a custom assistant —
+so Jarvis reaches them through a channel they already speak: **WhatsApp**. You
+talk, the glasses transcribe and send, this Worker answers in character, and the
+glasses read the reply back to you. A channel-agnostic JSON endpoint is included
+too, so you can wire Jarvis to any other speech bridge.
 
-<!-- dash-content-start -->
-
-D1 is Cloudflare's native serverless SQL database ([docs](https://developers.cloudflare.com/d1/)). This project demonstrates using a Worker with a D1 binding to execute a SQL statement. A simple frontend displays the result of this query:
-
-```SQL
-SELECT * FROM comments LIMIT 3;
-```
-
-The D1 database is initialized with a `comments` table and this data:
-
-```SQL
-INSERT INTO comments (author, content)
-VALUES
-    ('Kristian', 'Congrats!'),
-    ('Serena', 'Great job!'),
-    ('Max', 'Keep up the good work!')
-;
-```
-
-> [!IMPORTANT]
-> When using C3 to create this project, select "no" when it asks if you want to deploy. You need to follow this project's [setup steps](https://github.com/cloudflare/templates/tree/main/d1-template#setup-steps) before deploying.
-
-<!-- dash-content-end -->
-
-## Getting Started
-
-Outside of this repo, you can start a new project with this template using [C3](https://developers.cloudflare.com/pages/get-started/c3/) (the `create-cloudflare` CLI):
+## How it works
 
 ```
-npm create cloudflare@latest -- --template=cloudflare/templates/d1-template
+You speak ─▶ Meta glasses ─▶ WhatsApp Cloud API ─▶  POST /whatsapp  (this Worker)
+                                                          │
+   glasses read reply ◀─ WhatsApp ◀─ Graph API ◀─ Claude (Jarvis persona) + D1 memory
 ```
 
-A live public deployment of this template is available at [https://d1-template.templates.workers.dev](https://d1-template.templates.workers.dev)
+## Endpoints
 
-## Setup Steps
+| Method | Path        | Purpose                                                            |
+| ------ | ----------- | ----------------------------------------------------------------- |
+| `GET`  | `/`         | Status / setup page — shows what's configured.                    |
+| `POST` | `/jarvis`   | Channel-agnostic voice endpoint. `{ text, sessionId? } → { reply }`. |
+| `GET`  | `/whatsapp` | WhatsApp webhook verification handshake.                          |
+| `POST` | `/whatsapp` | WhatsApp inbound messages (the glasses bridge).                   |
 
-1. Install the project dependencies with a package manager of your choice:
+### The JSON endpoint
+
+```bash
+curl -X POST "$WORKER_URL/jarvis" \
+  -H 'content-type: application/json' \
+  -d '{ "text": "what should I focus on this morning?", "sessionId": "me" }'
+# → { "reply": "...", "sessionId": "me" }
+```
+
+Pass a stable `sessionId` per wearer/device to give Jarvis memory across turns.
+Say "Jarvis, start over" to wipe a session's history.
+
+## Setup
+
+1. **Install & initialise the database**
    ```bash
    npm install
+   npx wrangler d1 migrations apply DB --remote   # creates the jarvis_turns table
    ```
-2. Create a [D1 database](https://developers.cloudflare.com/d1/get-started/) with the name "d1-template-database":
-   ```bash
-   npx wrangler d1 create d1-template-database
-   ```
-   ...and update the `database_id` field in `wrangler.json` with the new database ID.
-3. Run the following db migration to initialize the database (notice the `migrations` directory in this project):
-   ```bash
-   npx wrangler d1 migrations apply --remote d1-template-database
-   ```
-4. Deploy the project!
+
+2. **Choose a brain**
+   - **Claude (recommended):** `npx wrangler secret put ANTHROPIC_API_KEY`
+   - **Or Workers AI fallback:** leave the key unset — the bound `AI` resource
+     (Llama) answers automatically. Lower quality, no external key.
+
+3. **Deploy**
    ```bash
    npx wrangler deploy
    ```
+
+4. **Connect the glasses via WhatsApp** (optional but this is the magic part)
+   - Set up a [WhatsApp Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api/get-started)
+     number and point its webhook at `https://<your-worker>/whatsapp`.
+   - Configure these secrets/vars:
+     ```bash
+     npx wrangler secret put WHATSAPP_TOKEN          # permanent Cloud API token
+     npx wrangler secret put WHATSAPP_APP_SECRET     # verifies webhook signatures
+     # set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_VERIFY_TOKEN as vars or secrets
+     ```
+   - On your phone, save the Cloud API number as a contact named **Jarvis**, then:
+     *"Hey Meta, send a message to Jarvis — what's the weather looking like?"*
+
+## Configuration
+
+| Variable                   | Required | Description                                                  |
+| -------------------------- | -------- | ------------------------------------------------------------ |
+| `ANTHROPIC_API_KEY`        | one of   | Anthropic API key — Jarvis answers with Claude.              |
+| `AI` binding               | these    | Workers AI fallback (already bound) when no key is set.      |
+| `JARVIS_MODEL`             | no       | Claude model id. Defaults to `claude-opus-4-8`.              |
+| `JARVIS_NAME`              | no       | What the assistant calls itself. Defaults to `Jarvis`.       |
+| `JARVIS_USER_TITLE`        | no       | How it addresses you. Defaults to `sir`; set `""` for none.  |
+| `WHATSAPP_TOKEN`           | WhatsApp | Cloud API access token (secret).                             |
+| `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp | The number replies are sent from.                            |
+| `WHATSAPP_VERIFY_TOKEN`    | WhatsApp | Your chosen webhook verification token.                      |
+| `WHATSAPP_APP_SECRET`      | WhatsApp | App secret used to verify `X-Hub-Signature-256` (secret).    |
+
+## Local development
+
+```bash
+npm run dev        # seeds local D1 and starts wrangler dev
+```
+
+## Notes
+
+- Replies are tuned for **speech** — short, plain sentences, no markdown — because
+  they get read aloud. Thinking is disabled for snappy responses.
+- WhatsApp webhooks are HMAC-verified when `WHATSAPP_APP_SECRET` is set. Set it
+  before going live.

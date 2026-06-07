@@ -1,6 +1,6 @@
 {
 	"name": "wolf-ridge-capitol-api",
-	"description": "Cloudflare's native serverless SQL database.",
+	"description": "Jarvis — a J.A.R.V.I.S.-style voice assistant backend for Meta AI glasses, on Cloudflare Workers + D1.",
 	"cloudflare": {
 		"label": "Worker + D1 Database",
 		"products": [
@@ -27,5 +27,8 @@
 		"dev": "pnpm seedLocalD1 && wrangler dev",
 		"predeploy": "wrangler d1 migrations apply DB --remote",
 		"seedLocalD1": "wrangler d1 migrations apply DB --local"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "^0.102.0"
 	}
 }
