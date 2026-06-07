@@ -11,6 +11,11 @@ talk, the glasses transcribe and send, this Worker answers in character, and the
 glasses read the reply back to you. A channel-agnostic JSON endpoint is included
 too, so you can wire Jarvis to any other speech bridge.
 
+> **Want to use Jarvis on your Mac instead of the glasses?** There's a voice
+> client in [`mac/`](./mac) — talk to Jarvis out loud on macOS (local Whisper for
+> speech-to-text, the built-in `say` voice for replies). It uses the same brain,
+> so persona and memory are shared. See [`mac/README.md`](./mac/README.md).
+
 ## How it works
 
 ```

@@ -1,0 +1,8 @@
+# Core dependencies for the Mac voice client.
+# sounddevice ships PortAudio in its macOS wheel, so no `brew install` is needed.
+sounddevice>=0.4.6
+numpy>=1.24
+faster-whisper>=1.0.0
+
+# Only needed for `--direct` mode (talking to Claude without the Worker):
+#   pip install anthropic
