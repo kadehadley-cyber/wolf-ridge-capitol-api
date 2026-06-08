@@ -10,9 +10,10 @@ Two ways to point it at a brain:
   * Worker (default) — run `npm run dev` in the repo root, which serves the
     Worker (and Claude + D1 memory) at http://localhost:8787. No deploy needed.
     Or set JARVIS_URL to your deployed Worker's /jarvis endpoint.
-  * Direct (--direct) — skip the Worker and call Claude straight from here with
-    ANTHROPIC_API_KEY. Handy if you don't want to run the Worker, but you lose
-    the shared persistent memory.
+  * Direct (--direct) — skip the Worker entirely and call Claude straight from
+    here with ANTHROPIC_API_KEY. Fully standalone; conversation memory is kept
+    on disk at ~/.jarvis so Jarvis remembers across launches. This is what the
+    double-click Mac app (mac/install.sh) uses.
 
 Usage:
     python3 jarvis_mac.py                 # push-to-talk against the local Worker
@@ -29,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import urllib.error
@@ -43,6 +45,29 @@ DEFAULT_MODEL = os.environ.get("WHISPER_MODEL", "base.en")
 DEFAULT_URL = os.environ.get("JARVIS_URL", "http://localhost:8787/jarvis")
 DEFAULT_SESSION = os.environ.get("JARVIS_SESSION", "mac")
 DEFAULT_CLAUDE_MODEL = os.environ.get("JARVIS_MODEL", "claude-opus-4-8")
+
+# Where standalone mode keeps its state (memory + saved API key), so Jarvis
+# remembers you across launches and the double-click app works without a shell
+# environment.
+STATE_DIR = pathlib.Path.home() / ".jarvis"
+
+
+def memory_path(session: str) -> pathlib.Path:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in session)
+    return STATE_DIR / f"history-{safe or 'default'}.json"
+
+
+def ensure_api_key():
+    """A GUI-launched app doesn't inherit your shell env, so fall back to a key
+    saved at ~/.jarvis/anthropic_api_key (written by install.sh)."""
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return
+    key_file = STATE_DIR / "anthropic_api_key"
+    if key_file.exists():
+        key = key_file.read_text().strip()
+        if key:
+            os.environ["ANTHROPIC_API_KEY"] = key
 
 
 # --------------------------------------------------------------------------- #
@@ -218,9 +243,11 @@ SYSTEM_PROMPT = (
 
 
 class DirectBrain:
-    """Calls Claude directly via the Anthropic Python SDK."""
+    """Calls Claude directly via the Anthropic Python SDK, with memory persisted
+    to disk so Jarvis remembers across launches (this is the standalone brain —
+    no Worker required)."""
 
-    def __init__(self, model: str):
+    def __init__(self, model: str, session: str = DEFAULT_SESSION, persist: bool = True):
         try:
             import anthropic
         except ImportError:
@@ -229,20 +256,42 @@ class DirectBrain:
                 "    pip install anthropic\n"
                 "and the ANTHROPIC_API_KEY environment variable set."
             )
+        ensure_api_key()
         if not os.environ.get("ANTHROPIC_API_KEY"):
-            sys.exit("Set ANTHROPIC_API_KEY to use --direct mode.")
+            sys.exit(
+                "No Anthropic API key. Set ANTHROPIC_API_KEY, or run mac/install.sh "
+                "to save one to ~/.jarvis/anthropic_api_key."
+            )
         self._client = anthropic.Anthropic()
         self.model = model
-        self.history: list[dict] = []
+        self._path = memory_path(session) if persist else None
+        self.history: list[dict] = self._load()
+
+    def _load(self) -> list[dict]:
+        if self._path and self._path.exists():
+            try:
+                return json.loads(self._path.read_text())
+            except (ValueError, OSError):
+                return []
+        return []
+
+    def _save(self):
+        if self._path:
+            try:
+                self._path.write_text(json.dumps(self.history))
+            except OSError:
+                pass
 
     def ask(self, text: str) -> str:
-        if text.strip().lower() in {
+        if text.strip().lower().rstrip(".!") in {
             "jarvis, start over",
             "start over",
             "reset",
             "new conversation",
+            "clear memory",
         }:
             self.history.clear()
+            self._save()
             return "Done. Clean slate."
 
         self.history.append({"role": "user", "content": text})
@@ -257,6 +306,7 @@ class DirectBrain:
             block.text for block in response.content if block.type == "text"
         ).strip()
         self.history.append({"role": "assistant", "content": reply})
+        self._save()
         return reply
 
 
@@ -283,7 +333,7 @@ def main():
         return
 
     brain = (
-        DirectBrain(args.claude_model)
+        DirectBrain(args.claude_model, args.session)
         if args.direct
         else WorkerBrain(args.url, args.session)
     )

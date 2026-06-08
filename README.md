@@ -13,8 +13,10 @@ too, so you can wire Jarvis to any other speech bridge.
 
 > **Want to use Jarvis on your Mac instead of the glasses?** There's a voice
 > client in [`mac/`](./mac) — talk to Jarvis out loud on macOS (local Whisper for
-> speech-to-text, the built-in `say` voice for replies). It uses the same brain,
-> so persona and memory are shared. See [`mac/README.md`](./mac/README.md).
+> speech-to-text, the built-in `say` voice for replies). Run `cd mac && ./install.sh`
+> for a standalone double-click **Jarvis.app** that talks straight to Claude (no
+> Worker needed), or pair it with this Worker to share one brain and memory. See
+> [`mac/README.md`](./mac/README.md).
 
 ## How it works
 
