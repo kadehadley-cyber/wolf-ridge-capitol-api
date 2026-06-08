@@ -1,0 +1,9 @@
+# Dependencies for the Mac voice client.
+# sounddevice ships PortAudio in its macOS wheel, so no `brew install` is needed.
+sounddevice>=0.4.6
+numpy>=1.24
+faster-whisper>=1.0.0
+
+# Used by standalone mode (--direct) — the double-click Mac app talks to Claude
+# directly through this. Not needed if you only ever point at the Worker.
+anthropic>=0.40

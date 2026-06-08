@@ -1,29 +1,75 @@
-export function renderHtml(content: string) {
-	return `
-    <!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>D1</title>
-        <link rel="stylesheet" type="text/css" href="https://static.integrations.cloudflare.com/styles.css">
-      </head>
-    
-      <body>
-        <header>
-          <img
-            src="https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/30e0d3f6-6076-40f8-7abb-8a7676f83c00/public"
-          />
-          <h1>🎉 Successfully connected d1-template to D1</h1>
-        </header>
-        <main>
-          <p>Your D1 Database contains the following data:</p>
-          <pre><code><span style="color: #0E838F">&gt; </span>SELECT * FROM comments LIMIT 3;<br>${content}</code></pre>
-          <small class="blue">
-            <a target="_blank" href="https://developers.cloudflare.com/d1/tutorials/build-a-comments-api/">Build a comments API with Workers and D1</a>
-          </small>
-        </main>
-      </body>
-    </html>
-`;
+// Simple status / setup page served at GET /. Shows which pieces are wired up
+// so you can tell at a glance what's left to configure.
+
+export function renderHtml(env: Env): string {
+	const brain = env.ANTHROPIC_API_KEY
+		? "Claude (Anthropic)"
+		: env.AI
+			? "Cloudflare Workers AI (fallback)"
+			: "⚠️ none configured";
+
+	const whatsapp =
+		env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID
+			? "ready"
+			: "not configured";
+
+	const signature = env.WHATSAPP_APP_SECRET
+		? "enforced"
+		: "⚠️ not enforced (set WHATSAPP_APP_SECRET)";
+
+	const name = env.JARVIS_NAME || "Jarvis";
+
+	const row = (label: string, value: string) =>
+		`<tr><td>${label}</td><td>${escapeHtml(value)}</td></tr>`;
+
+	return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtml(name)} · voice assistant</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { font: 16px/1.6 -apple-system, system-ui, sans-serif; max-width: 44rem;
+             margin: 4rem auto; padding: 0 1.25rem; background: #0b0f14; color: #e6edf3; }
+      h1 { font-weight: 650; letter-spacing: -0.02em; }
+      .accent { color: #38bdf8; }
+      table { border-collapse: collapse; width: 100%; margin: 1.5rem 0; }
+      td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #1f2933; }
+      td:first-child { color: #8b98a5; width: 12rem; }
+      code { background: #111821; padding: 0.15rem 0.4rem; border-radius: 4px; }
+      pre { background: #111821; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+      a { color: #38bdf8; }
+    </style>
+  </head>
+  <body>
+    <h1><span class="accent">${escapeHtml(name)}</span> is listening.</h1>
+    <p>A voice-assistant backend for Meta AI glasses, running on a Cloudflare Worker.</p>
+
+    <table>
+      ${row("Brain", brain)}
+      ${row("WhatsApp bridge", whatsapp)}
+      ${row("Webhook signature", signature)}
+    </table>
+
+    <h2>Try the voice endpoint</h2>
+    <pre>curl -X POST "$WORKER_URL/jarvis" \\
+  -H 'content-type: application/json' \\
+  -d '{ "text": "what's on my plate today?", "sessionId": "me" }'</pre>
+
+    <h2>Wire up the glasses (WhatsApp)</h2>
+    <p>Set the WhatsApp Cloud API webhook to <code>POST /whatsapp</code> on this
+       Worker, save a contact named “${escapeHtml(name)}” pointing at your
+       Cloud API number, then tell the glasses:
+       <em>“Hey Meta, send a message to ${escapeHtml(name)} — …”</em></p>
+  </body>
+</html>`;
+}
+
+function escapeHtml(s: string): string {
+	return s
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;");
 }
