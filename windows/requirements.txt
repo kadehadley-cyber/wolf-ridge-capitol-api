@@ -1,0 +1,11 @@
+# Dependencies for the Windows voice client.
+# sounddevice ships PortAudio in its Windows wheel, so there's nothing else to install.
+sounddevice>=0.4.6
+numpy>=1.24
+faster-whisper>=1.0.0
+
+# Used by standalone mode (--direct) — the desktop/Start-menu shortcut talks to
+# Claude directly through this. Not needed if you only point at the Worker.
+anthropic>=0.40
+# Text-to-speech uses the built-in Windows SAPI voices via PowerShell — no pip
+# package required.

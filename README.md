@@ -11,12 +11,14 @@ talk, the glasses transcribe and send, this Worker answers in character, and the
 glasses read the reply back to you. A channel-agnostic JSON endpoint is included
 too, so you can wire Jarvis to any other speech bridge.
 
-> **Want to use Jarvis on your Mac instead of the glasses?** There's a voice
-> client in [`mac/`](./mac) — talk to Jarvis out loud on macOS (local Whisper for
-> speech-to-text, the built-in `say` voice for replies). Run `cd mac && ./install.sh`
-> for a standalone double-click **Jarvis.app** that talks straight to Claude (no
-> Worker needed), or pair it with this Worker to share one brain and memory. See
-> [`mac/README.md`](./mac/README.md).
+> **Want to use Jarvis on your computer instead of the glasses?** There are
+> desktop voice clients that talk to Jarvis out loud (local Whisper for
+> speech-to-text, a built-in system voice for replies). Each can run standalone
+> straight to Claude, or paired with this Worker to share one brain and memory:
+> - **macOS** — [`mac/`](./mac): `cd mac && ./install.sh` builds a double-click
+>   **Jarvis.app**. See [`mac/README.md`](./mac/README.md).
+> - **Windows** — [`windows/`](./windows): `powershell -ExecutionPolicy Bypass -File .\install.ps1`
+>   sets up a **Jarvis** Desktop shortcut. See [`windows/README.md`](./windows/README.md).
 
 ## How it works
 
