@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """
-Jarvis — a voice assistant you talk to on your Mac.
+Jarvis — a voice assistant you talk to on Windows.
 
 The loop: microphone -> speech-to-text (local Whisper) -> the Jarvis "brain"
--> spoken reply (macOS `say`). The brain lives in the Cloudflare Worker in this
-repo, so persona and conversation memory are shared with the glasses build.
+-> spoken reply (Windows SAPI voices). The brain is either the Cloudflare Worker
+in this repo (shared persona + D1 memory) or Claude directly.
 
 Two ways to point it at a brain:
+  * Direct (--direct) — skip the Worker and call Claude straight from here with
+    ANTHROPIC_API_KEY. Fully standalone; conversation memory is kept on disk at
+    %USERPROFILE%\\.jarvis so Jarvis remembers across launches. This is what the
+    Start-menu / desktop shortcut (install.ps1) uses.
   * Worker (default) — run `npm run dev` in the repo root, which serves the
     Worker (and Claude + D1 memory) at http://localhost:8787. No deploy needed.
     Or set JARVIS_URL to your deployed Worker's /jarvis endpoint.
-  * Direct (--direct) — skip the Worker entirely and call Claude straight from
-    here with ANTHROPIC_API_KEY. Fully standalone; conversation memory is kept
-    on disk at ~/.jarvis so Jarvis remembers across launches. This is what the
-    double-click Mac app (mac/install.sh) uses.
 
 Usage:
-    python3 jarvis_mac.py                 # push-to-talk against the local Worker
-    python3 jarvis_mac.py --auto          # hands-free: stops on silence
-    python3 jarvis_mac.py --direct        # talk straight to Claude
-    python3 jarvis_mac.py --text "hello"  # type instead of speak (no mic)
-    python3 jarvis_mac.py --list-voices   # list installed macOS voices
+    python jarvis_win.py                 # push-to-talk against the local Worker
+    python jarvis_win.py --direct        # talk straight to Claude (standalone)
+    python jarvis_win.py --auto          # hands-free: stops on silence
+    python jarvis_win.py --text "hello"  # type instead of speak (no mic)
+    python jarvis_win.py --list-voices   # list installed Windows voices
 
 Press Ctrl-C any time to quit. Say "Jarvis, start over" to wipe the memory.
 """
@@ -37,19 +37,20 @@ import sys
 import urllib.error
 import urllib.request
 
+import pc_control
+
 SAMPLE_RATE = 16_000  # what Whisper expects
 
-# A British male voice is the most J.A.R.V.I.S.-like default; we fall back to the
-# system default voice if it isn't installed.
-DEFAULT_VOICE = os.environ.get("JARVIS_VOICE", "Daniel")
+# "Microsoft David" is the stock male English voice on Windows — the most
+# J.A.R.V.I.S.-like default. We fall back to the system default if it's missing.
+DEFAULT_VOICE = os.environ.get("JARVIS_VOICE", "Microsoft David Desktop")
 DEFAULT_MODEL = os.environ.get("WHISPER_MODEL", "base.en")
 DEFAULT_URL = os.environ.get("JARVIS_URL", "http://localhost:8787/jarvis")
-DEFAULT_SESSION = os.environ.get("JARVIS_SESSION", "mac")
+DEFAULT_SESSION = os.environ.get("JARVIS_SESSION", "windows")
 DEFAULT_CLAUDE_MODEL = os.environ.get("JARVIS_MODEL", "claude-opus-4-8")
 
 # Where standalone mode keeps its state (memory + saved API key), so Jarvis
-# remembers you across launches and the double-click app works without a shell
-# environment.
+# remembers you across launches and the shortcut works without a shell env.
 STATE_DIR = pathlib.Path.home() / ".jarvis"
 
 
@@ -60,13 +61,13 @@ def memory_path(session: str) -> pathlib.Path:
 
 
 def ensure_api_key():
-    """A GUI-launched app doesn't inherit your shell env, so fall back to a key
-    saved at ~/.jarvis/anthropic_api_key (written by install.sh)."""
+    """A shortcut-launched process may not inherit your shell env, so fall back
+    to a key saved at %USERPROFILE%\\.jarvis\\anthropic_api_key (by install.ps1)."""
     if os.environ.get("ANTHROPIC_API_KEY"):
         return
     key_file = STATE_DIR / "anthropic_api_key"
     if key_file.exists():
-        key = key_file.read_text().strip()
+        key = key_file.read_text(encoding="utf-8").strip()
         if key:
             os.environ["ANTHROPIC_API_KEY"] = key
 
@@ -83,7 +84,7 @@ def _import_audio():
     except ImportError:
         sys.exit(
             "Missing audio dependencies. Install them with:\n"
-            "    pip install -r mac/requirements.txt\n"
+            "    pip install -r requirements.txt\n"
             "(or: pip install sounddevice numpy faster-whisper)"
         )
     return np, sd
@@ -91,7 +92,7 @@ def _import_audio():
 
 def record_push_to_talk(np, sd):
     """Record from the mic between two Enter presses."""
-    input("\n🎙  Press Enter to speak…")
+    input("\n[mic] Press Enter to speak...")
     frames: list = []
     recording = {"on": True}
 
@@ -102,7 +103,7 @@ def record_push_to_talk(np, sd):
     with sd.InputStream(
         samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=callback
     ):
-        input("🔴 Recording… press Enter to stop.")
+        input("[rec] Recording... press Enter to stop.")
         recording["on"] = False
 
     if not frames:
@@ -114,7 +115,7 @@ def record_until_silence(np, sd, silence_secs=1.2, threshold=0.012, max_secs=30)
     """Hands-free capture: start on speech, stop after a beat of silence."""
     import time
 
-    print("\n🎙  Listening… (just start talking)")
+    print("\n[mic] Listening... (just start talking)")
     frames: list = []
     block = int(SAMPLE_RATE * 0.1)  # 100 ms blocks
     started = False
@@ -129,7 +130,7 @@ def record_until_silence(np, sd, silence_secs=1.2, threshold=0.012, max_secs=30)
 
             if level >= threshold:
                 if not started:
-                    print("🔴 Recording…")
+                    print("[rec] Recording...")
                 started = True
                 silent_for = 0.0
                 frames.append(mono.copy())
@@ -160,12 +161,9 @@ class Transcriber:
         try:
             from faster_whisper import WhisperModel
         except ImportError:
-            sys.exit(
-                "Missing faster-whisper. Install it with:\n"
-                "    pip install faster-whisper"
-            )
-        print(f"⏳ Loading speech model '{self.model_name}' (first run downloads it)…")
-        # int8 on CPU is plenty fast on Apple Silicon for the small models.
+            sys.exit("Missing faster-whisper. Install it with:\n    pip install faster-whisper")
+        print(f"[..] Loading speech model '{self.model_name}' (first run downloads it)...")
+        # int8 on CPU is plenty fast for the small models.
         self._model = WhisperModel(self.model_name, device="cpu", compute_type="int8")
 
     def transcribe(self, audio) -> str:
@@ -175,32 +173,47 @@ class Transcriber:
 
 
 # --------------------------------------------------------------------------- #
-# Speech out: macOS `say`
+# Speech out: Windows SAPI via PowerShell (no extra dependency)
 # --------------------------------------------------------------------------- #
+
+# Read the text from stdin so the spoken content never needs quoting/escaping.
+_SPEAK_PS = (
+    "Add-Type -AssemblyName System.Speech;"
+    "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer;"
+    "if ($env:JARVIS_TTS_VOICE) { try { $s.SelectVoice($env:JARVIS_TTS_VOICE) } catch { } }"
+    "$s.Speak([Console]::In.ReadToEnd())"
+)
 
 
 def speak(text: str, voice: str | None):
     if not text:
         return
-    cmd = ["say"]
+    env = dict(os.environ)
     if voice:
-        cmd += ["-v", voice]
-    cmd.append(text)
+        env["JARVIS_TTS_VOICE"] = voice
     try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError:
-        # Voice not installed — fall back to the system default.
-        subprocess.run(["say", text], check=False)
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", _SPEAK_PS],
+            input=text,
+            text=True,
+            env=env,
+            check=False,
+        )
     except FileNotFoundError:
-        # Not on macOS (`say` missing) — just print.
-        print("(text-to-speech unavailable; `say` not found)")
+        # Not on Windows (no PowerShell) — just print.
+        print("(text-to-speech unavailable; PowerShell not found)")
 
 
 def list_voices():
+    ps = (
+        "Add-Type -AssemblyName System.Speech;"
+        "(New-Object System.Speech.Synthesis.SpeechSynthesizer)."
+        "GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name }"
+    )
     try:
-        subprocess.run(["say", "-v", "?"], check=False)
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False)
     except FileNotFoundError:
-        print("`say` is only available on macOS.")
+        print("Listing voices requires Windows PowerShell.")
 
 
 # --------------------------------------------------------------------------- #
@@ -233,7 +246,7 @@ class WorkerBrain:
 
 
 SYSTEM_PROMPT = (
-    "You are Jarvis, a voice assistant on the user's Mac, modelled on Tony "
+    "You are Jarvis, a voice assistant on the user's Windows PC, modelled on Tony "
     "Stark's J.A.R.V.I.S.: unflappable, quietly witty, competent, and economical "
     "with words. Everything you say is read aloud, so reply in plain spoken "
     "English — no markdown, lists, code blocks, or emoji. Be brief: one to three "
@@ -245,8 +258,8 @@ SYSTEM_PROMPT = (
 
 class DirectBrain:
     """Calls Claude directly via the Anthropic Python SDK, with memory persisted
-    to disk so Jarvis remembers across launches (this is the standalone brain —
-    no Worker required)."""
+    to disk so Jarvis remembers across launches (the standalone brain — no Worker
+    required)."""
 
     def __init__(self, model: str, session: str = DEFAULT_SESSION, persist: bool = True):
         try:
@@ -260,8 +273,8 @@ class DirectBrain:
         ensure_api_key()
         if not os.environ.get("ANTHROPIC_API_KEY"):
             sys.exit(
-                "No Anthropic API key. Set ANTHROPIC_API_KEY, or run mac/install.sh "
-                "to save one to ~/.jarvis/anthropic_api_key."
+                "No Anthropic API key. Set ANTHROPIC_API_KEY, or run install.ps1 "
+                "to save one to %USERPROFILE%\\.jarvis\\anthropic_api_key."
             )
         self._client = anthropic.Anthropic()
         self.model = model
@@ -277,7 +290,7 @@ class DirectBrain:
     def _load(self) -> list[dict]:
         if self._path and self._path.exists():
             try:
-                return json.loads(self._path.read_text())
+                return json.loads(self._path.read_text(encoding="utf-8"))
             except (ValueError, OSError):
                 return []
         return []
@@ -285,21 +298,29 @@ class DirectBrain:
     def _save(self):
         if self._path:
             try:
-                self._path.write_text(json.dumps(self.history))
+                self._path.write_text(json.dumps(self.history), encoding="utf-8")
             except OSError:
                 pass
 
-    def ask(self, text: str) -> str:
-        if text.strip().lower().rstrip(".!") in {
-            "jarvis, start over",
-            "start over",
-            "reset",
-            "new conversation",
-            "clear memory",
-        }:
+    _RESET_PHRASES = {
+        "jarvis, start over",
+        "start over",
+        "reset",
+        "new conversation",
+        "clear memory",
+    }
+
+    def _maybe_reset(self, text: str):
+        if text.strip().lower().rstrip(".!") in self._RESET_PHRASES:
             self.history.clear()
             self._save()
             return "Done. Clean slate."
+        return None
+
+    def ask(self, text: str) -> str:
+        done = self._maybe_reset(text)
+        if done is not None:
+            return done
 
         # Build the next message list without mutating saved history yet, so a
         # failed API call doesn't leave a dangling user turn behind (which would
@@ -347,40 +368,118 @@ class DirectBrain:
         )
 
 
+class ControlBrain(DirectBrain):
+    """DirectBrain plus client-side tools that actually operate the PC: open apps
+    and URLs, search the web in the browser, type, control media, and lock/sleep
+    (and run PowerShell with --allow-shell). Runs a tool-use loop, executing each
+    tool locally and feeding the result back until Claude has its spoken answer."""
+
+    def __init__(self, model: str, session: str, allow_shell: bool = False):
+        super().__init__(model, session)
+        self.allow_shell = allow_shell
+        self._pc_tools = pc_control.control_tools(allow_shell)
+
+    def _system(self) -> str:
+        extra = (
+            "\n\nYou can operate this Windows PC with tools: open apps and URLs, "
+            "search the web in the browser, type text into the active window, control "
+            "media and volume, and lock or sleep the machine"
+            + (", and run PowerShell commands" if self.allow_shell else "")
+            + ". When the user asks you to do something on the computer, call the right "
+            "tool, then confirm in one short spoken sentence (e.g. 'Opening Chrome.'). "
+            "Don't ask for confirmation for ordinary actions; just do them."
+        )
+        return super()._system() + extra
+
+    def ask(self, text: str) -> str:
+        done = self._maybe_reset(text)
+        if done is not None:
+            return done
+
+        base = self.history + [{"role": "user", "content": text}]
+        work = list(base)
+        tools = (self.tools or []) + self._pc_tools  # web_search + PC control
+
+        response = None
+        for _ in range(8):  # bound the agent loop
+            response = self._client.messages.create(
+                model=self.model,
+                max_tokens=2048,
+                thinking={"type": "disabled"},
+                system=self._system(),
+                tools=tools,
+                messages=work,
+            )
+            if response.stop_reason == "tool_use":
+                work.append({"role": "assistant", "content": response.content})
+                results = []
+                for block in response.content:
+                    if block.type == "tool_use":
+                        output = pc_control.run_tool(
+                            block.name, dict(block.input), self.allow_shell
+                        )
+                        results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": output,
+                            }
+                        )
+                work.append({"role": "user", "content": results})
+                continue
+            if response.stop_reason == "pause_turn":  # server-side web search
+                work.append({"role": "assistant", "content": response.content})
+                continue
+            break
+
+        reply = " ".join(
+            block.text
+            for block in (response.content if response else [])
+            if block.type == "text"
+        ).strip()
+        # Persist plain text only — never the SDK tool-call blocks.
+        self.history = base + [{"role": "assistant", "content": reply}]
+        self._save()
+        return reply
+
+
 # --------------------------------------------------------------------------- #
 # Main loop
 # --------------------------------------------------------------------------- #
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Jarvis voice assistant for macOS.")
+    parser = argparse.ArgumentParser(description="Jarvis voice assistant for Windows.")
     parser.add_argument("--direct", action="store_true", help="Call Claude directly instead of the Worker.")
+    parser.add_argument("--control", action="store_true", help="Let Jarvis operate the PC (open apps, type, media, lock...). Implies --direct.")
+    parser.add_argument("--allow-shell", action="store_true", help="With --control, also allow running PowerShell and shutdown/restart. Use with care.")
     parser.add_argument("--auto", action="store_true", help="Hands-free: record until you stop talking.")
     parser.add_argument("--text", metavar="MSG", help="Send one typed message (skip the mic) and exit.")
-    parser.add_argument("--voice", default=DEFAULT_VOICE, help=f"macOS voice (default: {DEFAULT_VOICE}).")
+    parser.add_argument("--voice", default=DEFAULT_VOICE, help=f"Windows voice (default: {DEFAULT_VOICE}).")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL}).")
     parser.add_argument("--url", default=DEFAULT_URL, help="Worker /jarvis endpoint.")
     parser.add_argument("--session", default=DEFAULT_SESSION, help="Conversation/session id.")
     parser.add_argument("--claude-model", default=DEFAULT_CLAUDE_MODEL, help="Claude model for --direct mode.")
-    parser.add_argument("--list-voices", action="store_true", help="List installed macOS voices and exit.")
+    parser.add_argument("--list-voices", action="store_true", help="List installed Windows voices and exit.")
     args = parser.parse_args()
 
     if args.list_voices:
         list_voices()
         return
 
-    brain = (
-        DirectBrain(args.claude_model, args.session)
-        if args.direct
-        else WorkerBrain(args.url, args.session)
-    )
+    if args.control:
+        brain = ControlBrain(args.claude_model, args.session, args.allow_shell)
+    elif args.direct:
+        brain = DirectBrain(args.claude_model, args.session)
+    else:
+        brain = WorkerBrain(args.url, args.session)
 
     # Text-only mode: useful for testing the brain without a microphone.
     if args.text:
         try:
             reply = brain.ask(args.text)
         except Exception as err:
-            sys.exit(f"\n⚠️  {err}\n")
+            sys.exit(f"\n[!] {err}\n")
         print(f"\nJarvis: {reply}\n")
         speak(reply, args.voice)
         return
@@ -388,7 +487,12 @@ def main():
     np, sd = _import_audio()
     transcriber = Transcriber(args.model)
 
-    where = "Claude directly" if args.direct else args.url
+    if args.control:
+        where = "Claude + PC control" + (" + shell" if args.allow_shell else "")
+    elif args.direct:
+        where = "Claude directly"
+    else:
+        where = args.url
     print(f"Jarvis is online (brain: {where}, voice: {args.voice}).")
     print("Press Ctrl-C to quit.")
 
@@ -404,14 +508,14 @@ def main():
 
             you = transcriber.transcribe(audio)
             if not you:
-                print("…didn't catch that.")
+                print("...didn't catch that.")
                 continue
             print(f"You: {you}")
 
             try:
                 reply = brain.ask(you)
             except Exception as err:
-                print(f"\n⚠️  {err}\n")
+                print(f"\n[!] {err}\n")
                 continue
 
             print(f"Jarvis: {reply}")

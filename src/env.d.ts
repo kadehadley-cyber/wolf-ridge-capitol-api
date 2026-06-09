@@ -8,6 +8,10 @@ interface Env {
 	ANTHROPIC_API_KEY?: string;
 	/** Override the Claude model id. Defaults to claude-opus-4-8. */
 	JARVIS_MODEL?: string;
+	/** IANA timezone (e.g. "America/Los_Angeles") for Jarvis's time awareness. Defaults to UTC. */
+	JARVIS_TIMEZONE?: string;
+	/** Set to "off" to disable Jarvis's web-search tool. Enabled by default on the Claude brain. */
+	JARVIS_TOOLS?: string;
 	/** Cloudflare Workers AI binding — used only if ANTHROPIC_API_KEY is absent. */
 	AI?: { run(model: string, inputs: unknown): Promise<{ response?: string }> };
 

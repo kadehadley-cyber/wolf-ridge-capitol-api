@@ -11,12 +11,16 @@ talk, the glasses transcribe and send, this Worker answers in character, and the
 glasses read the reply back to you. A channel-agnostic JSON endpoint is included
 too, so you can wire Jarvis to any other speech bridge.
 
-> **Want to use Jarvis on your Mac instead of the glasses?** There's a voice
-> client in [`mac/`](./mac) — talk to Jarvis out loud on macOS (local Whisper for
-> speech-to-text, the built-in `say` voice for replies). Run `cd mac && ./install.sh`
-> for a standalone double-click **Jarvis.app** that talks straight to Claude (no
-> Worker needed), or pair it with this Worker to share one brain and memory. See
-> [`mac/README.md`](./mac/README.md).
+> **Want to use Jarvis on your computer instead of the glasses?** There are
+> desktop voice clients that talk to Jarvis out loud (local Whisper for
+> speech-to-text, a built-in system voice for replies). Each can run standalone
+> straight to Claude, or paired with this Worker to share one brain and memory:
+> - **macOS** — [`mac/`](./mac): `cd mac && ./install.sh` builds a double-click
+>   **Jarvis.app**. See [`mac/README.md`](./mac/README.md).
+> - **Windows** — [`windows/`](./windows): `powershell -ExecutionPolicy Bypass -File .\install.ps1`
+>   sets up a **Jarvis** Desktop shortcut. Run with `--control` to **operate the PC
+>   by voice** (open apps, search, type, media/volume, lock/sleep). See
+>   [`windows/README.md`](./windows/README.md).
 
 ## How it works
 
@@ -86,6 +90,8 @@ Say "Jarvis, start over" to wipe a session's history.
 | `JARVIS_MODEL`             | no       | Claude model id. Defaults to `claude-opus-4-8`.              |
 | `JARVIS_NAME`              | no       | What the assistant calls itself. Defaults to `Jarvis`.       |
 | `JARVIS_USER_TITLE`        | no       | How it addresses you. Defaults to `sir`; set `""` for none.  |
+| `JARVIS_TIMEZONE`          | no       | IANA timezone for time awareness, e.g. `America/Los_Angeles`. Defaults to UTC. |
+| `JARVIS_TOOLS`             | no       | Set to `off` to disable web search. Enabled by default (Claude only). |
 | `WHATSAPP_TOKEN`           | WhatsApp | Cloud API access token (secret).                             |
 | `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp | The number replies are sent from.                            |
 | `WHATSAPP_VERIFY_TOKEN`    | WhatsApp | Your chosen webhook verification token.                      |
@@ -96,6 +102,14 @@ Say "Jarvis, start over" to wipe a session's history.
 ```bash
 npm run dev        # seeds local D1 and starts wrangler dev
 ```
+
+## Capabilities
+
+On the Claude brain, Jarvis has real agency: it knows the current date and time
+(set `JARVIS_TIMEZONE` for your locale) and can **search the web**, so it answers
+live questions — weather, news, prices, scores, recent facts — instead of
+guessing. Search is on by default; set `JARVIS_TOOLS=off` to disable it. (The
+Workers AI fallback has no web access.)
 
 ## Notes
 

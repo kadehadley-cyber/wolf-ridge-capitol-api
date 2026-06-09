@@ -1,0 +1,4 @@
+# Python / local Jarvis client artifacts
+.venv/
+__pycache__/
+*.pyc

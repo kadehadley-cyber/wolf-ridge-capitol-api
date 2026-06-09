@@ -83,7 +83,12 @@ All optional; set as environment variables or pass the matching flag.
 | `WHISPER_MODEL` | `--model` | `base.en` | `tiny.en` is faster; `small.en`/`medium.en` are more accurate. |
 | `JARVIS_SESSION` | `--session` | `mac` | Memory bucket — change it to keep separate conversations. |
 | `JARVIS_MODEL` | `--claude-model` | `claude-opus-4-8` | Claude model for standalone mode. |
+| `JARVIS_TOOLS` | — | (on) | Set to `off` to disable web search in standalone mode. |
 | `JARVIS_URL` | `--url` | `http://localhost:8787/jarvis` | Worker endpoint (paired mode). |
+
+In standalone (`--direct`) mode Jarvis knows the current time and can **search the
+web** for live questions (weather, news, facts) — set `JARVIS_TOOLS=off` to turn
+search off.
 
 ## Requirements
 
