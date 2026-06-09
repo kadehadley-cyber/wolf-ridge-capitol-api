@@ -88,6 +88,8 @@ Say "Jarvis, start over" to wipe a session's history.
 | `JARVIS_MODEL`             | no       | Claude model id. Defaults to `claude-opus-4-8`.              |
 | `JARVIS_NAME`              | no       | What the assistant calls itself. Defaults to `Jarvis`.       |
 | `JARVIS_USER_TITLE`        | no       | How it addresses you. Defaults to `sir`; set `""` for none.  |
+| `JARVIS_TIMEZONE`          | no       | IANA timezone for time awareness, e.g. `America/Los_Angeles`. Defaults to UTC. |
+| `JARVIS_TOOLS`             | no       | Set to `off` to disable web search. Enabled by default (Claude only). |
 | `WHATSAPP_TOKEN`           | WhatsApp | Cloud API access token (secret).                             |
 | `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp | The number replies are sent from.                            |
 | `WHATSAPP_VERIFY_TOKEN`    | WhatsApp | Your chosen webhook verification token.                      |
@@ -98,6 +100,14 @@ Say "Jarvis, start over" to wipe a session's history.
 ```bash
 npm run dev        # seeds local D1 and starts wrangler dev
 ```
+
+## Capabilities
+
+On the Claude brain, Jarvis has real agency: it knows the current date and time
+(set `JARVIS_TIMEZONE` for your locale) and can **search the web**, so it answers
+live questions — weather, news, prices, scores, recent facts — instead of
+guessing. Search is on by default; set `JARVIS_TOOLS=off` to disable it. (The
+Workers AI fallback has no web access.)
 
 ## Notes
 

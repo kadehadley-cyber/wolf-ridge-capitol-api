@@ -28,6 +28,7 @@ Press Ctrl-C any time to quit. Say "Jarvis, start over" to wipe the memory.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import pathlib
@@ -264,6 +265,12 @@ class DirectBrain:
             )
         self._client = anthropic.Anthropic()
         self.model = model
+        # Live web search gives Jarvis real agency; disable with JARVIS_TOOLS=off.
+        self.tools = (
+            None
+            if os.environ.get("JARVIS_TOOLS") == "off"
+            else [{"type": "web_search_20260209", "name": "web_search"}]
+        )
         self._path = memory_path(session) if persist else None
         self.history: list[dict] = self._load()
 
@@ -297,20 +304,47 @@ class DirectBrain:
         # Build the next message list without mutating saved history yet, so a
         # failed API call doesn't leave a dangling user turn behind (which would
         # send two user turns in a row next time → a 400).
-        messages = self.history + [{"role": "user", "content": text}]
-        response = self._client.messages.create(
-            model=self.model,
-            max_tokens=1024,
-            thinking={"type": "disabled"},  # snappy spoken replies
-            system=SYSTEM_PROMPT,
-            messages=messages,
-        )
+        base = self.history + [{"role": "user", "content": text}]
+        work = list(base)
+        response = self._create(work)
+        # Server-side web search runs its own loop; on hitting the server limit it
+        # returns pause_turn — re-send the accumulated turn to let it finish.
+        for _ in range(4):
+            if response.stop_reason != "pause_turn":
+                break
+            work = work + [{"role": "assistant", "content": response.content}]
+            response = self._create(work)
         reply = " ".join(
             block.text for block in response.content if block.type == "text"
         ).strip()
-        self.history = messages + [{"role": "assistant", "content": reply}]
+        # Persist plain text only — never the SDK tool-call blocks.
+        self.history = base + [{"role": "assistant", "content": reply}]
         self._save()
         return reply
+
+    def _create(self, messages: list[dict]):
+        kwargs = dict(
+            model=self.model,
+            max_tokens=2048,  # room for search; the spoken answer stays short
+            thinking={"type": "disabled"},  # snappy spoken replies
+            system=self._system(),
+            messages=messages,
+        )
+        if self.tools:
+            kwargs["tools"] = self.tools
+        return self._client.messages.create(**kwargs)
+
+    def _system(self) -> str:
+        now = datetime.datetime.now().astimezone()
+        stamp = now.strftime("%A, %d %B %Y, %H:%M %Z").strip()
+        return (
+            SYSTEM_PROMPT
+            + f"\n\nFor your reference, the current date and time is {stamp}. "
+            "You can search the web - do so whenever the answer depends on current, "
+            "real-world, or changing information (weather, news, prices, recent facts, "
+            "anything you're unsure of) rather than guessing. After searching, give the "
+            "short spoken answer, not a list of sources."
+        )
 
 
 # --------------------------------------------------------------------------- #

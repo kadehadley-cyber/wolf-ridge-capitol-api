@@ -19,6 +19,36 @@ const DEFAULT_USER_TITLE = "sir";
 
 // Spoken replies are short; this is plenty of headroom and keeps latency low.
 const MAX_TOKENS = 1024;
+// Web search produces extra intermediate output, so the tooled Claude path gets
+// more room; the spoken answer itself still stays short.
+const CLAUDE_MAX_TOKENS = 2048;
+
+// Spelling out the trigger condition makes Opus reach for the tool reliably.
+const TOOL_SENTENCE =
+	"You can search the web — do so whenever the answer depends on current, " +
+	"real-world, or changing information (weather, news, prices, sports, recent " +
+	"facts, anything you're unsure of) rather than guessing. After searching, give " +
+	"the short spoken answer, not a list of sources.";
+
+/** A one-line "the time right now is…" note for the system prompt. */
+function timeLine(env: Env): string {
+	const tz = env.JARVIS_TIMEZONE || "UTC";
+	let stamp: string;
+	try {
+		stamp = new Intl.DateTimeFormat("en-GB", {
+			weekday: "long",
+			year: "numeric",
+			month: "long",
+			day: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+			timeZone: tz,
+		}).format(new Date());
+	} catch {
+		stamp = new Date().toUTCString();
+	}
+	return `For your reference, the current date and time is ${stamp} (${tz}).`;
+}
 
 // Phrases that wipe the conversation and start fresh.
 const RESET_PATTERN =
@@ -72,13 +102,17 @@ async function generate(
 	history: Turn[],
 	utterance: string,
 ): Promise<string> {
-	const system = buildSystemPrompt(persona(env));
+	const base = buildSystemPrompt(persona(env));
 	const messages: Turn[] = [...history, { role: "user", content: utterance }];
 
 	if (env.ANTHROPIC_API_KEY) {
+		// Claude gets the live web-search tool plus time + tool guidance.
+		const system = `${base}\n\n${timeLine(env)} ${TOOL_SENTENCE}`;
 		return generateWithClaude(env, system, messages);
 	}
 	if (env.AI) {
+		// The Workers AI fallback has no tools, but still gets the current time.
+		const system = `${base}\n\n${timeLine(env)}`;
 		return generateWithWorkersAI(env, system, messages);
 	}
 	throw new Error(
@@ -89,21 +123,38 @@ async function generate(
 async function generateWithClaude(
 	env: Env,
 	system: string,
-	messages: Turn[],
+	turns: Turn[],
 ): Promise<string> {
 	const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+	const messages: Anthropic.MessageParam[] = turns.map((m) => ({
+		role: m.role,
+		content: m.content,
+	}));
 
-	const response = await client.messages.create({
-		model: env.JARVIS_MODEL || DEFAULT_MODEL,
-		max_tokens: MAX_TOKENS,
-		// A voice assistant must answer instantly — no "thinking" pause before
-		// speaking. The persona prompt already tells it to emit only the final,
-		// spoken answer (Opus 4.8 can otherwise narrate reasoning when thinking
-		// is disabled).
-		thinking: { type: "disabled" },
-		system,
-		messages: messages.map((m) => ({ role: m.role, content: m.content })),
-	});
+	const request = () =>
+		client.messages.create({
+			model: env.JARVIS_MODEL || DEFAULT_MODEL,
+			max_tokens: CLAUDE_MAX_TOKENS,
+			// A voice assistant should answer without a long "thinking" pause; the
+			// persona prompt tells it to emit only the final spoken answer.
+			thinking: { type: "disabled" },
+			system,
+			// Live web search gives Jarvis real agency. Server-side tool — Anthropic
+			// runs the search loop. Disable with JARVIS_TOOLS=off.
+			tools:
+				env.JARVIS_TOOLS === "off"
+					? undefined
+					: [{ type: "web_search_20260209", name: "web_search" }],
+			messages,
+		});
+
+	let response = await request();
+	// Server-side search runs its own loop; if it hits the server iteration limit
+	// it returns `pause_turn`. Re-send the accumulated turn to let it finish.
+	for (let i = 0; response.stop_reason === "pause_turn" && i < 4; i++) {
+		messages.push({ role: "assistant", content: response.content });
+		response = await request();
+	}
 
 	return response.content
 		.filter((block): block is Anthropic.TextBlock => block.type === "text")
