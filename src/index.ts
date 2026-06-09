@@ -45,21 +45,29 @@ export default {
  * POST a transcript, speak the `reply` back.
  */
 async function handleJarvis(request: Request, env: Env): Promise<Response> {
-	let body: { text?: string; sessionId?: string };
+	let body: unknown;
 	try {
 		body = await request.json();
 	} catch {
 		return json({ error: "Expected a JSON body like { \"text\": \"...\" }" }, 400);
 	}
 
-	const text = (body.text ?? "").toString();
+	if (typeof body !== "object" || body === null) {
+		return json({ error: "Expected a JSON object like { \"text\": \"...\" }" }, 400);
+	}
+	const { text: rawText, sessionId: rawSession } = body as {
+		text?: unknown;
+		sessionId?: unknown;
+	};
+
+	const text = (rawText ?? "").toString();
 	if (!text.trim()) {
 		return json({ error: "Missing `text`." }, 400);
 	}
 
 	// Without a session id, every request is a fresh conversation. Supply a
 	// stable id (per wearer/device) to give Jarvis memory across turns.
-	const sessionId = (body.sessionId ?? "default").toString();
+	const sessionId = (rawSession ?? "default").toString();
 
 	try {
 		const reply = await ask(env, sessionId, text);

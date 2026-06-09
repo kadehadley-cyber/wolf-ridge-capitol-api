@@ -294,18 +294,21 @@ class DirectBrain:
             self._save()
             return "Done. Clean slate."
 
-        self.history.append({"role": "user", "content": text})
+        # Build the next message list without mutating saved history yet, so a
+        # failed API call doesn't leave a dangling user turn behind (which would
+        # send two user turns in a row next time → a 400).
+        messages = self.history + [{"role": "user", "content": text}]
         response = self._client.messages.create(
             model=self.model,
             max_tokens=1024,
             thinking={"type": "disabled"},  # snappy spoken replies
             system=SYSTEM_PROMPT,
-            messages=self.history,
+            messages=messages,
         )
         reply = " ".join(
             block.text for block in response.content if block.type == "text"
         ).strip()
-        self.history.append({"role": "assistant", "content": reply})
+        self.history = messages + [{"role": "assistant", "content": reply}]
         self._save()
         return reply
 
@@ -342,7 +345,7 @@ def main():
     if args.text:
         try:
             reply = brain.ask(args.text)
-        except RuntimeError as err:
+        except Exception as err:
             sys.exit(f"\n⚠️  {err}\n")
         print(f"\nJarvis: {reply}\n")
         speak(reply, args.voice)
@@ -373,7 +376,7 @@ def main():
 
             try:
                 reply = brain.ask(you)
-            except RuntimeError as err:
+            except Exception as err:
                 print(f"\n⚠️  {err}\n")
                 continue
 
