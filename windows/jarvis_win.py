@@ -37,6 +37,8 @@ import sys
 import urllib.error
 import urllib.request
 
+import pc_control
+
 SAMPLE_RATE = 16_000  # what Whisper expects
 
 # "Microsoft David" is the stock male English voice on Windows — the most
@@ -300,17 +302,25 @@ class DirectBrain:
             except OSError:
                 pass
 
-    def ask(self, text: str) -> str:
-        if text.strip().lower().rstrip(".!") in {
-            "jarvis, start over",
-            "start over",
-            "reset",
-            "new conversation",
-            "clear memory",
-        }:
+    _RESET_PHRASES = {
+        "jarvis, start over",
+        "start over",
+        "reset",
+        "new conversation",
+        "clear memory",
+    }
+
+    def _maybe_reset(self, text: str):
+        if text.strip().lower().rstrip(".!") in self._RESET_PHRASES:
             self.history.clear()
             self._save()
             return "Done. Clean slate."
+        return None
+
+    def ask(self, text: str) -> str:
+        done = self._maybe_reset(text)
+        if done is not None:
+            return done
 
         # Build the next message list without mutating saved history yet, so a
         # failed API call doesn't leave a dangling user turn behind (which would
@@ -358,6 +368,81 @@ class DirectBrain:
         )
 
 
+class ControlBrain(DirectBrain):
+    """DirectBrain plus client-side tools that actually operate the PC: open apps
+    and URLs, search the web in the browser, type, control media, and lock/sleep
+    (and run PowerShell with --allow-shell). Runs a tool-use loop, executing each
+    tool locally and feeding the result back until Claude has its spoken answer."""
+
+    def __init__(self, model: str, session: str, allow_shell: bool = False):
+        super().__init__(model, session)
+        self.allow_shell = allow_shell
+        self._pc_tools = pc_control.control_tools(allow_shell)
+
+    def _system(self) -> str:
+        extra = (
+            "\n\nYou can operate this Windows PC with tools: open apps and URLs, "
+            "search the web in the browser, type text into the active window, control "
+            "media and volume, and lock or sleep the machine"
+            + (", and run PowerShell commands" if self.allow_shell else "")
+            + ". When the user asks you to do something on the computer, call the right "
+            "tool, then confirm in one short spoken sentence (e.g. 'Opening Chrome.'). "
+            "Don't ask for confirmation for ordinary actions; just do them."
+        )
+        return super()._system() + extra
+
+    def ask(self, text: str) -> str:
+        done = self._maybe_reset(text)
+        if done is not None:
+            return done
+
+        base = self.history + [{"role": "user", "content": text}]
+        work = list(base)
+        tools = (self.tools or []) + self._pc_tools  # web_search + PC control
+
+        response = None
+        for _ in range(8):  # bound the agent loop
+            response = self._client.messages.create(
+                model=self.model,
+                max_tokens=2048,
+                thinking={"type": "disabled"},
+                system=self._system(),
+                tools=tools,
+                messages=work,
+            )
+            if response.stop_reason == "tool_use":
+                work.append({"role": "assistant", "content": response.content})
+                results = []
+                for block in response.content:
+                    if block.type == "tool_use":
+                        output = pc_control.run_tool(
+                            block.name, dict(block.input), self.allow_shell
+                        )
+                        results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": output,
+                            }
+                        )
+                work.append({"role": "user", "content": results})
+                continue
+            if response.stop_reason == "pause_turn":  # server-side web search
+                work.append({"role": "assistant", "content": response.content})
+                continue
+            break
+
+        reply = " ".join(
+            block.text
+            for block in (response.content if response else [])
+            if block.type == "text"
+        ).strip()
+        # Persist plain text only — never the SDK tool-call blocks.
+        self.history = base + [{"role": "assistant", "content": reply}]
+        self._save()
+        return reply
+
+
 # --------------------------------------------------------------------------- #
 # Main loop
 # --------------------------------------------------------------------------- #
@@ -366,6 +451,8 @@ class DirectBrain:
 def main():
     parser = argparse.ArgumentParser(description="Jarvis voice assistant for Windows.")
     parser.add_argument("--direct", action="store_true", help="Call Claude directly instead of the Worker.")
+    parser.add_argument("--control", action="store_true", help="Let Jarvis operate the PC (open apps, type, media, lock...). Implies --direct.")
+    parser.add_argument("--allow-shell", action="store_true", help="With --control, also allow running PowerShell and shutdown/restart. Use with care.")
     parser.add_argument("--auto", action="store_true", help="Hands-free: record until you stop talking.")
     parser.add_argument("--text", metavar="MSG", help="Send one typed message (skip the mic) and exit.")
     parser.add_argument("--voice", default=DEFAULT_VOICE, help=f"Windows voice (default: {DEFAULT_VOICE}).")
@@ -380,11 +467,12 @@ def main():
         list_voices()
         return
 
-    brain = (
-        DirectBrain(args.claude_model, args.session)
-        if args.direct
-        else WorkerBrain(args.url, args.session)
-    )
+    if args.control:
+        brain = ControlBrain(args.claude_model, args.session, args.allow_shell)
+    elif args.direct:
+        brain = DirectBrain(args.claude_model, args.session)
+    else:
+        brain = WorkerBrain(args.url, args.session)
 
     # Text-only mode: useful for testing the brain without a microphone.
     if args.text:
@@ -399,7 +487,12 @@ def main():
     np, sd = _import_audio()
     transcriber = Transcriber(args.model)
 
-    where = "Claude directly" if args.direct else args.url
+    if args.control:
+        where = "Claude + PC control" + (" + shell" if args.allow_shell else "")
+    elif args.direct:
+        where = "Claude directly"
+    else:
+        where = args.url
     print(f"Jarvis is online (brain: {where}, voice: {args.voice}).")
     print("Press Ctrl-C to quit.")
 

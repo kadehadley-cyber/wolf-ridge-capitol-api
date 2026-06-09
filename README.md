@@ -18,7 +18,9 @@ too, so you can wire Jarvis to any other speech bridge.
 > - **macOS** — [`mac/`](./mac): `cd mac && ./install.sh` builds a double-click
 >   **Jarvis.app**. See [`mac/README.md`](./mac/README.md).
 > - **Windows** — [`windows/`](./windows): `powershell -ExecutionPolicy Bypass -File .\install.ps1`
->   sets up a **Jarvis** Desktop shortcut. See [`windows/README.md`](./windows/README.md).
+>   sets up a **Jarvis** Desktop shortcut. Run with `--control` to **operate the PC
+>   by voice** (open apps, search, type, media/volume, lock/sleep). See
+>   [`windows/README.md`](./windows/README.md).
 
 ## How it works
 

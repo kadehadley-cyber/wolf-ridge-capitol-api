@@ -64,11 +64,32 @@ To use a deployed Worker instead: set `JARVIS_URL` to `https://<you>.workers.dev
 
 | Command | What it does |
 | --- | --- |
+| `jarvis.bat --control` | **Operate the PC by voice** — open apps, search, type, media/volume, lock/sleep. Implies `--direct`. |
+| `jarvis.bat --control --allow-shell` | As above, plus run PowerShell and shutdown/restart (power-user). |
 | `jarvis.bat --direct` | Standalone — talk straight to Claude (the shortcut uses this). |
 | `jarvis.bat` | Paired — push-to-talk against the local/your Worker. |
 | `jarvis.bat --auto` | Hands-free — starts on speech, stops after a short silence. |
 | `jarvis.bat --text "what's the time in Tokyo?"` | Type one message instead of speaking (no mic). |
 | `jarvis.bat --list-voices` | List the Windows voices you can pass to `--voice`. |
+
+## Control your PC by voice
+
+Run `jarvis.bat --control` and Jarvis can actually drive the machine — say the
+word and it does it, hands-free:
+
+- **"Open Chrome"**, "launch Notepad", "start Spotify" — opens apps
+- **"Pull up the weather radar"**, "search for flights to Tokyo" — opens the browser
+- **"Go to github.com"** — opens a URL
+- **"Type out: thanks, I'll review it tomorrow"** — types into the focused window
+- **"Turn it up"**, "mute", "pause", "next track" — media and volume
+- **"Lock the computer"**, "go to sleep"
+- It still **answers questions** and **searches the web** out loud, too.
+
+It confirms each action in a short line ("Opening Chrome."). Everyday actions run
+without asking. To also let it run arbitrary PowerShell and shut down/restart,
+add **`--allow-shell`** — only do that if you're comfortable letting your voice
+execute commands on the PC. Those are off by default so a stray sentence can't
+wipe your work.
 
 ## Configuration
 
