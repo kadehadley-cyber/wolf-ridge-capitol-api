@@ -181,6 +181,9 @@ class Transcriber:
 def speak(text: str, voice: str | None):
     if not text:
         return
+    if text.startswith("-"):
+        # `say` would parse a leading dash as an option flag ("-7 degrees").
+        text = " " + text
     cmd = ["say"]
     if voice:
         cmd += ["-v", voice]
@@ -491,7 +494,8 @@ def main():
 
             print(f"Jarvis: {reply}")
             speak(reply, args.voice)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
+        # Ctrl-C, or Ctrl-D / closed stdin at one of the Enter prompts.
         print("\nGoodbye.")
 
 

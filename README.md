@@ -62,7 +62,7 @@ Say "Jarvis, start over" to wipe a session's history.
 
 3. **Deploy**
    ```bash
-   npx wrangler deploy
+   npm run deploy   # applies any pending D1 migrations, then deploys
    ```
 
 4. **Connect the glasses via WhatsApp** (optional but this is the magic part)

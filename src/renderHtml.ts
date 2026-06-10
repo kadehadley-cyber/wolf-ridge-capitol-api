@@ -55,7 +55,7 @@ export function renderHtml(env: Env): string {
     <h2>Try the voice endpoint</h2>
     <pre>curl -X POST "$WORKER_URL/jarvis" \\
   -H 'content-type: application/json' \\
-  -d '{ "text": "what's on my plate today?", "sessionId": "me" }'</pre>
+  -d '{ "text": "what should I focus on today?", "sessionId": "me" }'</pre>
 
     <h2>Wire up the glasses (WhatsApp)</h2>
     <p>Set the WhatsApp Cloud API webhook to <code>POST /whatsapp</code> on this
