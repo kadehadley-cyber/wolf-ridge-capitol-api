@@ -18,6 +18,7 @@ fi
 source .venv/bin/activate
 pip install --quiet --upgrade pip
 pip install --quiet -r requirements.txt
+touch .venv/.deps-ok   # the ./jarvis launcher checks this install stamp
 echo "  done."
 
 # --- API key -------------------------------------------------------------- #
@@ -34,7 +35,7 @@ elif [[ -s "$KEY_FILE" ]]; then
 else
   echo "→ Jarvis talks to Claude. Paste your Anthropic API key (input hidden),"
   echo "  or press Enter to skip and set ANTHROPIC_API_KEY later."
-  read -rs -p "  API key: " key
+  read -rs -p "  API key: " key || key=""   # tolerate a closed/non-tty stdin
   echo
   if [[ -n "$key" ]]; then
     printf '%s' "$key" > "$KEY_FILE"

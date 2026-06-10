@@ -38,6 +38,12 @@ PLIST
 cat > "$APP/Contents/MacOS/Jarvis" <<LAUNCH
 #!/bin/bash
 MAC_DIR="$MAC_DIR"
+if [ ! -x "\$MAC_DIR/jarvis" ]; then
+  # The app is a thin launcher into the repo checkout; if that moved or was
+  # deleted, explain instead of flashing a cryptic Terminal error.
+  osascript -e "display alert \"Jarvis\" message \"Can't find the Jarvis files at \$MAC_DIR — the repo may have been moved or deleted. Run mac/install.sh (or mac/make-app.sh) from its new location to rebuild this app.\""
+  exit 1
+fi
 osascript <<OSA
 tell application "Terminal"
   activate

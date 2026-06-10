@@ -28,7 +28,16 @@ export async function loadHistory(
 		.bind(sessionId, HISTORY_LIMIT)
 		.all<Turn>();
 
-	return (results ?? []).reverse();
+	const turns = (results ?? []).reverse();
+	// Defensive: the model API rejects empty content blocks and requires the
+	// conversation to open with a user turn. Normal writes always satisfy both
+	// (whole pairs, never-empty replies), but don't let an odd DB state — a
+	// manual edit, a partial import — wedge every future call in the session.
+	const clean = turns.filter((t) => t.content && t.content.trim() !== "");
+	while (clean.length > 0 && clean[0].role !== "user") {
+		clean.shift();
+	}
+	return clean;
 }
 
 export async function appendTurns(
