@@ -57,6 +57,9 @@ cat <<'DONE'
    • Double-click mac/Jarvis.command in Finder
    • Run ./jarvis --direct in this folder
 
+First launch only: if macOS says "Jarvis can't be opened because the developer
+cannot be verified", right-click Jarvis.app -> Open, then click Open. Once.
+
 Press Enter to speak, Enter again to stop, Ctrl-C to quit.
 Say "Jarvis, start over" to wipe its memory.
 DONE

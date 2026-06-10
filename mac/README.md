@@ -38,6 +38,14 @@ history is kept on disk at `~/.jarvis/` so it remembers you between sessions.
 > opens a Terminal window to run in — that's also what macOS asks for microphone
 > permission, so grant it when prompted.
 
+> **If the app won't open** — it bounces in the Dock and quits, or macOS says the
+> developer can't be verified — it's an unsigned, locally-built app. The first
+> time, **right-click `Jarvis.app` → Open**, then click **Open** in the dialog;
+> you only need to do this once. (`install.sh`/`make-app.sh` already ad-hoc-sign
+> the app and clear its quarantine flag to avoid this, but right-click → Open
+> always works. From a terminal:
+> `xattr -dr com.apple.quarantine ~/Applications/Jarvis.app`.)
+
 ---
 
 ## Paired with the Worker
