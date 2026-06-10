@@ -76,7 +76,15 @@ async function generate(
 	const messages: Turn[] = [...history, { role: "user", content: utterance }];
 
 	if (env.ANTHROPIC_API_KEY) {
-		return generateWithClaude(env, system, messages);
+		try {
+			return await generateWithClaude(env, system, messages);
+		} catch (err) {
+			// A bad key, missing model access, or an Anthropic outage shouldn't
+			// leave the wearer in silence — fall back to Workers AI when bound.
+			if (!env.AI) throw err;
+			console.error("Claude call failed; answering with Workers AI:", err);
+			return generateWithWorkersAI(env, system, messages);
+		}
 	}
 	if (env.AI) {
 		return generateWithWorkersAI(env, system, messages);

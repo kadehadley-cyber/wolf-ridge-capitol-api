@@ -6,4 +6,5 @@ faster-whisper>=1.0.0
 
 # Used by standalone mode (--direct) — the double-click Mac app talks to Claude
 # directly through this. Not needed if you only ever point at the Worker.
-anthropic>=0.40
+# (>=0.47 is the first release with the `thinking` parameter the client passes.)
+anthropic>=0.47
