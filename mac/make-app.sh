@@ -48,5 +48,22 @@ LAUNCH
 
 chmod +x "$APP/Contents/MacOS/Jarvis"
 
+# Tell LaunchServices this is a real application bundle.
+printf 'APPL????' > "$APP/Contents/PkgInfo"
+
+# A hand-built bundle is unsigned, so Gatekeeper can refuse to open it ("Jarvis
+# cannot be opened because the developer cannot be verified") or just bounce it
+# in the Dock and quit. We build it locally, so it's safe to strip any inherited
+# quarantine flag and give it an ad-hoc signature so the system treats it as a
+# valid bundle. Both are best-effort — skip quietly if the tools aren't present.
+xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+codesign --force --deep --sign - "$APP" 2>/dev/null || true
+
+# Register the bundle so a double-click finds it immediately.
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+[ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$APP" 2>/dev/null || true
+
 echo "✅ Built $APP"
 echo "   Open it from Finder/Spotlight, or drag it into your Dock."
+echo "   First launch: if macOS says the developer can't be verified,"
+echo "   right-click the app and choose Open, then click Open in the dialog."
