@@ -181,6 +181,9 @@ class Transcriber:
 def speak(text: str, voice: str | None):
     if not text:
         return
+    if text.startswith("-"):
+        # `say` would parse a leading dash as an option flag ("-7 degrees").
+        text = " " + text
     cmd = ["say"]
     if voice:
         cmd += ["-v", voice]
@@ -222,11 +225,39 @@ class WorkerBrain:
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 data = json.load(resp)
+        except urllib.error.HTTPError as err:
+            # The Worker answered, so "is it running?" would be the wrong hint —
+            # surface its actual error instead.
+            if err.code == 404:
+                raise RuntimeError(
+                    f"Nothing answers at {self.url} (HTTP 404). JARVIS_URL/--url "
+                    "should point at the Worker's /jarvis endpoint."
+                ) from err
+            try:
+                detail = json.load(err).get("error", "")
+            except (ValueError, OSError):
+                detail = ""
+            raise RuntimeError(
+                f"The Jarvis Worker at {self.url} answered HTTP {err.code}"
+                + (f": {detail}" if detail else ".")
+                + "\nThe Worker is up but its brain failed — check that its "
+                "ANTHROPIC_API_KEY secret is set and the D1 migration was "
+                "applied (npx wrangler d1 migrations apply DB --remote)."
+            ) from err
         except urllib.error.URLError as err:
             raise RuntimeError(
                 f"Couldn't reach the Jarvis Worker at {self.url} ({err}).\n"
                 "Is it running? Start it with `npm run dev` in the repo root, "
                 "or set JARVIS_URL to your deployed Worker, or use --direct."
+            ) from err
+        except TimeoutError as err:
+            raise RuntimeError(
+                f"The Jarvis Worker at {self.url} took too long to answer."
+            ) from err
+        except ValueError as err:
+            raise RuntimeError(
+                f"The reply from {self.url} wasn't JSON — is that URL really "
+                "the /jarvis endpoint?"
             ) from err
         return data.get("reply", "")
 
@@ -247,6 +278,9 @@ class DirectBrain:
     to disk so Jarvis remembers across launches (this is the standalone brain —
     no Worker required)."""
 
+    # How much history to send to the model — matches the Worker's HISTORY_LIMIT.
+    MAX_CONTEXT_TURNS = 20
+
     def __init__(self, model: str, session: str = DEFAULT_SESSION, persist: bool = True):
         try:
             import anthropic
@@ -262,18 +296,52 @@ class DirectBrain:
                 "No Anthropic API key. Set ANTHROPIC_API_KEY, or run mac/install.sh "
                 "to save one to ~/.jarvis/anthropic_api_key."
             )
+        self._anthropic = anthropic
         self._client = anthropic.Anthropic()
         self.model = model
         self._path = memory_path(session) if persist else None
         self.history: list[dict] = self._load()
 
     def _load(self) -> list[dict]:
-        if self._path and self._path.exists():
-            try:
-                return json.loads(self._path.read_text())
-            except (ValueError, OSError):
-                return []
-        return []
+        if not (self._path and self._path.exists()):
+            return []
+        try:
+            raw = json.loads(self._path.read_text())
+        except (ValueError, OSError):
+            return []
+        if not isinstance(raw, list):
+            return []
+        # Keep only well-formed, non-empty turns. The API rejects empty content
+        # blocks, so one bad row saved by an older build would otherwise wedge
+        # every future conversation in this session.
+        kept = [
+            t
+            for t in raw
+            if isinstance(t, dict)
+            and t.get("role") in ("user", "assistant")
+            and isinstance(t.get("content"), str)
+            and t["content"].strip()
+        ]
+        # Dropping a turn can leave two of the same role in a row, which the
+        # API also rejects. Re-establish strict user/assistant alternation: in
+        # a run of user turns keep the latest (the next answer responds to it);
+        # in a run of assistant turns keep the first (it answers the question
+        # before it).
+        turns: list[dict] = []
+        for t in kept:
+            if turns and turns[-1]["role"] == t["role"]:
+                if t["role"] == "user":
+                    turns[-1] = t
+                continue
+            turns.append(t)
+        # The conversation must open with a user turn…
+        while turns and turns[0]["role"] != "user":
+            turns.pop(0)
+        # …and a crash mid-exchange can leave a dangling user message at the
+        # end; drop it so the next turn starts clean.
+        if turns and turns[-1]["role"] == "user":
+            turns.pop()
+        return turns
 
     def _save(self):
         if self._path:
@@ -281,6 +349,41 @@ class DirectBrain:
                 self._path.write_text(json.dumps(self.history))
             except OSError:
                 pass
+
+    def _context(self) -> list[dict]:
+        turns = self.history[-self.MAX_CONTEXT_TURNS :]
+        # The API requires the conversation to open with a user turn.
+        while turns and turns[0]["role"] == "assistant":
+            turns.pop(0)
+        return turns
+
+    def _explain(self, err) -> str:
+        """Translate an Anthropic SDK error into one actionable spoken-world
+        sentence (the talk loop prints RuntimeErrors instead of crashing)."""
+        a = self._anthropic
+        if isinstance(err, a.AuthenticationError):
+            return (
+                "Anthropic rejected the API key. Re-run mac/install.sh to save "
+                "a valid key, or fix the ANTHROPIC_API_KEY environment variable."
+            )
+        if isinstance(err, a.NotFoundError):
+            return (
+                f"This API key can't use the model '{self.model}'. Try "
+                "--claude-model claude-sonnet-4-6 (or set JARVIS_MODEL)."
+            )
+        if isinstance(err, a.RateLimitError):
+            return (
+                "Anthropic is rate-limiting requests — give it a moment and "
+                "try again, or check your plan and credits."
+            )
+        if isinstance(err, a.APIConnectionError):
+            return "Couldn't reach the Anthropic API. Check your internet connection."
+        if isinstance(err, a.APIStatusError):
+            return (
+                f"The Anthropic API returned an error "
+                f"({err.status_code}): {getattr(err, 'message', err)}"
+            )
+        return f"The Claude call failed: {err}"
 
     def ask(self, text: str) -> str:
         if text.strip().lower().rstrip(".!") in {
@@ -295,16 +398,28 @@ class DirectBrain:
             return "Done. Clean slate."
 
         self.history.append({"role": "user", "content": text})
-        response = self._client.messages.create(
-            model=self.model,
-            max_tokens=1024,
-            thinking={"type": "disabled"},  # snappy spoken replies
-            system=SYSTEM_PROMPT,
-            messages=self.history,
-        )
+        try:
+            response = self._client.messages.create(
+                model=self.model,
+                max_tokens=1024,
+                thinking={"type": "disabled"},  # snappy spoken replies
+                system=SYSTEM_PROMPT,
+                messages=self._context(),
+            )
+        except self._anthropic.AnthropicError as err:
+            # Drop the failed turn so it can't poison the next one, and raise
+            # the RuntimeError the talk loop already knows how to show.
+            self.history.pop()
+            raise RuntimeError(self._explain(err)) from err
+
         reply = " ".join(
             block.text for block in response.content if block.type == "text"
         ).strip()
+        if not reply:
+            # Never store an empty turn — the API rejects empty content blocks
+            # on the next call, which would wedge the whole session.
+            self.history.pop()
+            return "Apologies — I didn't catch that. Could you say it again?"
         self.history.append({"role": "assistant", "content": reply})
         self._save()
         return reply
@@ -379,7 +494,8 @@ def main():
 
             print(f"Jarvis: {reply}")
             speak(reply, args.voice)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
+        # Ctrl-C, or Ctrl-D / closed stdin at one of the Enter prompts.
         print("\nGoodbye.")
 
 

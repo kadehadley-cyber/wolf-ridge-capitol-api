@@ -13,6 +13,9 @@ import { ask } from "./jarvis";
 
 const GRAPH_API_VERSION = "v21.0";
 
+// The Cloud API rejects text bodies longer than this.
+const WHATSAPP_MAX_TEXT = 4096;
+
 /**
  * Webhook verification handshake (GET). Meta calls this once when you register
  * the webhook; echo back `hub.challenge` if the verify token matches.
@@ -104,7 +107,7 @@ async function sendText(env: Env, to: string, body: string): Promise<void> {
 				messaging_product: "whatsapp",
 				to,
 				type: "text",
-				text: { body },
+				text: { body: body.slice(0, WHATSAPP_MAX_TEXT) },
 			}),
 		},
 	);
