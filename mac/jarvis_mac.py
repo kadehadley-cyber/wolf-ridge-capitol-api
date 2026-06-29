@@ -219,7 +219,14 @@ class WorkerBrain:
 
     def ask(self, text: str) -> str:
         payload = json.dumps({"text": text, "sessionId": self.session}).encode()
-        headers = {"content-type": "application/json"}
+        # Send an explicit User-Agent: Cloudflare's bot protection blocks the
+        # default "Python-urllib/x.y" signature with a 403 before the request
+        # ever reaches the Worker.
+        headers = {
+            "content-type": "application/json",
+            "accept": "application/json",
+            "user-agent": "Jarvis-Mac/1.0 (+https://github.com/kadehadley-cyber/wolf-ridge-capitol-api)",
+        }
         # The Worker gates /jarvis behind a bearer token when JARVIS_API_KEY is
         # set on it; send the matching key so we aren't rejected with a 401.
         if self.api_key:
@@ -234,6 +241,13 @@ class WorkerBrain:
                     "The Jarvis Worker rejected the request (401 Unauthorized). "
                     "It has JARVIS_API_KEY set, so pass the matching key with "
                     "--api-key or the JARVIS_API_KEY environment variable."
+                ) from err
+            if err.code == 403:
+                raise RuntimeError(
+                    "The request was blocked before reaching the Worker (403 Forbidden) — "
+                    "typically Cloudflare bot protection. This client already sends a normal "
+                    "User-Agent; if it persists, check the Worker isn't behind Cloudflare "
+                    "Access or Bot Fight Mode."
                 ) from err
             raise RuntimeError(
                 f"The Jarvis Worker returned an error ({err.code} {err.reason})."
