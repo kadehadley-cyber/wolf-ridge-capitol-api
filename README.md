@@ -55,9 +55,13 @@ You speak ─▶ Meta glasses ─▶ WhatsApp Cloud API ─▶  POST /whatsapp  
 ```bash
 curl -X POST "$WORKER_URL/jarvis" \
   -H 'content-type: application/json' \
+  -H 'authorization: Bearer $JARVIS_API_KEY' \
   -d '{ "text": "what should I focus on this morning?", "sessionId": "me" }'
 # → { "reply": "...", "sessionId": "me" }
 ```
+
+The `authorization` header is required when `JARVIS_API_KEY` is set on the Worker;
+omit it for an unauthenticated local Worker.
 
 Pass a stable `sessionId` per wearer/device to give Jarvis memory across turns.
 Say "Jarvis, start over" to wipe a session's short-term history, or "Jarvis,
