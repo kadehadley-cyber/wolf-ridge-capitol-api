@@ -1,0 +1,23 @@
+[Unit]
+Description=Jarvis voice assistant appliance
+# Wait for the network (the brain lives in a Cloudflare Worker) and audio stack.
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# install.sh substitutes __USER__ with the account it set Jarvis up under.
+User=__USER__
+SupplementaryGroups=audio
+EnvironmentFile=/etc/jarvis/jarvis.conf
+WorkingDirectory=/opt/jarvis
+ExecStart=/opt/jarvis/venv/bin/python /opt/jarvis/jarvis_pi.py
+Restart=on-failure
+RestartSec=3
+# Give models a moment to load on a cold Pi before counting a start as failed.
+TimeoutStartSec=90
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

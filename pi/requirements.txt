@@ -1,0 +1,10 @@
+# Python dependencies for the Jarvis Pi appliance.
+# Installed into /opt/jarvis/venv by install.sh.
+
+sounddevice        # microphone capture (bundles PortAudio bindings)
+numpy              # audio buffers + level detection
+faster-whisper     # on-device speech-to-text
+openwakeword       # "Hey Jarvis" wake word (pulls onnxruntime); optional at runtime
+
+# Only needed for --direct mode (talking to Claude without the Worker):
+anthropic

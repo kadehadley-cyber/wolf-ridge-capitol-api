@@ -1,0 +1,37 @@
+# Jarvis Pi configuration.
+# install.sh copies this to /etc/jarvis/jarvis.conf and fills in your values.
+# The systemd service loads it as environment variables (KEY=value, no quotes).
+
+# --- Brain: the Cloudflare Worker that runs Claude + your long-term memory ---
+JARVIS_URL=https://YOUR-WORKER.workers.dev/jarvis
+JARVIS_API_KEY=
+# A stable id so this device keeps its own conversation/memory:
+JARVIS_SESSION=pi
+
+# --- Speech-to-text (faster-whisper). tiny.en is fastest on a Pi; base.en is
+#     more accurate but slower. ---
+WHISPER_MODEL=tiny.en
+
+# --- Wake word: say "Hey Jarvis" to trigger. Set to "off" to listen
+#     continuously (not recommended for an always-on device). ---
+JARVIS_WAKE_WORD=hey_jarvis
+JARVIS_WAKE_THRESHOLD=0.5
+
+# --- Text-to-speech: "piper" (neural, recommended) or "espeak" ---
+JARVIS_TTS=piper
+PIPER_BIN=/opt/jarvis/piper/piper
+PIPER_MODEL=/opt/jarvis/voices/en_GB-alan-medium.onnx
+ESPEAK_VOICE=en-gb
+
+# --- Spoken greeting on boot (set empty to start silently) ---
+JARVIS_GREETING=Jarvis online.
+
+# --- Audio input device index. Leave blank for the system default; run
+#     `python3 jarvis_pi.py --list-audio` to see the numbers. ---
+JARVIS_INPUT_DEVICE=
+
+# --- On-screen JARVIS HUD (the animated arc-reactor interface), served locally
+#     for the kiosk browser. Set JARVIS_HUD=off for a headless (no screen) box. ---
+JARVIS_HUD=on
+JARVIS_HUD_HOST=127.0.0.1
+JARVIS_HUD_PORT=8088
