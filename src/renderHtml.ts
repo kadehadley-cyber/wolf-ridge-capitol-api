@@ -15,7 +15,11 @@ export function renderHtml(env: Env): string {
 
 	const signature = env.WHATSAPP_APP_SECRET
 		? "enforced"
-		: "⚠️ not enforced (set WHATSAPP_APP_SECRET)";
+		: "⚠️ inbound rejected (set WHATSAPP_APP_SECRET)";
+
+	const httpAuth = env.JARVIS_API_KEY
+		? "bearer token required"
+		: "⚠️ open (set JARVIS_API_KEY)";
 
 	const whatsappReady = Boolean(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID);
 	const proactivePush = whatsappReady
@@ -64,6 +68,7 @@ export function renderHtml(env: Env): string {
       ${row("Reminders", "ready (D1)")}
       ${row("Proactive briefing", "GET /briefing?sessionId=me")}
       ${row("Proactive push", proactivePush)}
+      ${row("HTTP auth", httpAuth)}
       ${row("WhatsApp bridge", whatsapp)}
       ${row("Webhook signature", signature)}
     </table>

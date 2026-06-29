@@ -3,6 +3,16 @@
 // only knows about the `DB` binding declared in wrangler.json).
 
 interface Env {
+	// --- Access control ---
+	/**
+	 * Shared bearer token (secret) for the HTTP endpoints `/jarvis` and
+	 * `/briefing`, which read and write a session's durable memory. When set,
+	 * callers must send `Authorization: Bearer <key>`. Leave unset only for local
+	 * development; set it for any shared/public deployment so a session's dossier
+	 * can't be read or poisoned by guessing its id.
+	 */
+	JARVIS_API_KEY?: string;
+
 	// --- Language model (set ANTHROPIC_API_KEY, or bind Workers AI as a fallback) ---
 	/** Anthropic API key (secret). When set, Jarvis answers with Claude. */
 	ANTHROPIC_API_KEY?: string;

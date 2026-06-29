@@ -529,8 +529,13 @@ function tokenizeMath(s: string): MathTok[] {
 		if (isDigit(c) || (c === "." && isDigit(s[i + 1] ?? ""))) {
 			let j = i + 1;
 			while (j < s.length && (isDigit(s[j]) || s[j] === ".")) j++;
-			let value = parseFloat(s.slice(i, j));
-			if (!Number.isFinite(value)) throw new Error(`bad number near "${s.slice(i, j)}"`);
+			const slice = s.slice(i, j);
+			// parseFloat would silently accept "1.2.3" as 1.2; reject malformed
+			// numbers outright so an exact-arithmetic tool never returns a wrong
+			// answer for a typo.
+			if (!/^[0-9]*\.?[0-9]+$/.test(slice)) throw new Error(`bad number "${slice}"`);
+			let value = parseFloat(slice);
+			if (!Number.isFinite(value)) throw new Error(`bad number near "${slice}"`);
 			i = j;
 			if (s[i] === "%") {
 				value = value / 100;
@@ -679,10 +684,23 @@ class MathParser {
 	}
 }
 
+/**
+ * Render a number the way a person would say it: plain digits, never scientific
+ * notation, with enough precision that small magnitudes don't collapse to "0".
+ * (This is read aloud, so "0.000000025" beats "2.5e-8".)
+ */
 function formatNumber(n: number): string {
-	if (Number.isInteger(n)) return n.toString();
-	const rounded = Math.round(n * 1e10) / 1e10;
-	return rounded.toString();
+	if (!Number.isFinite(n)) throw new Error("that isn't a finite number");
+	if (n === 0) return "0";
+	const abs = Math.abs(n);
+	// Keep ~10 significant fractional digits, but extend for very small numbers so
+	// e.g. 1e-12 stays "0.000000000001" instead of rounding away to 0.
+	const fractionDigits =
+		abs < 1 ? Math.min(20, Math.max(10, Math.ceil(-Math.log10(abs)) + 4)) : 10;
+	return n.toLocaleString("en-US", {
+		useGrouping: false,
+		maximumFractionDigits: fractionDigits,
+	});
 }
 
 // --------------------------------------------------------------------------- //
@@ -845,6 +863,9 @@ export async function safeFetch(rawUrl: string, timeoutMs = 4000): Promise<strin
 		const res = await fetch(url.toString(), {
 			signal: controller.signal,
 			headers: { accept: "application/json" },
+			// Don't auto-follow redirects: a 3xx could point off the allowlist. Any
+			// redirect is non-2xx, so the !res.ok check below rejects it.
+			redirect: "manual",
 		});
 		if (!res.ok) throw new Error(`weather service returned ${res.status}`);
 		const body = await res.text();

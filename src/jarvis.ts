@@ -98,6 +98,8 @@ export async function ask(
 	const due = await dueReminders(env.DB, sessionId, now);
 
 	const system = buildSystemPrompt(persona(env), {
+		// Tools only fire on the Claude path; don't claim agency the fallback lacks.
+		hasTools: Boolean(env.ANTHROPIC_API_KEY),
 		nowSpoken: formatSpokenDateTime(now, tz),
 		knownFacts: formatFactsForPrompt(facts),
 		dueReminders: due
@@ -114,10 +116,11 @@ export async function ask(
 		{ role: "assistant", content: reply },
 	]);
 
-	// Mark surfaced reminders fired only after a reply is in hand, so a failed
-	// generation doesn't silently drop them.
+	// Consume a surfaced reminder only if the reply actually voiced it; otherwise
+	// leave it pending so it resurfaces next turn rather than being silently lost.
 	if (due.length) {
-		await Promise.all(due.map((r) => markReminderFired(env.DB, sessionId, r.id)));
+		const voiced = due.filter((r) => replyMentions(reply, r.text));
+		await Promise.all(voiced.map((r) => markReminderFired(env.DB, sessionId, r.id)));
 	}
 
 	return reply;
@@ -243,4 +246,36 @@ function joinText(content: Anthropic.ContentBlock[]): string {
 		.filter((block): block is Anthropic.TextBlock => block.type === "text")
 		.map((block) => block.text)
 		.join(" ");
+}
+
+// Words too generic to indicate a reminder was actually voiced.
+const REMINDER_STOPWORDS = new Set([
+	"remind",
+	"reminder",
+	"about",
+	"that",
+	"this",
+	"with",
+	"your",
+	"have",
+	"from",
+	"need",
+	"please",
+	"later",
+	"today",
+	"tomorrow",
+]);
+
+/**
+ * Heuristic: did the spoken reply plausibly mention this reminder? Used to avoid
+ * consuming a due reminder the model answered around without ever voicing. If
+ * the text has no distinctive words, assume it surfaced (don't strand it).
+ */
+function replyMentions(reply: string, reminderText: string): boolean {
+	const haystack = reply.toLowerCase();
+	const significant = (reminderText.toLowerCase().match(/[a-z0-9]{4,}/g) ?? []).filter(
+		(w) => !REMINDER_STOPWORDS.has(w),
+	);
+	if (significant.length === 0) return true;
+	return significant.some((w) => haystack.includes(w));
 }

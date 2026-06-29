@@ -66,7 +66,14 @@ export async function composeBriefing(
 	}
 }
 
-/** Reminders that are overdue or fall on the local calendar day of `now`. */
+/** How far back an overdue reminder still counts as "today's" news. */
+const OVERDUE_GRACE_MS = 36 * 60 * 60 * 1000;
+
+/**
+ * Reminders worth mentioning in a briefing: due on the local calendar day, or
+ * recently overdue. The grace window keeps week-old missed reminders from being
+ * recited every single morning (they remain available via `list_reminders`).
+ */
 async function todaysReminders(
 	env: Env,
 	sessionId: string,
@@ -79,7 +86,8 @@ async function todaysReminders(
 	return pending.filter((r) => {
 		const dueMs = new Date(r.dueAt).getTime();
 		if (!Number.isFinite(dueMs)) return false;
-		return dueMs <= nowMs || localYmd(new Date(r.dueAt), tz) === today;
+		if (dueMs <= nowMs) return nowMs - dueMs <= OVERDUE_GRACE_MS;
+		return localYmd(new Date(r.dueAt), tz) === today;
 	});
 }
 

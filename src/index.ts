@@ -37,9 +37,11 @@ export default {
 			}
 
 			case "POST /jarvis":
+				if (!authorized(request, env)) return unauthorized();
 				return handleJarvis(request, env);
 
 			case "GET /briefing":
+				if (!authorized(request, env)) return unauthorized();
 				return handleBriefing(url, env);
 
 			default:
@@ -106,4 +108,33 @@ function json(data: unknown, status = 200): Response {
 		status,
 		headers: { "content-type": "application/json; charset=utf-8" },
 	});
+}
+
+/**
+ * Gate the HTTP endpoints that touch a session's durable memory. When
+ * JARVIS_API_KEY is set, require a matching bearer token (constant-time compare);
+ * when it isn't, stay open for zero-config local use.
+ */
+function authorized(request: Request, env: Env): boolean {
+	if (!env.JARVIS_API_KEY) return true;
+	const header = request.headers.get("authorization") ?? "";
+	const match = /^Bearer\s+(.+)$/i.exec(header);
+	return match ? timingSafeEqual(match[1], env.JARVIS_API_KEY) : false;
+}
+
+function unauthorized(): Response {
+	return json({ error: "Unauthorized." }, 401);
+}
+
+/** Length-independent constant-time string comparison. */
+function timingSafeEqual(a: string, b: string): boolean {
+	const enc = new TextEncoder();
+	const ab = enc.encode(a);
+	const bb = enc.encode(b);
+	// Compare against a fixed-length digest so length itself isn't a side channel.
+	let mismatch = ab.length ^ bb.length;
+	for (let i = 0; i < ab.length; i++) {
+		mismatch |= ab[i] ^ bb[(i % bb.length) || 0];
+	}
+	return mismatch === 0;
 }

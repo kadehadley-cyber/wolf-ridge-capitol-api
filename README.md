@@ -127,6 +127,7 @@ briefing). If you've wired up the WhatsApp bridge, the cron trigger also
 
 | Variable                   | Required | Description                                                  |
 | -------------------------- | -------- | ------------------------------------------------------------ |
+| `JARVIS_API_KEY`           | prod     | Bearer token for `/jarvis` and `/briefing`. Unset = open (local only); set it for any shared deployment. |
 | `ANTHROPIC_API_KEY`        | one of   | Anthropic API key — Jarvis answers with Claude.              |
 | `AI` binding               | these    | Workers AI fallback (already bound) when no key is set.      |
 | `JARVIS_MODEL`             | no       | Claude model id. Defaults to `claude-opus-4-8`.              |
@@ -162,6 +163,9 @@ small deployments, not thousands of users.
   Arithmetic uses a hand-written parser, never `eval`.
 - Stored facts and tool results are treated as **reference data, never
   instructions** (prompt-injection defense) and are scoped per session.
-- WhatsApp webhooks are HMAC-verified when `WHATSAPP_APP_SECRET` is set. Now that
-  the bridge can write durable memory and reminders, **set it before going
-  live** — an unsigned, spoofed webhook could otherwise plant data in a session.
+- **Access control.** Because a session id keys durable memory, the HTTP
+  endpoints `/jarvis` and `/briefing` accept a bearer token: set `JARVIS_API_KEY`
+  and send `Authorization: Bearer <key>` for any shared deployment (leave it
+  unset only for local dev). The WhatsApp webhook **fails closed** — with no
+  `WHATSAPP_APP_SECRET` configured, inbound messages are rejected rather than
+  trusted, since an accepted message now writes durable state.
