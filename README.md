@@ -152,12 +152,23 @@ evaluator, unit conversion, number formatting, timezone helpers, reminder
 windowing, and the reminder-mention heuristic — and run in CI on every push and
 pull request via `.github/workflows/ci.yml`.
 
-## Proactive delivery (cron)
+## Proactive delivery (cron) — optional, off by default
 
-`wrangler.json` registers a `*/15 * * * *` cron trigger. On each tick the Worker
-sweeps for due reminders and delivers any scheduled daily briefings — but only
-over WhatsApp, so this is a **no-op until the WhatsApp bridge is configured**.
-Reminders are marked delivered atomically (at most once), and the daily briefing
+Jarvis can *speak first* — sweep for due reminders and push the daily briefing on
+a schedule — but that needs both a cron trigger and a WhatsApp delivery channel,
+so it's **opt-in**. Without it, reminders are pull-based: they surface the next
+time you talk to Jarvis or whenever you call `GET /briefing`.
+
+To enable proactive push, configure the WhatsApp bridge and add a trigger to
+`wrangler.json`:
+
+```jsonc
+"triggers": { "crons": ["*/15 * * * *"] }
+```
+
+The `scheduled()` handler then sweeps due reminders and delivers any scheduled
+briefings over WhatsApp on each tick (it no-ops if WhatsApp isn't configured).
+Reminders are marked delivered atomically (at most once) and the daily briefing
 is guarded by a per-day ledger so it can't double-send. This scales to personal /
 small deployments, not thousands of users.
 

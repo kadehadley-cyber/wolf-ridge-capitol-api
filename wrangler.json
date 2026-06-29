@@ -14,9 +14,6 @@
 	"ai": {
 		"binding": "AI"
 	},
-	"triggers": {
-		"crons": ["*/15 * * * *"]
-	},
 	"observability": {
 		"enabled": true
 	}
