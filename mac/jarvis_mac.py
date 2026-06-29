@@ -39,9 +39,10 @@ import urllib.request
 
 SAMPLE_RATE = 16_000  # what Whisper expects
 
-# "auto" picks the most natural British voice installed (see resolve_voice).
-# Override with JARVIS_VOICE / --voice (e.g. "Daniel (Enhanced)").
-DEFAULT_VOICE = os.environ.get("JARVIS_VOICE", "auto")
+# The voice Jarvis speaks with. Set to a specific installed voice (the default),
+# or "auto" to let resolve_voice pick the most natural British voice it finds.
+# Override per-run with JARVIS_VOICE / --voice.
+DEFAULT_VOICE = os.environ.get("JARVIS_VOICE", "Allison (Enhanced)")
 DEFAULT_MODEL = os.environ.get("WHISPER_MODEL", "base.en")
 DEFAULT_URL = os.environ.get("JARVIS_URL", "http://localhost:8787/jarvis")
 DEFAULT_SESSION = os.environ.get("JARVIS_SESSION", "mac")
