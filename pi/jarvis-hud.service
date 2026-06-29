@@ -1,0 +1,22 @@
+[Unit]
+Description=Jarvis HUD kiosk (Cage + Chromium full-screen)
+# Wait for the voice service (which serves the HUD at :8088) and a graphical seat.
+After=jarvis.service systemd-user-sessions.service
+Wants=jarvis.service
+
+[Service]
+# install.sh substitutes __USER__. Cage is a tiny kiosk Wayland compositor that
+# runs exactly one full-screen app — here, Chromium pointed at the local HUD.
+User=__USER__
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+PAMName=login
+ExecStart=/usr/bin/cage -s -- __BROWSER__ --kiosk --noerrdialogs --disable-infobars \
+  --check-for-update-interval=31536000 --app=http://127.0.0.1:8088
+Restart=on-failure
+RestartSec=4
+
+[Install]
+WantedBy=multi-user.target

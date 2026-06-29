@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>J.A.R.V.I.S.</title>
+<style>
+  :root {
+    --blue: #38d0ff;
+    --blue-bright: #9bf1ff;
+    --blue-deep: #0a4d6e;
+    --bg: #02060b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); cursor: none; }
+  body {
+    font-family: "Eurostile", "Bank Gothic", "Agency FB", "DIN Condensed",
+      ui-monospace, "SF Mono", "Roboto Mono", monospace;
+    color: var(--blue);
+    letter-spacing: 0.18em;
+    -webkit-font-smoothing: antialiased;
+  }
+  #stage { position: fixed; inset: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* Holographic scanlines + vignette over everything */
+  #overlay {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      repeating-linear-gradient(0deg, rgba(120,230,255,0.05) 0 1px, transparent 1px 3px);
+    mix-blend-mode: screen;
+    animation: flicker 6s infinite steps(60);
+  }
+  /* Separate, gentler vignette so the centre stays bright. */
+  #vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(130% 130% at 50% 50%, transparent 48%, rgba(0,0,0,0.72) 100%);
+  }
+  @keyframes flicker { 0%,100%{opacity:.85} 48%{opacity:.8} 50%{opacity:.95} 52%{opacity:.8} }
+
+  .hud { position: absolute; pointer-events: none; text-shadow: 0 0 12px rgba(56,208,255,0.55); }
+
+  /* Top bar */
+  #topbar { top: 3.2vh; left: 0; right: 0; display: flex; justify-content: space-between;
+            align-items: flex-start; padding: 0 5vw; }
+  .brand { font-size: clamp(20px, 3.4vw, 46px); font-weight: 700; letter-spacing: 0.42em; }
+  .brand small { display:block; font-size: clamp(8px,1vw,13px); letter-spacing:0.5em; opacity:0.65; margin-top:6px; }
+  #clock { text-align: right; }
+  #time { font-size: clamp(22px, 3.2vw, 44px); font-weight: 600; }
+  #date { font-size: clamp(8px, 1vw, 13px); opacity: 0.7; margin-top: 4px; letter-spacing: 0.4em; }
+
+  /* Corner telemetry readouts */
+  .corner { font-size: clamp(8px, 0.95vw, 12px); line-height: 1.9; opacity: 0.62; }
+  #tl { top: 16vh; left: 4vw; }
+  #bl { bottom: 5vh; left: 4vw; }
+  #br { bottom: 5vh; right: 4vw; text-align: right; }
+  .corner .v { color: var(--blue-bright); }
+
+  /* Center status + captions */
+  #status { left: 0; right: 0; bottom: 15vh; text-align: center;
+            font-size: clamp(13px, 1.7vw, 22px); letter-spacing: 0.7em; padding-left: 0.7em;
+            color: var(--blue-bright); opacity: 0.92; }
+  #captions { left: 0; right: 0; bottom: 4.5vh; text-align: center; padding: 0 7vw; }
+  #you { font-size: clamp(11px, 1.3vw, 17px); opacity: 0.6; min-height: 1.4em; letter-spacing: 0.25em; }
+  #reply { font-size: clamp(15px, 2.1vw, 30px); margin-top: 1vh; min-height: 1.5em;
+           color: var(--blue-bright); letter-spacing: 0.16em; line-height: 1.35; }
+  .caret { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Boot fade-in */
+  #stage { animation: boot 1.6s ease-out both; }
+  @keyframes boot { from { opacity: 0; filter: brightness(2.2) blur(6px); } to { opacity: 1; filter: none; } }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="vignette"></div>
+    <div id="overlay"></div>
+
+    <div class="hud" id="topbar">
+      <div class="brand">J.A.R.V.I.S.<small>JUST A RATHER VERY INTELLIGENT SYSTEM</small></div>
+      <div id="clock"><div id="time">--:--</div><div id="date">— — —</div></div>
+    </div>
+
+    <div class="hud corner" id="tl">
+      <div>SYS&nbsp;&nbsp;<span class="v" id="m-sys">ONLINE</span></div>
+      <div>CORE&nbsp;<span class="v" id="m-core">98.6%</span></div>
+      <div>LINK&nbsp;<span class="v" id="m-link">SECURE</span></div>
+    </div>
+    <div class="hud corner" id="bl">
+      <div>PWR&nbsp;&nbsp;<span class="v" id="m-pwr">100%</span></div>
+      <div>NET&nbsp;&nbsp;<span class="v">CLOUDFLARE EDGE</span></div>
+    </div>
+    <div class="hud corner" id="br">
+      <div><span class="v" id="m-cpu">12%</span>&nbsp;&nbsp;CPU</div>
+      <div><span class="v" id="m-mem">41%</span>&nbsp;&nbsp;MEM</div>
+      <div><span class="v" id="m-uptime">00:00:00</span></div>
+    </div>
+
+    <div class="hud" id="status">STANDBY</div>
+    <div class="hud" id="captions">
+      <div id="you"></div>
+      <div id="reply"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  const BLUE = "#38d0ff", BRIGHT = "#bff4ff", DEEP = "#0c5c84";
+
+  let W = 0, H = 0, CX = 0, CY = 0, R = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 1.75);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    CX = W / 2; CY = H / 2;
+    R = Math.min(W, H) * 0.30;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // ---- Visual state, eased toward targets so transitions feel mechanical ----
+  const VIS = {
+    idle:      { energy: 0.24, spin: 0.45, glow: 0.80, hue: 0 },
+    listening: { energy: 0.78, spin: 0.85, glow: 1.05, hue: 0 },
+    thinking:  { energy: 0.60, spin: 2.10, glow: 1.00, hue: 0 },
+    speaking:  { energy: 1.00, spin: 1.20, glow: 1.10, hue: 0 },
+  };
+  let cur = { ...VIS.idle };
+  let stateName = "idle";
+  let micLevel = 0;          // 0..1 reported by the device while listening
+  const STATUS_TEXT = { idle: "STANDBY", listening: "LISTENING", thinking: "PROCESSING", speaking: "SPEAKING" };
+
+  function setState(name, level) {
+    if (VIS[name]) stateName = name;
+    if (typeof level === "number") micLevel = Math.max(0, Math.min(1, level));
+    document.getElementById("status").textContent = STATUS_TEXT[stateName] || "";
+  }
+
+  // ---- Rotating ring helpers ----
+  function ring(r, opts) {
+    const { width = 1, alpha = 1, dash = null, color = BLUE, glow = 0 } = opts || {};
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.shadowColor = color; ctx.shadowBlur = glow;
+    if (dash) ctx.setLineDash(dash);
+    ctx.beginPath(); ctx.arc(CX, CY, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  function arc(r, a0, a1, opts) {
+    const { width = 2, alpha = 1, color = BLUE, glow = 0, cap = "butt" } = opts || {};
+    ctx.save();
+    ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = width;
+    ctx.lineCap = cap; ctx.shadowColor = color; ctx.shadowBlur = glow;
+    ctx.beginPath(); ctx.arc(CX, CY, r, a0, a1); ctx.stroke();
+    ctx.restore();
+  }
+  function ticks(r, count, len, opts) {
+    const { width = 1, alpha = 0.6, color = BLUE, rot = 0 } = opts || {};
+    ctx.save();
+    ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = width;
+    for (let i = 0; i < count; i++) {
+      const a = rot + (i / count) * Math.PI * 2;
+      const x0 = CX + Math.cos(a) * r, y0 = CY + Math.sin(a) * r;
+      const x1 = CX + Math.cos(a) * (r + len), y1 = CY + Math.sin(a) * (r + len);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---- Particles for atmosphere ----
+  const parts = Array.from({ length: 70 }, () => ({
+    a: Math.random() * Math.PI * 2,
+    r: R * (1.2 + Math.random() * 2.2),
+    s: 0.0005 + Math.random() * 0.0016,
+    z: 0.2 + Math.random() * 0.8,
+  }));
+
+  let t = 0, spinAcc = 0, last = performance.now();
+  let bootT = 0;
+
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
+    bootT = Math.min(1, bootT + dt / 1.4);
+
+    // Ease current visuals toward the target state.
+    const tgt = VIS[stateName];
+    const k = 1 - Math.pow(0.0001, dt); // smooth critically-damped-ish
+    for (const key of ["energy", "spin", "glow", "hue"]) cur[key] += (tgt[key] - cur[key]) * k;
+    spinAcc += cur.spin * dt;
+
+    // Drive amplitude from reported mic level when listening, else synthetic.
+    const breathe = 0.5 + 0.5 * Math.sin(t * 1.7);
+    const amp = stateName === "listening"
+      ? Math.max(cur.energy * 0.35, micLevel)
+      : cur.energy * (0.55 + 0.45 * breathe);
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Background glow behind the core.
+    const bgGlow = ctx.createRadialGradient(CX, CY, 0, CX, CY, R * 2.6);
+    bgGlow.addColorStop(0, `rgba(24,140,200,${0.30 * cur.glow})`);
+    bgGlow.addColorStop(0.5, `rgba(16,90,140,${0.12 * cur.glow})`);
+    bgGlow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = bgGlow; ctx.fillRect(0, 0, W, H);
+
+    const bootScale = 0.6 + 0.4 * easeOut(bootT);
+    ctx.save(); ctx.translate(CX, CY); ctx.scale(bootScale, bootScale); ctx.translate(-CX, -CY);
+
+    // Additive blending so the glows bloom and accumulate like real holography.
+    ctx.globalCompositeOperation = "lighter";
+
+    // Drifting particles.
+    ctx.save();
+    for (const p of parts) {
+      p.a += p.s * (0.6 + cur.spin);
+      const x = CX + Math.cos(p.a) * p.r, y = CY + Math.sin(p.a) * p.r;
+      ctx.globalAlpha = 0.10 + 0.22 * p.z * cur.glow;
+      ctx.fillStyle = BLUE;
+      ctx.beginPath(); ctx.arc(x, y, p.z * 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+
+    const g = 14 * cur.glow;
+
+    // --- Outer ring stack ---
+    ring(R * 1.62, { width: 1, alpha: 0.28 * cur.glow, color: BLUE });
+    ticks(R * 1.5, 120, 7, { rot: spinAcc * 0.1, alpha: 0.32 * cur.glow, width: 1 });
+    ticks(R * 1.5, 12, 16, { rot: spinAcc * 0.1, alpha: 0.6 * cur.glow, width: 2, color: BRIGHT });
+
+    // Rotating dashed mid ring.
+    ctx.save(); ctx.translate(CX, CY); ctx.rotate(spinAcc * 0.5); ctx.translate(-CX, -CY);
+    ring(R * 1.28, { width: 2, alpha: 0.6 * cur.glow, dash: [6, 14], color: BLUE, glow: g });
+    ctx.restore();
+
+    // Counter-rotating broken ring with bracket accents.
+    ctx.save(); ctx.translate(CX, CY); ctx.rotate(-spinAcc * 0.34); ctx.translate(-CX, -CY);
+    for (let i = 0; i < 4; i++) {
+      const a0 = (i / 4) * Math.PI * 2 + 0.18;
+      arc(R * 1.12, a0, a0 + Math.PI / 2 - 0.36, { width: 3.5, alpha: 0.98 * cur.glow, color: BLUE, glow: g, cap: "round" });
+    }
+    ctx.restore();
+
+    // Fast inner accent arcs (spin up hard when thinking).
+    ctx.save(); ctx.translate(CX, CY); ctx.rotate(spinAcc * 1.1); ctx.translate(-CX, -CY);
+    arc(R * 0.96, 0.2, 1.5, { width: 2, alpha: 0.9 * cur.glow, color: BRIGHT, glow: g });
+    arc(R * 0.96, Math.PI + 0.2, Math.PI + 1.0, { width: 2, alpha: 0.9 * cur.glow, color: BRIGHT, glow: g });
+    ctx.restore();
+
+    ring(R * 0.84, { width: 1.5, alpha: 0.5 * cur.glow, color: BLUE, glow: g });
+
+    // --- Radial audio equalizer reacting to amplitude ---
+    const bars = 100;
+    ctx.save();
+    ctx.strokeStyle = BRIGHT; ctx.shadowColor = BLUE; ctx.shadowBlur = g * 1.4;
+    for (let i = 0; i < bars; i++) {
+      const a = (i / bars) * Math.PI * 2;
+      const wob = Math.sin(i * 0.6 + t * 6) * 0.5 + 0.5;
+      const n = (0.22 + 0.78 * wob) * amp;
+      const r0 = R * 0.52;
+      const r1 = r0 + n * R * 0.34 + 3;
+      ctx.globalAlpha = 0.5 + 0.5 * n;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(CX + Math.cos(a) * r0, CY + Math.sin(a) * r0);
+      ctx.lineTo(CX + Math.cos(a) * r1, CY + Math.sin(a) * r1);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // --- Reactor core ---
+    const pulse = 0.5 + 0.5 * Math.sin(t * (stateName === "thinking" ? 9 : 3));
+    const coreR = R * (0.30 + 0.05 * amp + 0.02 * pulse);
+    const core = ctx.createRadialGradient(CX, CY, 0, CX, CY, coreR);
+    core.addColorStop(0, "rgba(216,250,255,1)");
+    core.addColorStop(0.22, `rgba(150,238,255,${cur.glow})`);
+    core.addColorStop(0.5, `rgba(90,215,255,${0.9 * cur.glow})`);
+    core.addColorStop(0.8, `rgba(24,135,200,${0.5 * cur.glow})`);
+    core.addColorStop(1, "rgba(8,50,85,0)");
+    ctx.save();
+    ctx.shadowColor = BLUE; ctx.shadowBlur = 75 * cur.glow;
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(CX, CY, coreR, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // Core rotating triangle reticle (arc-reactor motif).
+    ctx.save();
+    ctx.translate(CX, CY); ctx.rotate(spinAcc * 0.7);
+    ctx.globalAlpha = 0.8 * cur.glow; ctx.strokeStyle = BRIGHT; ctx.lineWidth = 1.5;
+    ctx.shadowColor = BLUE; ctx.shadowBlur = g;
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 - Math.PI / 2;
+      const x = Math.cos(a) * coreR * 0.7, y = Math.sin(a) * coreR * 0.7;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.closePath(); ctx.stroke();
+    ctx.restore();
+
+    ctx.restore(); // boot scale
+
+    requestAnimationFrame(frame);
+  }
+  function easeOut(x) { return 1 - Math.pow(1 - x, 3); }
+  requestAnimationFrame(frame);
+
+  // ---- Clock + flavor telemetry ----
+  const startTime = Date.now();
+  function pad(n) { return String(n).padStart(2, "0"); }
+  setInterval(() => {
+    const d = new Date();
+    document.getElementById("time").textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    document.getElementById("date").textContent =
+      d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase();
+    const up = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById("m-uptime").textContent =
+      `${pad(Math.floor(up/3600))}:${pad(Math.floor(up/60)%60)}:${pad(up%60)}`;
+    document.getElementById("m-cpu").textContent = `${8 + Math.floor(Math.random()*10)}%`;
+    document.getElementById("m-mem").textContent = `${38 + Math.floor(Math.random()*8)}%`;
+    document.getElementById("m-core").textContent = `${(98 + Math.random()).toFixed(1)}%`;
+  }, 1000);
+
+  // ---- Caption typewriter ----
+  let typing = null;
+  function typeReply(text) {
+    const el = document.getElementById("reply");
+    clearInterval(typing); el.textContent = ""; if (!text) return;
+    let i = 0;
+    typing = setInterval(() => {
+      el.textContent = text.slice(0, ++i);
+      const c = document.createElement("span"); c.className = "caret"; c.textContent = "▌";
+      el.appendChild(c);
+      if (i >= text.length) clearInterval(typing);
+    }, 22);
+  }
+
+  // ---- State source: poll the device, else run a self-demo ----
+  let lastReply = "", lastYou = "", demo = false;
+  async function poll() {
+    try {
+      const r = await fetch("/state", { cache: "no-store" });
+      if (!r.ok) throw 0;
+      const s = await r.json();
+      setState(s.state || "idle", s.level);
+      if ((s.you || "") !== lastYou) { lastYou = s.you || ""; document.getElementById("you").textContent = lastYou ? `“${lastYou}”` : ""; }
+      if ((s.reply || "") !== lastReply) { lastReply = s.reply || ""; typeReply(lastReply); }
+    } catch (e) {
+      if (!demo) { demo = true; runDemo(); }
+    }
+  }
+  setInterval(poll, 150);
+
+  // Standalone preview (no device): cycle through the states so the look is alive.
+  function runDemo() {
+    const script = [
+      ["idle", 2200, "", ""],
+      ["listening", 2600, "what's the weather like in Malibu?", ""],
+      ["thinking", 1500, "what's the weather like in Malibu?", ""],
+      ["speaking", 4200, "what's the weather like in Malibu?", "Seventy-two and clear over Malibu, sir. A fine day to fly."],
+      ["idle", 2000, "", ""],
+    ];
+    let i = 0;
+    (function step() {
+      const [st, ms, you, reply] = script[i % script.length];
+      setState(st, st === "listening" ? 0.6 + Math.random()*0.3 : undefined);
+      const yEl = document.getElementById("you");
+      if (you !== lastYou) { lastYou = you; yEl.textContent = you ? `“${you}”` : ""; }
+      if (reply !== lastReply) { lastReply = reply; typeReply(reply); }
+      // Wobble the mic level during the listening beat.
+      if (st === "listening") {
+        const lv = setInterval(() => setState("listening", 0.4 + Math.random()*0.5), 120);
+        setTimeout(() => clearInterval(lv), ms);
+      }
+      i++; setTimeout(step, ms);
+    })();
+  }
+})();
+</script>
+</body>
+</html>
