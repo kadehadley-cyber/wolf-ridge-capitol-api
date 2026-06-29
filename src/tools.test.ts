@@ -4,6 +4,7 @@ import {
 	evalMath,
 	filterRemindersByWindow,
 	formatNumber,
+	geocodeCandidates,
 } from "./tools";
 import type { Reminder } from "./longterm";
 
@@ -93,6 +94,28 @@ describe("formatNumber", () => {
 	it("does not collapse a small non-zero result to 0", () => {
 		expect(formatNumber(1e-12)).toBe("0.000000000001");
 		expect(formatNumber(2.5e-8)).toBe("0.000000025");
+	});
+});
+
+describe("geocodeCandidates", () => {
+	it("tries the full clean name first so it isn't truncated", () => {
+		expect(geocodeCandidates("New York")[0]).toBe("New York");
+	});
+
+	it("falls back past a trailing state word", () => {
+		const c = geocodeCandidates("American Fork Utah");
+		expect(c[0]).toBe("American Fork Utah");
+		expect(c).toContain("American Fork");
+	});
+
+	it("falls back to the part before a comma", () => {
+		expect(geocodeCandidates("Provo, UT")).toContain("Provo");
+	});
+
+	it("dedupes and caps at three attempts", () => {
+		const c = geocodeCandidates("a b c d");
+		expect(c.length).toBeLessThanOrEqual(3);
+		expect(new Set(c).size).toBe(c.length);
 	});
 });
 
