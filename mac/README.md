@@ -58,7 +58,12 @@ Then run the client pointed at it (this is the default when you omit `--direct`)
 cd mac && ./jarvis
 ```
 
-To use a deployed Worker instead: `JARVIS_URL="https://<you>.workers.dev/jarvis" ./jarvis`.
+To use a deployed Worker instead, point `JARVIS_URL` at it — and, if that Worker
+has `JARVIS_API_KEY` set, pass the matching key so you aren't rejected with a 401:
+
+```bash
+JARVIS_URL="https://<you>.workers.dev/jarvis" JARVIS_API_KEY="<your-key>" ./jarvis
+```
 
 ---
 
@@ -84,6 +89,7 @@ All optional; set as environment variables or pass the matching flag.
 | `JARVIS_SESSION` | `--session` | `mac` | Memory bucket — change it to keep separate conversations. |
 | `JARVIS_MODEL` | `--claude-model` | `claude-opus-4-8` | Claude model for standalone mode. |
 | `JARVIS_URL` | `--url` | `http://localhost:8787/jarvis` | Worker endpoint (paired mode). |
+| `JARVIS_API_KEY` | `--api-key` | — | Bearer token for a deployed Worker that has `JARVIS_API_KEY` set (paired mode). |
 
 ## Requirements
 

@@ -45,6 +45,8 @@ DEFAULT_MODEL = os.environ.get("WHISPER_MODEL", "base.en")
 DEFAULT_URL = os.environ.get("JARVIS_URL", "http://localhost:8787/jarvis")
 DEFAULT_SESSION = os.environ.get("JARVIS_SESSION", "mac")
 DEFAULT_CLAUDE_MODEL = os.environ.get("JARVIS_MODEL", "claude-opus-4-8")
+# Bearer token for a deployed Worker that has JARVIS_API_KEY set (paired mode).
+DEFAULT_WORKER_KEY = os.environ.get("JARVIS_API_KEY", "")
 
 # Where standalone mode keeps its state (memory + saved API key), so Jarvis
 # remembers you across launches and the double-click app works without a shell
@@ -210,18 +212,32 @@ def list_voices():
 class WorkerBrain:
     """Talks to the Cloudflare Worker's /jarvis endpoint."""
 
-    def __init__(self, url: str, session: str):
+    def __init__(self, url: str, session: str, api_key: str = ""):
         self.url = url
         self.session = session
+        self.api_key = api_key
 
     def ask(self, text: str) -> str:
         payload = json.dumps({"text": text, "sessionId": self.session}).encode()
-        req = urllib.request.Request(
-            self.url, data=payload, headers={"content-type": "application/json"}
-        )
+        headers = {"content-type": "application/json"}
+        # The Worker gates /jarvis behind a bearer token when JARVIS_API_KEY is
+        # set on it; send the matching key so we aren't rejected with a 401.
+        if self.api_key:
+            headers["authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(self.url, data=payload, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 data = json.load(resp)
+        except urllib.error.HTTPError as err:
+            if err.code == 401:
+                raise RuntimeError(
+                    "The Jarvis Worker rejected the request (401 Unauthorized). "
+                    "It has JARVIS_API_KEY set, so pass the matching key with "
+                    "--api-key or the JARVIS_API_KEY environment variable."
+                ) from err
+            raise RuntimeError(
+                f"The Jarvis Worker returned an error ({err.code} {err.reason})."
+            ) from err
         except urllib.error.URLError as err:
             raise RuntimeError(
                 f"Couldn't reach the Jarvis Worker at {self.url} ({err}).\n"
@@ -323,6 +339,7 @@ def main():
     parser.add_argument("--voice", default=DEFAULT_VOICE, help=f"macOS voice (default: {DEFAULT_VOICE}).")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL}).")
     parser.add_argument("--url", default=DEFAULT_URL, help="Worker /jarvis endpoint.")
+    parser.add_argument("--api-key", default=DEFAULT_WORKER_KEY, help="Bearer token for a Worker with JARVIS_API_KEY set (or set JARVIS_API_KEY).")
     parser.add_argument("--session", default=DEFAULT_SESSION, help="Conversation/session id.")
     parser.add_argument("--claude-model", default=DEFAULT_CLAUDE_MODEL, help="Claude model for --direct mode.")
     parser.add_argument("--list-voices", action="store_true", help="List installed macOS voices and exit.")
@@ -335,7 +352,7 @@ def main():
     brain = (
         DirectBrain(args.claude_model, args.session)
         if args.direct
-        else WorkerBrain(args.url, args.session)
+        else WorkerBrain(args.url, args.session, args.api_key)
     )
 
     # Text-only mode: useful for testing the brain without a microphone.
