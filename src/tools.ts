@@ -436,7 +436,7 @@ const cancelReminderTool: JarvisTool = {
 };
 
 /** Bucket pending reminders into the requested window using the session tz. */
-function filterRemindersByWindow(
+export function filterRemindersByWindow(
 	reminders: Reminder[],
 	window: "due" | "today" | "upcoming" | "all",
 	now: Date,
@@ -689,7 +689,7 @@ class MathParser {
  * notation, with enough precision that small magnitudes don't collapse to "0".
  * (This is read aloud, so "0.000000025" beats "2.5e-8".)
  */
-function formatNumber(n: number): string {
+export function formatNumber(n: number): string {
 	if (!Number.isFinite(n)) throw new Error("that isn't a finite number");
 	if (n === 0) return "0";
 	const abs = Math.abs(n);

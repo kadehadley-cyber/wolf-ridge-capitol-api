@@ -271,7 +271,7 @@ const REMINDER_STOPWORDS = new Set([
  * consuming a due reminder the model answered around without ever voicing. If
  * the text has no distinctive words, assume it surfaced (don't strand it).
  */
-function replyMentions(reply: string, reminderText: string): boolean {
+export function replyMentions(reply: string, reminderText: string): boolean {
 	const haystack = reply.toLowerCase();
 	const significant = (reminderText.toLowerCase().match(/[a-z0-9]{4,}/g) ?? []).filter(
 		(w) => !REMINDER_STOPWORDS.has(w),

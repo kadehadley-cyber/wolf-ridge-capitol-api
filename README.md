@@ -143,7 +143,14 @@ briefing). If you've wired up the WhatsApp bridge, the cron trigger also
 
 ```bash
 npm run dev        # seeds local D1 and starts wrangler dev
+npm test           # run the unit tests (vitest)
+npm run check      # the full gate: tsc + tests + a dry-run bundle
 ```
+
+Unit tests ([vitest](https://vitest.dev/)) cover the pure logic — the math
+evaluator, unit conversion, number formatting, timezone helpers, reminder
+windowing, and the reminder-mention heuristic — and run in CI on every push and
+pull request via `.github/workflows/ci.yml`.
 
 ## Proactive delivery (cron)
 

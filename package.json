@@ -17,16 +17,19 @@
 	},
 	"devDependencies": {
 		"typescript": "5.9.3",
+		"vitest": "^3.2.6",
 		"wrangler": "4.56.0"
 	},
 	"private": true,
 	"scripts": {
 		"cf-typegen": "wrangler types",
-		"check": "tsc && wrangler deploy --dry-run",
+		"check": "tsc && vitest run && wrangler deploy --dry-run",
 		"deploy": "wrangler deploy",
 		"dev": "pnpm seedLocalD1 && wrangler dev",
 		"predeploy": "wrangler d1 migrations apply DB --remote",
-		"seedLocalD1": "wrangler d1 migrations apply DB --local"
+		"seedLocalD1": "wrangler d1 migrations apply DB --local",
+		"test": "vitest run",
+		"test:watch": "vitest"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.102.0"
