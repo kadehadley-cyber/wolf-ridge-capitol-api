@@ -86,7 +86,7 @@ async function respondToMessages(
 	}
 }
 
-async function sendText(env: Env, to: string, body: string): Promise<void> {
+export async function sendText(env: Env, to: string, body: string): Promise<void> {
 	if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID) {
 		console.error("WhatsApp credentials missing; cannot deliver reply.");
 		return;
@@ -116,8 +116,10 @@ async function sendText(env: Env, to: string, body: string): Promise<void> {
 
 /**
  * Verify Meta's `X-Hub-Signature-256` header (HMAC-SHA256 of the raw body keyed
- * by the app secret). Skipped only if no app secret is configured — set
- * WHATSAPP_APP_SECRET in production.
+ * by the app secret). Fails CLOSED: with no `WHATSAPP_APP_SECRET` configured we
+ * reject inbound webhooks rather than trust them, because an accepted message
+ * now writes durable memory and reminders and triggers billable replies — a
+ * forged, unsigned webhook must not be able to do that.
  */
 async function verifySignature(
 	rawBody: string,
@@ -125,10 +127,10 @@ async function verifySignature(
 	env: Env,
 ): Promise<boolean> {
 	if (!env.WHATSAPP_APP_SECRET) {
-		console.warn(
-			"WHATSAPP_APP_SECRET not set — skipping signature verification. Set it before going live.",
+		console.error(
+			"WHATSAPP_APP_SECRET not set — rejecting inbound webhook. Set it to enable the WhatsApp bridge.",
 		);
-		return true;
+		return false;
 	}
 	if (!signature?.startsWith("sha256=")) return false;
 
