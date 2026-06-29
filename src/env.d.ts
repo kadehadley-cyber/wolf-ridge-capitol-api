@@ -16,6 +16,12 @@ interface Env {
 	JARVIS_NAME?: string;
 	/** How the assistant addresses the wearer. Defaults to "sir"; set "" for none. */
 	JARVIS_USER_TITLE?: string;
+	/**
+	 * Default IANA timezone (e.g. "America/Denver") used to ground time and
+	 * reminders when a wearer hasn't saved their own `timezone` fact. Optional;
+	 * falls back to UTC.
+	 */
+	JARVIS_TIMEZONE?: string;
 
 	// --- WhatsApp Cloud API bridge ---
 	/** Permanent access token for the WhatsApp Cloud API (secret). */

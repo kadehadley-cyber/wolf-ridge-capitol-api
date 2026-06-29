@@ -86,7 +86,7 @@ async function respondToMessages(
 	}
 }
 
-async function sendText(env: Env, to: string, body: string): Promise<void> {
+export async function sendText(env: Env, to: string, body: string): Promise<void> {
 	if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID) {
 		console.error("WhatsApp credentials missing; cannot deliver reply.");
 		return;

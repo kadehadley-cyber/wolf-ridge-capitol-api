@@ -17,6 +17,17 @@ export function renderHtml(env: Env): string {
 		? "enforced"
 		: "⚠️ not enforced (set WHATSAPP_APP_SECRET)";
 
+	const whatsappReady = Boolean(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID);
+	const proactivePush = whatsappReady
+		? "ready (cron pushes reminders + briefings)"
+		: "pull-only (configure WhatsApp to push)";
+
+	// Agency (tool use) is the Claude path only; the Workers AI fallback can't
+	// call tools, so it degrades to a memory-aware conversation.
+	const agency = env.ANTHROPIC_API_KEY
+		? "ready (10 tools)"
+		: "limited (set ANTHROPIC_API_KEY for tools)";
+
 	const name = env.JARVIS_NAME || "Jarvis";
 
 	const row = (label: string, value: string) =>
@@ -48,6 +59,11 @@ export function renderHtml(env: Env): string {
 
     <table>
       ${row("Brain", brain)}
+      ${row("Agency (tools)", agency)}
+      ${row("Long-term memory", "ready (D1)")}
+      ${row("Reminders", "ready (D1)")}
+      ${row("Proactive briefing", "GET /briefing?sessionId=me")}
+      ${row("Proactive push", proactivePush)}
       ${row("WhatsApp bridge", whatsapp)}
       ${row("Webhook signature", signature)}
     </table>

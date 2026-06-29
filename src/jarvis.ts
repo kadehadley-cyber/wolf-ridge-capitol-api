@@ -3,15 +3,28 @@
 // Powered by Claude (Anthropic API) when ANTHROPIC_API_KEY is set, with an
 // automatic fallback to Cloudflare Workers AI (Llama) when it isn't — so the
 // assistant still answers even before you've wired up a key.
+//
+// On the Claude path Jarvis is an *agent*: it can call tools mid-turn (tell the
+// time, check the weather, do exact math and unit conversions, and remember or
+// recall facts and reminders). It also knows you — durable facts about the
+// wearer are injected into every system prompt — and it's grounded in the real
+// date/time. The Workers AI fallback can't call tools, so it degrades to a
+// memory-aware, date-grounded conversation.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { buildSystemPrompt, type PersonaConfig } from "./persona";
+import { appendTurns, clearHistory, loadHistory, type Turn } from "./memory";
 import {
-	appendTurns,
-	clearHistory,
-	loadHistory,
-	type Turn,
-} from "./memory";
+	clearFacts,
+	clearReminders,
+	dueReminders,
+	formatFactsForPrompt,
+	getFactValue,
+	loadFacts,
+	markReminderFired,
+} from "./longterm";
+import { formatSpokenDateTime, formatSpokenDue, safeTimeZone } from "./datetime";
+import { buildToolCatalog, runTool, type ToolContext } from "./tools";
 
 const DEFAULT_MODEL = "claude-opus-4-8";
 const DEFAULT_NAME = "Jarvis";
@@ -20,17 +33,27 @@ const DEFAULT_USER_TITLE = "sir";
 // Spoken replies are short; this is plenty of headroom and keeps latency low.
 const MAX_TOKENS = 1024;
 
-// Phrases that wipe the conversation and start fresh.
+// How many durable facts to inject into the system prompt each turn.
+const FACT_INJECT_LIMIT = 40;
+
+// Bounds on the agentic tool-call loop so a turn always ends in a spoken
+// sentence — never a hang or a dangling tool call.
+const MAX_TOOL_STEPS = 5;
+const TOOL_TIME_BUDGET_MS = 22_000;
+
+// Phrases that wipe the short-term conversation and start fresh.
 const RESET_PATTERN =
 	/^\s*(jarvis,?\s+)?(reset|start over|forget (everything|all that|the conversation)|new conversation|clear (memory|history))\s*[.!]?\s*$/i;
+
+// Phrases that wipe everything Jarvis knows about you — the privacy command.
+const FORGET_ME_PATTERN =
+	/^\s*(jarvis,?\s+)?(forget (everything|all|what you know) about me|forget me|wipe (my data|everything about me)|delete (my data|everything about me))\s*[.!]?\s*$/i;
 
 function persona(env: Env): PersonaConfig {
 	return {
 		name: env.JARVIS_NAME || DEFAULT_NAME,
 		userTitle:
-			env.JARVIS_USER_TITLE === undefined
-				? DEFAULT_USER_TITLE
-				: env.JARVIS_USER_TITLE,
+			env.JARVIS_USER_TITLE === undefined ? DEFAULT_USER_TITLE : env.JARVIS_USER_TITLE,
 	};
 }
 
@@ -44,10 +67,20 @@ export async function ask(
 	utterance: string,
 ): Promise<string> {
 	const text = utterance.trim();
-	const { name } = persona(env);
 
 	if (!text) {
 		return `I'm here. What do you need?`;
+	}
+
+	// The privacy command is checked first — it's the most destructive and its
+	// phrasing ("forget everything about me") would otherwise look like a reset.
+	if (FORGET_ME_PATTERN.test(text)) {
+		await Promise.all([
+			clearHistory(env.DB, sessionId),
+			clearFacts(env.DB, sessionId),
+			clearReminders(env.DB, sessionId),
+		]);
+		return `Done. I've wiped what I knew about you, along with our conversation.`;
 	}
 
 	if (RESET_PATTERN.test(text)) {
@@ -55,8 +88,25 @@ export async function ask(
 		return `Done. Clean slate.`;
 	}
 
-	const history = await loadHistory(env.DB, sessionId);
-	const reply = (await generate(env, history, text)).trim() ||
+	const now = new Date();
+	const [history, facts] = await Promise.all([
+		loadHistory(env.DB, sessionId),
+		loadFacts(env.DB, sessionId, FACT_INJECT_LIMIT),
+	]);
+
+	const tz = safeTimeZone(getFactValue(facts, "timezone") ?? env.JARVIS_TIMEZONE);
+	const due = await dueReminders(env.DB, sessionId, now);
+
+	const system = buildSystemPrompt(persona(env), {
+		nowSpoken: formatSpokenDateTime(now, tz),
+		knownFacts: formatFactsForPrompt(facts),
+		dueReminders: due
+			.map((r) => `- ${r.text} (due ${formatSpokenDue(new Date(r.dueAt), tz)})`)
+			.join("\n"),
+	});
+
+	const reply =
+		(await generate(env, sessionId, system, history, text, now, facts)).trim() ||
 		`Apologies — I didn't catch that. Could you say it again?`;
 
 	await appendTurns(env.DB, sessionId, [
@@ -64,64 +114,133 @@ export async function ask(
 		{ role: "assistant", content: reply },
 	]);
 
+	// Mark surfaced reminders fired only after a reply is in hand, so a failed
+	// generation doesn't silently drop them.
+	if (due.length) {
+		await Promise.all(due.map((r) => markReminderFired(env.DB, sessionId, r.id)));
+	}
+
 	return reply;
 }
 
 async function generate(
 	env: Env,
+	sessionId: string,
+	system: string,
 	history: Turn[],
 	utterance: string,
+	now: Date,
+	facts: Awaited<ReturnType<typeof loadFacts>>,
 ): Promise<string> {
-	const system = buildSystemPrompt(persona(env));
-	const messages: Turn[] = [...history, { role: "user", content: utterance }];
-
 	if (env.ANTHROPIC_API_KEY) {
-		return generateWithClaude(env, system, messages);
+		return generateWithClaude(env, sessionId, system, history, utterance, now, facts);
 	}
 	if (env.AI) {
-		return generateWithWorkersAI(env, system, messages);
+		return generateWithWorkersAI(env, system, history, utterance);
 	}
 	throw new Error(
 		"No language model configured. Set the ANTHROPIC_API_KEY secret or bind Workers AI as `AI`.",
 	);
 }
 
+/**
+ * The agentic path. Claude may call tools across several rounds; each round we
+ * run the requested tools and feed the results back. Bounded by step count and
+ * a wall-clock budget, with a final tools-free call so the turn always resolves
+ * to a spoken sentence.
+ */
 async function generateWithClaude(
 	env: Env,
+	sessionId: string,
 	system: string,
-	messages: Turn[],
+	history: Turn[],
+	utterance: string,
+	now: Date,
+	facts: Awaited<ReturnType<typeof loadFacts>>,
 ): Promise<string> {
 	const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+	const model = env.JARVIS_MODEL || DEFAULT_MODEL;
+	const catalog = buildToolCatalog();
+	const tools = catalog.map((t) => t.definition);
+	const ctx: ToolContext = { env, sessionId, now, facts };
 
-	const response = await client.messages.create({
-		model: env.JARVIS_MODEL || DEFAULT_MODEL,
+	const messages: Anthropic.MessageParam[] = [
+		...history.map((m) => ({ role: m.role, content: m.content })),
+		{ role: "user", content: utterance },
+	];
+
+	const start = Date.now();
+	for (let step = 0; step < MAX_TOOL_STEPS; step++) {
+		const response = await client.messages.create({
+			model,
+			max_tokens: MAX_TOKENS,
+			// Snappy spoken replies: no "thinking" pause before answering.
+			thinking: { type: "disabled" },
+			system,
+			tools,
+			tool_choice: { type: "auto" },
+			messages,
+		});
+
+		if (response.stop_reason !== "tool_use") {
+			return joinText(response.content);
+		}
+
+		// Echo the assistant's tool-call turn back, then answer every tool_use
+		// block in this round in parallel.
+		messages.push({ role: "assistant", content: response.content });
+		const toolUses = response.content.filter(
+			(b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+		);
+		const results: Anthropic.ToolResultBlockParam[] = await Promise.all(
+			toolUses.map(async (tu) => {
+				const r = await runTool(catalog, tu.name, tu.input, ctx);
+				return {
+					type: "tool_result",
+					tool_use_id: tu.id,
+					content: r.content,
+					is_error: r.isError,
+				};
+			}),
+		);
+		messages.push({ role: "user", content: results });
+
+		if (Date.now() - start > TOOL_TIME_BUDGET_MS) break;
+	}
+
+	// Step/budget exhausted: one final call with tools omitted forces a spoken
+	// answer instead of leaving the wearer hanging on a tool call.
+	const final = await client.messages.create({
+		model,
 		max_tokens: MAX_TOKENS,
-		// A voice assistant must answer instantly — no "thinking" pause before
-		// speaking. The persona prompt already tells it to emit only the final,
-		// spoken answer (Opus 4.8 can otherwise narrate reasoning when thinking
-		// is disabled).
 		thinking: { type: "disabled" },
 		system,
-		messages: messages.map((m) => ({ role: m.role, content: m.content })),
+		messages,
 	});
-
-	return response.content
-		.filter((block): block is Anthropic.TextBlock => block.type === "text")
-		.map((block) => block.text)
-		.join(" ");
+	return joinText(final.content);
 }
 
 async function generateWithWorkersAI(
 	env: Env,
 	system: string,
-	messages: Turn[],
+	history: Turn[],
+	utterance: string,
 ): Promise<string> {
 	const result = await env.AI!.run("@cf/meta/llama-3.1-8b-instruct", {
 		max_tokens: MAX_TOKENS,
 		messages: [
 			{ role: "system", content: system },
-			...messages.map((m) => ({ role: m.role, content: m.content })),
+			...history.map((m) => ({ role: m.role, content: m.content })),
+			{ role: "user", content: utterance },
 		],
 	});
 	return typeof result?.response === "string" ? result.response : "";
+}
+
+/** Collapse a Claude response's content blocks into the spoken text. */
+function joinText(content: Anthropic.ContentBlock[]): string {
+	return content
+		.filter((block): block is Anthropic.TextBlock => block.type === "text")
+		.map((block) => block.text)
+		.join(" ");
 }
