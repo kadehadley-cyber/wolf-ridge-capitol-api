@@ -34,6 +34,16 @@ export function renderHtml(env: Env): string {
 
 	const name = env.JARVIS_NAME || "Jarvis";
 
+	// Show the bearer header in the example only when it's actually required, and
+	// keep the JSON apostrophe-free so the single-quoted shell command pastes
+	// cleanly.
+	const authHeaderLine = env.JARVIS_API_KEY
+		? `\n  -H 'authorization: Bearer $JARVIS_API_KEY' \\`
+		: "";
+	const curlExample = `curl -X POST "$WORKER_URL/jarvis" \\
+  -H 'content-type: application/json' \\${authHeaderLine}
+  -d '{ "text": "what time is it right now?", "sessionId": "me" }'`;
+
 	const row = (label: string, value: string) =>
 		`<tr><td>${label}</td><td>${escapeHtml(value)}</td></tr>`;
 
@@ -74,9 +84,7 @@ export function renderHtml(env: Env): string {
     </table>
 
     <h2>Try the voice endpoint</h2>
-    <pre>curl -X POST "$WORKER_URL/jarvis" \\
-  -H 'content-type: application/json' \\
-  -d '{ "text": "what's on my plate today?", "sessionId": "me" }'</pre>
+    <pre>${curlExample}</pre>
 
     <h2>Wire up the glasses (WhatsApp)</h2>
     <p>Set the WhatsApp Cloud API webhook to <code>POST /whatsapp</code> on this
