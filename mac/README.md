@@ -84,12 +84,28 @@ All optional; set as environment variables or pass the matching flag.
 | Variable | Flag | Default | Notes |
 | --- | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | — | — | Standalone mode. `install.sh` saves it to `~/.jarvis/anthropic_api_key`. |
-| `JARVIS_VOICE` | `--voice` | `Daniel` | Any installed macOS voice; falls back to the system default. |
+| `JARVIS_VOICE` | `--voice` | `Allison (Enhanced)` | Any installed voice. Use `auto` to pick the most natural UK voice found, or name one, e.g. `"Daniel (Enhanced)"`. |
 | `WHISPER_MODEL` | `--model` | `base.en` | `tiny.en` is faster; `small.en`/`medium.en` are more accurate. |
 | `JARVIS_SESSION` | `--session` | `mac` | Memory bucket — change it to keep separate conversations. |
 | `JARVIS_MODEL` | `--claude-model` | `claude-opus-4-8` | Claude model for standalone mode. |
 | `JARVIS_URL` | `--url` | `http://localhost:8787/jarvis` | Worker endpoint (paired mode). |
 | `JARVIS_API_KEY` | `--api-key` | — | Bearer token for a deployed Worker that has `JARVIS_API_KEY` set (paired mode). |
+
+## A natural voice (not the robot)
+
+macOS ships a basic default voice that sounds synthetic, but it also has **free,
+much more natural** voices — they're just not downloaded by default:
+
+1. **System Settings ▸ Accessibility ▸ Spoken Content ▸ System Voice ▸ Manage Voices…**
+2. Download an **Enhanced** (or **Premium**) voice — Jarvis defaults to
+   *Allison (Enhanced)*; for a British accent grab *Daniel (Enhanced)* or
+   *Oliver (Enhanced)* under English (United Kingdom).
+3. Test it: `say -v "Allison (Enhanced)" "Good evening."`
+
+Pick any installed voice with `JARVIS_VOICE` / `--voice "..."`. Set
+`JARVIS_VOICE=auto` to have Jarvis automatically choose the most natural British
+voice it finds. If the configured voice isn't installed, it falls back to the
+system default.
 
 ## Requirements
 
