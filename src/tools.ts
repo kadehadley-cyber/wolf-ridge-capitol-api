@@ -193,12 +193,7 @@ export async function getWeather(
 	when: "now" | "today" | "tomorrow",
 	tempUnit: "celsius" | "fahrenheit",
 ): Promise<string> {
-	const geo = await fetchJson(
-		`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
-			place,
-		)}&count=1&language=en&format=json`,
-	);
-	const first = firstResult(geo);
+	const first = await geocodePlace(place);
 	if (!first) {
 		return JSON.stringify({ error: `Couldn't find a place called "${place}".` });
 	}
@@ -235,6 +230,44 @@ export async function getWeather(
 		out.conditions = wmoPhrase(codes[dayIndex]);
 	}
 	return JSON.stringify(out);
+}
+
+/**
+ * Resolve a place name to coordinates, tolerant of natural phrasing. Open-Meteo's
+ * geocoder matches bare city names, so "American Fork Utah" or "Provo, UT" miss;
+ * we retry with progressively simpler queries until one resolves.
+ */
+async function geocodePlace(
+	place: string,
+): Promise<ReturnType<typeof firstResult>> {
+	for (const name of geocodeCandidates(place)) {
+		const geo = await fetchJson(
+			`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+				name,
+			)}&count=1&language=en&format=json`,
+		);
+		const first = firstResult(geo);
+		if (first) return first;
+	}
+	return undefined;
+}
+
+/**
+ * Progressively-simpler geocoder queries: the full string first (so clean names
+ * like "New York" resolve on the first try and never get truncated), then the
+ * part before a comma, then the string minus its last word (usually a US state).
+ * Deduplicated and capped so a lookup is at most a few requests.
+ */
+export function geocodeCandidates(place: string): string[] {
+	const trimmed = place.trim();
+	const candidates = [trimmed];
+	if (trimmed.includes(",")) {
+		const beforeComma = trimmed.split(",")[0].trim();
+		if (beforeComma) candidates.push(beforeComma);
+	}
+	const words = trimmed.split(/\s+/);
+	if (words.length > 1) candidates.push(words.slice(0, -1).join(" "));
+	return [...new Set(candidates.filter(Boolean))].slice(0, 3);
 }
 
 // --------------------------------------------------------------------------- //
