@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import urllib.error
@@ -38,9 +39,9 @@ import urllib.request
 
 SAMPLE_RATE = 16_000  # what Whisper expects
 
-# A British male voice is the most J.A.R.V.I.S.-like default; we fall back to the
-# system default voice if it isn't installed.
-DEFAULT_VOICE = os.environ.get("JARVIS_VOICE", "Daniel")
+# "auto" picks the most natural British voice installed (see resolve_voice).
+# Override with JARVIS_VOICE / --voice (e.g. "Daniel (Enhanced)").
+DEFAULT_VOICE = os.environ.get("JARVIS_VOICE", "auto")
 DEFAULT_MODEL = os.environ.get("WHISPER_MODEL", "base.en")
 DEFAULT_URL = os.environ.get("JARVIS_URL", "http://localhost:8787/jarvis")
 DEFAULT_SESSION = os.environ.get("JARVIS_SESSION", "mac")
@@ -204,6 +205,45 @@ def list_voices():
         print("`say` is only available on macOS.")
 
 
+def resolve_voice(preferred: str) -> str:
+    """Pick the most natural British voice available.
+
+    If the user named a voice, honour it. Otherwise ("auto") read the installed
+    macOS voices and prefer an Enhanced/Premium English (UK) one — that's the
+    difference between a natural-sounding person and the robotic default. Falls
+    back to "Daniel", then the system default. Download the better voices via
+    System Settings ▸ Accessibility ▸ Spoken Content ▸ System Voice ▸ Manage Voices.
+    """
+    if preferred and preferred.lower() != "auto":
+        return preferred
+    try:
+        out = subprocess.run(
+            ["say", "-v", "?"], capture_output=True, text=True, check=True
+        ).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return "Daniel"
+
+    uk = []
+    for line in out.splitlines():
+        m = re.match(r"^(.*?)\s+([a-z]{2}_[A-Z]{2})\b", line)
+        if m and m.group(2) == "en_GB":
+            uk.append(m.group(1).strip())
+
+    male = ("daniel", "oliver", "jamie", "arthur", "malcolm", "gordon", "stephen")
+
+    def score(name: str) -> int:
+        low = name.lower()
+        s = 6 if "premium" in low else 4 if "enhanced" in low else 0
+        return s + (2 if any(mm in low for mm in male) else 0)
+
+    if uk:
+        best = max(uk, key=score)
+        if "enhanced" in best.lower() or "premium" in best.lower():
+            return best
+        return "Daniel" if "Daniel" in uk else best
+    return "Daniel"
+
+
 # --------------------------------------------------------------------------- #
 # The brain
 # --------------------------------------------------------------------------- #
@@ -363,6 +403,8 @@ def main():
         list_voices()
         return
 
+    voice = resolve_voice(args.voice)
+
     brain = (
         DirectBrain(args.claude_model, args.session)
         if args.direct
@@ -376,14 +418,17 @@ def main():
         except RuntimeError as err:
             sys.exit(f"\n⚠️  {err}\n")
         print(f"\nJarvis: {reply}\n")
-        speak(reply, args.voice)
+        speak(reply, voice)
         return
 
     np, sd = _import_audio()
     transcriber = Transcriber(args.model)
 
     where = "Claude directly" if args.direct else args.url
-    print(f"Jarvis is online (brain: {where}, voice: {args.voice}).")
+    print(f"Jarvis is online (brain: {where}, voice: {voice}).")
+    if args.voice.lower() == "auto" and "enhanced" not in voice.lower() and "premium" not in voice.lower():
+        print("Tip: download a UK ‘Enhanced’ voice (System Settings ▸ Accessibility ▸ "
+              "Spoken Content ▸ System Voice ▸ Manage Voices) for a far more natural sound.")
     print("Press Ctrl-C to quit.")
 
     try:
@@ -409,7 +454,7 @@ def main():
                 continue
 
             print(f"Jarvis: {reply}")
-            speak(reply, args.voice)
+            speak(reply, voice)
     except KeyboardInterrupt:
         print("\nGoodbye.")
 
