@@ -201,3 +201,7 @@ dist
 # Python
 __pycache__/
 *.pyc
+
+# ESP32 local secrets
+esp32/include/config.h
+.pio/
