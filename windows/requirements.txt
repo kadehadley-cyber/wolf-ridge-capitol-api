@@ -1,0 +1,13 @@
+# Python dependencies for the Windows Jarvis client.
+#   py -3 -m pip install -r requirements.txt
+#
+# Text-to-speech uses Windows' built-in System.Speech (via PowerShell) — no
+# package needed for that. sounddevice bundles PortAudio in its Windows wheel,
+# so there's nothing to install by hand.
+
+sounddevice        # microphone capture
+numpy              # audio buffers + level detection
+faster-whisper     # on-device speech-to-text
+
+# Only needed for --direct mode (talking to Claude without the Worker):
+anthropic
