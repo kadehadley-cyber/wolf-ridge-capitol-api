@@ -1,7 +1,7 @@
 // Simple status / setup page served at GET /. Shows which pieces are wired up
 // so you can tell at a glance what's left to configure.
 
-import { parseDeviceMap } from "./tools";
+import { buildToolCatalog, parseDeviceMap } from "./tools";
 
 export function renderHtml(env: Env): string {
 	const brain = env.ANTHROPIC_API_KEY
@@ -29,9 +29,11 @@ export function renderHtml(env: Env): string {
 		: "pull-only (configure WhatsApp to push)";
 
 	// Agency (tool use) is the Claude path only; the Workers AI fallback can't
-	// call tools, so it degrades to a memory-aware conversation.
+	// call tools, so it degrades to a memory-aware conversation. Count the actual
+	// catalog so configuring Home Assistant / devices is reflected here.
+	const toolCount = buildToolCatalog(env).length;
 	const agency = env.ANTHROPIC_API_KEY
-		? "ready (11 tools + vision)"
+		? `ready (${toolCount} tools + vision)`
 		: "limited (set ANTHROPIC_API_KEY for tools)";
 
 	const smartHome =

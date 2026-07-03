@@ -61,6 +61,16 @@ def log(msg: str) -> None:
     print(msg, flush=True)
 
 
+def _stdin_is_interactive() -> bool:
+    """True only when input() can actually read from a person. Guards prompts and
+    push-to-talk against GUI/double-click launches with no console, where input()
+    raises EOFError immediately."""
+    try:
+        return bool(sys.stdin) and sys.stdin.isatty()
+    except (ValueError, OSError):
+        return False
+
+
 # --------------------------------------------------------------------------- #
 # Configuration: env > ~/.jarvis/desktop.json > first-run prompt
 # --------------------------------------------------------------------------- #
@@ -81,14 +91,27 @@ class Config:
         self.whisper_model = os.environ.get("WHISPER_MODEL", saved.get("whisper_model", "base.en"))
         self.voice = os.environ.get("JARVIS_VOICE", saved.get("voice", ""))
         self.hud_port = int(os.environ.get("JARVIS_HUD_PORT", saved.get("hud_port", 8090)))
-        self.wake_threshold = float(os.environ.get("JARVIS_WAKE_THRESHOLD", "0.5"))
+        self.wake_threshold = float(
+            os.environ.get("JARVIS_WAKE_THRESHOLD", saved.get("wake_threshold", 0.5))
+        )
 
-        # First run: ask once, save, and never ask again.
+        # First run: ask once, save, and never ask again. This needs an interactive
+        # console — when there's no usable stdin (double-clicked via pythonw, a GUI
+        # launcher, systemd) input() would raise EOFError and kill the app before
+        # anything appears. Fail with a clear, actionable message instead.
         if not self.url:
+            if not _stdin_is_interactive():
+                raise SystemExit(
+                    "Jarvis isn't configured yet. Run it once from a terminal to set "
+                    "your Worker URL, or set the JARVIS_URL environment variable "
+                    f"(saved to {CONFIG_PATH})."
+                )
             print("First run — point Jarvis at your Worker.")
             self.url = input("  Worker /jarvis URL: ").strip()
             if not self.api_key:
                 self.api_key = input("  JARVIS_API_KEY (blank if none): ").strip()
+            if not self.url:
+                raise SystemExit("No Worker URL given; nothing to point Jarvis at.")
             try:
                 STATE_DIR.mkdir(parents=True, exist_ok=True)
                 CONFIG_PATH.write_text(
@@ -306,7 +329,9 @@ def speak(text: str, voice: str) -> None:
                 subprocess.run(["aplay", "-q", wav], check=False)
             else:
                 subprocess.run(["espeak-ng", "-v", "en-gb", text], check=False)
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError):
+        # OSError covers a missing binary (FileNotFoundError) and permission/spawn
+        # failures alike, so a TTS hiccup never kills the turn — Jarvis prints.
         log(f"(no text-to-speech available) Jarvis: {text}")
 
 
@@ -319,6 +344,7 @@ def _speak_windows(text: str, voice: str) -> None:
         "Add-Type -AssemblyName System.Speech;"
         "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer;"
         "if($env:JARVIS_TTS_VOICE){try{$s.SelectVoice($env:JARVIS_TTS_VOICE)}catch{}};"
+        "if($env:JARVIS_TTS_RATE){try{$s.Rate=[int]$env:JARVIS_TTS_RATE}catch{}};"
         f"$t=Get-Content -Raw -Encoding UTF8 -LiteralPath '{path}';"
         "if($t){$s.Speak($t)};"
     )
@@ -372,11 +398,27 @@ class Listener:
             try:
                 from openwakeword.model import Model
 
+                # The pip package ships no model weights — fetch them once (a no-op
+                # if already cached). Without this, Model() raises on a fresh
+                # install and the advertised "Hey Jarvis" mode silently never works.
+                try:
+                    import openwakeword.utils as oww_utils
+
+                    try:
+                        oww_utils.download_models(model_names=["hey_jarvis"])
+                    except TypeError:  # older signature takes no args
+                        oww_utils.download_models()
+                except Exception:  # noqa: BLE001 — let Model() surface the real cause
+                    pass
                 self.oww = Model(wakeword_models=["hey_jarvis"])
                 log("Wake word active — say “Hey Jarvis”.")
             except Exception as err:  # noqa: BLE001
-                log(f"Wake word unavailable ({err}); falling back to push-to-talk.")
-                self.mode = "push"
+                # No console (HUD double-click) → push-to-talk's input() can't be
+                # reached, so fall back to hands-free VAD instead, which works
+                # behind the window. With a console, push-to-talk is the nicer default.
+                fallback = "push" if _stdin_is_interactive() else "auto"
+                log(f"Wake word unavailable ({err}); falling back to {fallback}.")
+                self.mode = fallback
 
     def wait_for_command(self):
         if self.mode == "wake" and self.oww is not None:
@@ -385,7 +427,12 @@ class Listener:
             return self._record_until_silence()
         if self.mode == "auto":
             return self._record_until_silence(wait_for_speech=True)
-        input("\n[mic] Press Enter to speak…")
+        try:
+            input("\n[mic] Press Enter to speak…")
+        except EOFError as err:
+            # No readable console: end this thread cleanly instead of looping on
+            # EOFError forever (SystemExit isn't caught by the loop's `except Exception`).
+            raise SystemExit("Push-to-talk needs a console; none is attached.") from err
         return self._record_push()
 
     def _await_wake(self):
@@ -435,9 +482,9 @@ class Listener:
                 if level >= threshold:
                     started = True
                     silent = 0.0
-                    frames.append(mono.copy())
+                    frames.append(mono)  # flatten() already returned a fresh array
                 elif started:
-                    frames.append(mono.copy())
+                    frames.append(mono)
                     silent += 0.1
                     if silent >= silence_secs:
                         break

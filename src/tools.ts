@@ -442,9 +442,9 @@ const controlHomeTool: JarvisTool = {
 		if ("candidates" in entity) return JSON.stringify(entity);
 
 		if (action === "status") {
-			const s = await haFetch(ctx.env, `/api/states/${entity.id}`);
-			const st = isObject(s) ? s : {};
-			return JSON.stringify({ id: entity.id, name: entity.name, state: st.state ?? "unknown" });
+			// haResolveEntity already read fresh state this turn; reuse it rather
+			// than making a second round-trip for the same entity.
+			return JSON.stringify({ id: entity.id, name: entity.name, state: entity.state });
 		}
 
 		const domain = entity.id.split(".")[0];
@@ -495,10 +495,19 @@ async function haResolveEntity(
 	device: string,
 ): Promise<HaEntity | { candidates: Array<{ id: string; name: string }> }> {
 	const q = device.trim().toLowerCase();
-	if (q.includes(".") && !q.includes(" ")) {
-		return { id: q, name: q, state: "unknown" }; // already an entity id
-	}
 	const states = await haStates(env);
+	// An explicit, well-formed entity id ("light.lab"): it must be a domain we
+	// support and must actually exist. Validating the shape keeps an unvalidated,
+	// model-supplied string out of the HA URL path — no traversal via '/', '..',
+	// '?' or '#' — and confirming it exists means we never report success for a
+	// device that isn't there.
+	if (/^[a-z_]+\.[a-z0-9_]+$/.test(q)) {
+		const domain = q.split(".")[0];
+		if (!HA_DOMAINS.has(domain)) throw new Error(`I don't control ${domain} devices`);
+		const match = states.find((s) => s.id === q);
+		if (!match) throw new Error(`no device with id "${q}" — try the 'list' action`);
+		return match;
+	}
 	const words = q.replace(/^the\s+/, "").split(/\s+/).filter(Boolean);
 	const hits = states.filter((s) => {
 		const name = s.name.toLowerCase();
@@ -528,10 +537,16 @@ async function haFetch(env: Env, path: string, body?: unknown): Promise<unknown>
 				"user-agent": OUTBOUND_UA,
 			},
 			body: body === undefined ? undefined : JSON.stringify(body),
+			// Don't auto-follow redirects: a 3xx would resend the Authorization
+			// header (the long-lived HA token) to whatever host the redirect names.
+			// A redirect surfaces as a non-2xx response, so the !res.ok check rejects it.
+			redirect: "manual",
 		});
 		if (!res.ok) throw new Error(`the home system returned ${res.status}`);
 		const text = await res.text();
-		if (text.length > 512 * 1024) throw new Error("home system response too large");
+		// /api/states returns every entity with full attributes; a real home can
+		// run to a few MB, so give it real headroom (this is the operator's own HA).
+		if (text.length > 8 * 1024 * 1024) throw new Error("home system response too large");
 		try {
 			return JSON.parse(text);
 		} catch {

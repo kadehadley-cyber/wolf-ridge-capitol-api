@@ -62,8 +62,10 @@ export default {
  * POST a transcript, speak the `reply` back.
  */
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-// ~6 MB of raw image once base64 is decoded — plenty for a screenshot or photo.
-const MAX_IMAGE_B64_CHARS = 8_000_000;
+// Base64 inflates by ~4/3, so 5M chars decode to ~3.75 MB — comfortably under the
+// Anthropic API's 5 MB per-image ceiling. Keeping the local gate below the API's
+// means an oversized photo gets a clean 413 here instead of failing the whole turn.
+const MAX_IMAGE_B64_CHARS = 5_000_000;
 
 async function handleJarvis(request: Request, env: Env): Promise<Response> {
 	let body: {
@@ -90,7 +92,11 @@ async function handleJarvis(request: Request, env: Env): Promise<Response> {
 	// Optional image (identification via vision): raw base64 or a data: URL.
 	let image: ImageAttachment | undefined;
 	if (typeof body.imageBase64 === "string" && body.imageBase64) {
-		const dataUrl = /^data:(image\/\w+);base64,(.*)$/s.exec(body.imageBase64);
+		// Match any media type (case-insensitive, and subtypes with +/-/. like
+		// image/svg+xml) so the prefix is always stripped; the type is then
+		// validated against IMAGE_TYPES below, giving a clean 415 for unsupported
+		// kinds instead of forwarding the whole data: URL as base64 payload.
+		const dataUrl = /^data:([a-z]+\/[a-z0-9.+-]+);base64,(.*)$/is.exec(body.imageBase64);
 		const data = dataUrl ? dataUrl[2] : body.imageBase64;
 		const mediaType = (dataUrl?.[1] ?? body.imageType ?? "image/jpeg").toLowerCase();
 		if (!IMAGE_TYPES.has(mediaType)) {
