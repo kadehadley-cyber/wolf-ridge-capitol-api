@@ -25,12 +25,17 @@ talk, the glasses transcribe and send, this Worker answers in character, and the
 glasses read the reply back to you. A channel-agnostic JSON endpoint is included
 too, so you can wire Jarvis to any other speech bridge.
 
-> **Want to use Jarvis on your Mac instead of the glasses?** There's a voice
-> client in [`mac/`](./mac) — talk to Jarvis out loud on macOS (local Whisper for
-> speech-to-text, the built-in `say` voice for replies). Run `cd mac && ./install.sh`
-> for a standalone double-click **Jarvis.app** that talks straight to Claude (no
-> Worker needed), or pair it with this Worker to share one brain and memory. See
-> [`mac/README.md`](./mac/README.md).
+> **One brain, many bodies.** Every client shares this Worker's persona, tools,
+> and long-term memory:
+>
+> | Surface | Where | Interaction |
+> | --- | --- | --- |
+> | **Desktop app** (Mac/Windows/Linux) | [`desktop/`](./desktop) | "Hey Jarvis" + the arc-reactor HUD window; screen/webcam identification |
+> | macOS voice client | [`mac/`](./mac) | push-to-talk / hands-free, natural `say` voices |
+> | Windows voice client | [`windows/`](./windows) | push-to-talk / hands-free, System.Speech |
+> | Raspberry Pi appliance | [`pi/`](./pi) | always-on "Hey Jarvis" box + HUD kiosk |
+> | ESP32-2432S028 (CYD) | [`esp32/`](./esp32) | 2.8" touch terminal + HUD |
+> | Meta glasses | this Worker | WhatsApp bridge (below) |
 
 ## How it works
 
@@ -80,6 +85,14 @@ mid-turn. All of them run inside the Worker and need **no extra API keys**:
 | `set_reminder` / `list_reminders` / `cancel_reminder` | One-shot reminders.                            |
 | `do_math`                               | Exact arithmetic, percentages, `sqrt`/`round`, parentheses (no `eval`). |
 | `convert_units`                         | Length, mass, volume, speed, data, time, and temperature.           |
+| `get_directions`                        | Driving distance + travel time between places/addresses, via keyless [Nominatim](https://nominatim.org/) + [OSRM](http://project-osrm.org/). |
+| `control_home` *(when configured)*      | Home Assistant: lights, switches, locks, covers ("open the mask"). Set `HOME_ASSISTANT_URL` + `HOME_ASSISTANT_TOKEN`. |
+| `trigger_device` *(when configured)*    | Named hardware webhooks from `JARVIS_DEVICES` — the DIY "suit" control plane. |
+
+**Vision.** `POST /jarvis` also accepts an image (`imageBase64` + optional
+`imageType`) alongside the text — Jarvis identifies what it's shown with Claude
+vision. The desktop client uses this for *"what's on my screen?"* (screenshot)
+and *"what am I looking at?"* (webcam).
 
 **Memory** is injected into every turn, so Jarvis knows you without a lookup.
 Tell it `remember that my home is Denver` or `my timezone is America/Denver` and
@@ -138,6 +151,9 @@ briefing). If you've wired up the WhatsApp bridge, the cron trigger also
 | `JARVIS_NAME`              | no       | What the assistant calls itself. Defaults to `Jarvis`.       |
 | `JARVIS_USER_TITLE`        | no       | How it addresses you. Defaults to `sir`; set `""` for none.  |
 | `JARVIS_TIMEZONE`          | no       | Default IANA timezone for time/reminders before a wearer saves their own. Falls back to UTC. |
+| `HOME_ASSISTANT_URL`       | no       | Home Assistant base URL (https — Nabu Casa or a tunnel). Enables `control_home`. |
+| `HOME_ASSISTANT_TOKEN`     | no       | Home Assistant long-lived token (secret). |
+| `JARVIS_DEVICES`           | no       | JSON map of named commands → https webhooks, e.g. `{"open mask":"https://…/open"}`. Enables `trigger_device`. |
 | `WHATSAPP_TOKEN`           | WhatsApp | Cloud API access token (secret).                             |
 | `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp | The number replies are sent from.                            |
 | `WHATSAPP_VERIFY_TOKEN`    | WhatsApp | Your chosen webhook verification token.                      |

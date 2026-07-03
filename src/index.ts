@@ -11,7 +11,7 @@
 // Plus a scheduled (cron) handler that pushes due reminders and the daily
 // briefing when a WhatsApp delivery channel is configured.
 
-import { ask } from "./jarvis";
+import { ask, type ImageAttachment } from "./jarvis";
 import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
 import { handleInbound, verifyWebhook } from "./whatsapp";
@@ -61,8 +61,17 @@ export default {
  * bridge (an iOS Shortcut, a relay app, your own glasses integration) at this:
  * POST a transcript, speak the `reply` back.
  */
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+// ~6 MB of raw image once base64 is decoded — plenty for a screenshot or photo.
+const MAX_IMAGE_B64_CHARS = 8_000_000;
+
 async function handleJarvis(request: Request, env: Env): Promise<Response> {
-	let body: { text?: string; sessionId?: string };
+	let body: {
+		text?: string;
+		sessionId?: string;
+		imageBase64?: string;
+		imageType?: string;
+	};
 	try {
 		body = await request.json();
 	} catch {
@@ -78,8 +87,23 @@ async function handleJarvis(request: Request, env: Env): Promise<Response> {
 	// stable id (per wearer/device) to give Jarvis memory across turns.
 	const sessionId = (body.sessionId ?? "default").toString();
 
+	// Optional image (identification via vision): raw base64 or a data: URL.
+	let image: ImageAttachment | undefined;
+	if (typeof body.imageBase64 === "string" && body.imageBase64) {
+		const dataUrl = /^data:(image\/\w+);base64,(.*)$/s.exec(body.imageBase64);
+		const data = dataUrl ? dataUrl[2] : body.imageBase64;
+		const mediaType = (dataUrl?.[1] ?? body.imageType ?? "image/jpeg").toLowerCase();
+		if (!IMAGE_TYPES.has(mediaType)) {
+			return json({ error: "Unsupported image type." }, 415);
+		}
+		if (data.length > MAX_IMAGE_B64_CHARS) {
+			return json({ error: "Image too large." }, 413);
+		}
+		image = { data, mediaType: mediaType as ImageAttachment["mediaType"] };
+	}
+
 	try {
-		const reply = await ask(env, sessionId, text);
+		const reply = await ask(env, sessionId, text, image);
 		return json({ reply, sessionId });
 	} catch (err) {
 		console.error("Jarvis error:", err);

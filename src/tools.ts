@@ -54,11 +54,17 @@ export interface ToolResult {
 // Catalog + dispatch
 // --------------------------------------------------------------------------- //
 
-/** The always-on tool catalog. Every tool here works without any API key. */
-export function buildToolCatalog(): JarvisTool[] {
-	return [
+// The always-on core: every tool here works without any API key. Hoisted so
+// nothing is re-allocated per request; ToolContext carries all per-turn state.
+let CORE_TOOLS: JarvisTool[] | undefined;
+
+/** The tool catalog for this deployment: the keyless core plus any tools the
+ * operator has configured (Home Assistant, named device webhooks). */
+export function buildToolCatalog(env: Env): JarvisTool[] {
+	CORE_TOOLS ??= [
 		getTimeTool,
 		getWeatherTool,
+		getDirectionsTool,
 		rememberFactTool,
 		recallFactsTool,
 		forgetFactTool,
@@ -68,6 +74,17 @@ export function buildToolCatalog(): JarvisTool[] {
 		doMathTool,
 		convertUnitsTool,
 	];
+	const tools = CORE_TOOLS;
+	const extras: JarvisTool[] = [];
+	if (homeAssistantConfigured(env)) extras.push(controlHomeTool);
+	if (Object.keys(parseDeviceMap(env.JARVIS_DEVICES)).length > 0) {
+		extras.push(triggerDeviceTool);
+	}
+	return extras.length ? [...tools, ...extras] : tools;
+}
+
+export function homeAssistantConfigured(env: Env): boolean {
+	return Boolean(env.HOME_ASSISTANT_URL && env.HOME_ASSISTANT_TOKEN);
 }
 
 /**
@@ -268,6 +285,322 @@ export function geocodeCandidates(place: string): string[] {
 	const words = trimmed.split(/\s+/);
 	if (words.length > 1) candidates.push(words.slice(0, -1).join(" "));
 	return [...new Set(candidates.filter(Boolean))].slice(0, 3);
+}
+
+// --------------------------------------------------------------------------- //
+// Tool: get_directions  (Nominatim + OSRM — keyless)
+// --------------------------------------------------------------------------- //
+
+const getDirectionsTool: JarvisTool = {
+	definition: {
+		name: "get_directions",
+		description:
+			"Driving distance and travel time from one place to another (addresses or place names). Omit origin to start from the wearer's saved home_location. Keyless.",
+		input_schema: {
+			type: "object",
+			properties: {
+				destination: { type: "string", description: "Where they're going — an address or place name." },
+				origin: { type: "string", description: "Starting point. Omit to use the saved home_location fact." },
+			},
+			required: ["destination"],
+		},
+	},
+	async execute(input, ctx) {
+		const obj = asObject(input);
+		const destination = reqStr(obj, "destination");
+		const origin = optStr(obj, "origin") ?? getFactValue(ctx.facts, "home_location");
+		if (!origin) {
+			return JSON.stringify({
+				need: "origin",
+				message: "No origin given and no home_location saved. Ask where they're starting from.",
+			});
+		}
+
+		const [from, to] = await Promise.all([
+			geocodeForRouting(origin),
+			geocodeForRouting(destination),
+		]);
+		if (!from) return JSON.stringify({ error: `Couldn't find "${origin}".` });
+		if (!to) return JSON.stringify({ error: `Couldn't find "${destination}".` });
+
+		const route = await fetchJson(
+			`https://router.project-osrm.org/route/v1/driving/` +
+				`${from.lon},${from.lat};${to.lon},${to.lat}?overview=false&alternatives=false`,
+		);
+		const routes = Array.isArray(route.routes) ? route.routes : [];
+		const first = isObject(routes[0]) ? routes[0] : undefined;
+		const meters = num(first?.distance);
+		const seconds = num(first?.duration);
+		if (meters === undefined || seconds === undefined) {
+			return JSON.stringify({ error: "Couldn't find a driving route between those." });
+		}
+		return JSON.stringify({
+			from: from.label,
+			to: to.label,
+			mode: "driving",
+			spoken_distance: formatMilesSpoken(meters),
+			spoken_duration: formatDurationSpoken(seconds),
+		});
+	},
+};
+
+interface RoutePoint {
+	lat: number;
+	lon: number;
+	label: string;
+}
+
+/**
+ * Geocode a place/address for routing. Nominatim handles street addresses;
+ * if it comes up empty (or errors), fall back to the Open-Meteo city geocoder.
+ */
+async function geocodeForRouting(query: string): Promise<RoutePoint | undefined> {
+	try {
+		const raw = await fetchJsonAny(
+			`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}` +
+				`&format=json&limit=1`,
+		);
+		if (Array.isArray(raw) && isObject(raw[0])) {
+			const lat = parseFloat(String(raw[0].lat));
+			const lon = parseFloat(String(raw[0].lon));
+			if (Number.isFinite(lat) && Number.isFinite(lon)) {
+				const label =
+					typeof raw[0].display_name === "string"
+						? raw[0].display_name.split(",").slice(0, 2).join(",").trim()
+						: query;
+				return { lat, lon, label };
+			}
+		}
+	} catch {
+		// fall through to the city geocoder
+	}
+	const place = await geocodePlace(query);
+	return place
+		? { lat: place.latitude, lon: place.longitude, label: place.name ?? query }
+		: undefined;
+}
+
+/** "18 miles" / "1.6 miles" — spoken-friendly driving distance. */
+export function formatMilesSpoken(meters: number): string {
+	const miles = meters / 1609.344;
+	const rounded = miles >= 10 ? Math.round(miles) : Math.round(miles * 10) / 10;
+	return `${rounded} mile${rounded === 1 ? "" : "s"}`;
+}
+
+/** "about 25 minutes" / "about 2 hours and 10 minutes" — spoken travel time. */
+export function formatDurationSpoken(totalSeconds: number): string {
+	const mins = Math.round(totalSeconds / 60);
+	if (mins < 1) return "under a minute";
+	if (mins < 60) return `about ${mins} minute${mins === 1 ? "" : "s"}`;
+	const h = Math.floor(mins / 60);
+	const m = mins % 60;
+	const hours = `${h} hour${h === 1 ? "" : "s"}`;
+	return m ? `about ${hours} and ${m} minutes` : `about ${hours}`;
+}
+
+// --------------------------------------------------------------------------- //
+// Tool: control_home  (Home Assistant — configured via HOME_ASSISTANT_URL/TOKEN)
+// --------------------------------------------------------------------------- //
+
+const HA_DOMAINS = new Set([
+	"light", "switch", "cover", "lock", "fan", "climate", "scene", "script", "media_player",
+]);
+
+const controlHomeTool: JarvisTool = {
+	definition: {
+		name: "control_home",
+		description:
+			"Control the home through Home Assistant: turn devices on/off/toggle, open or close covers (the mask, garage, blinds), lock/unlock, check a device's state, or list devices. Use 'list' first if unsure of a device's name.",
+		input_schema: {
+			type: "object",
+			properties: {
+				action: {
+					type: "string",
+					enum: ["list", "status", "turn_on", "turn_off", "toggle", "open", "close", "lock", "unlock"],
+				},
+				device: {
+					type: "string",
+					description: "Entity id (light.lab) or a friendly name ('lab lights', 'the mask'). Not needed for 'list'.",
+				},
+			},
+			required: ["action"],
+		},
+	},
+	async execute(input, ctx) {
+		const obj = asObject(input);
+		const action = reqStr(obj, "action");
+
+		if (action === "list") {
+			const states = await haStates(ctx.env);
+			return JSON.stringify({
+				devices: states.slice(0, 40).map((s) => ({ id: s.id, name: s.name, state: s.state })),
+			});
+		}
+
+		const device = reqStr(obj, "device");
+		const entity = await haResolveEntity(ctx.env, device);
+		if ("candidates" in entity) return JSON.stringify(entity);
+
+		if (action === "status") {
+			const s = await haFetch(ctx.env, `/api/states/${entity.id}`);
+			const st = isObject(s) ? s : {};
+			return JSON.stringify({ id: entity.id, name: entity.name, state: st.state ?? "unknown" });
+		}
+
+		const domain = entity.id.split(".")[0];
+		let service: [string, string];
+		switch (action) {
+			case "turn_on": case "turn_off": case "toggle":
+				service = ["homeassistant", action]; // generic across domains
+				break;
+			case "open":
+				service = domain === "lock" ? ["lock", "unlock"] : ["cover", "open_cover"];
+				break;
+			case "close":
+				service = domain === "lock" ? ["lock", "lock"] : ["cover", "close_cover"];
+				break;
+			case "lock": service = ["lock", "lock"]; break;
+			case "unlock": service = ["lock", "unlock"]; break;
+			default:
+				throw new Error(`unknown action "${action}"`);
+		}
+		await haFetch(ctx.env, `/api/services/${service[0]}/${service[1]}`, { entity_id: entity.id });
+		return JSON.stringify({ ok: true, did: action, device: entity.name });
+	},
+};
+
+interface HaEntity { id: string; name: string; state: string; }
+
+async function haStates(env: Env): Promise<HaEntity[]> {
+	const raw = await haFetch(env, "/api/states");
+	if (!Array.isArray(raw)) return [];
+	const out: HaEntity[] = [];
+	for (const s of raw) {
+		if (!isObject(s) || typeof s.entity_id !== "string") continue;
+		const domain = s.entity_id.split(".")[0];
+		if (!HA_DOMAINS.has(domain)) continue;
+		const attrs = isObject(s.attributes) ? s.attributes : {};
+		out.push({
+			id: s.entity_id,
+			name: typeof attrs.friendly_name === "string" ? attrs.friendly_name : s.entity_id,
+			state: typeof s.state === "string" ? s.state : "unknown",
+		});
+	}
+	return out;
+}
+
+/** Resolve "the mask" / "lab lights" to one entity, or return candidates. */
+async function haResolveEntity(
+	env: Env,
+	device: string,
+): Promise<HaEntity | { candidates: Array<{ id: string; name: string }> }> {
+	const q = device.trim().toLowerCase();
+	if (q.includes(".") && !q.includes(" ")) {
+		return { id: q, name: q, state: "unknown" }; // already an entity id
+	}
+	const states = await haStates(env);
+	const words = q.replace(/^the\s+/, "").split(/\s+/).filter(Boolean);
+	const hits = states.filter((s) => {
+		const name = s.name.toLowerCase();
+		return words.every((w) => name.includes(w));
+	});
+	if (hits.length === 1) return hits[0];
+	if (hits.length === 0) throw new Error(`no device matches "${device}" — try the 'list' action`);
+	return { candidates: hits.slice(0, 8).map((h) => ({ id: h.id, name: h.name })) };
+}
+
+/** Authenticated fetch against the operator's Home Assistant (https only). */
+async function haFetch(env: Env, path: string, body?: unknown): Promise<unknown> {
+	const base = (env.HOME_ASSISTANT_URL ?? "").replace(/\/+$/, "");
+	const url = new URL(base + path);
+	if (url.protocol !== "https:") throw new Error("the home system URL must be https");
+
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 6000);
+	try {
+		const res = await fetch(url.toString(), {
+			method: body === undefined ? "GET" : "POST",
+			signal: controller.signal,
+			headers: {
+				authorization: `Bearer ${env.HOME_ASSISTANT_TOKEN}`,
+				"content-type": "application/json",
+				accept: "application/json",
+				"user-agent": OUTBOUND_UA,
+			},
+			body: body === undefined ? undefined : JSON.stringify(body),
+		});
+		if (!res.ok) throw new Error(`the home system returned ${res.status}`);
+		const text = await res.text();
+		if (text.length > 512 * 1024) throw new Error("home system response too large");
+		try {
+			return JSON.parse(text);
+		} catch {
+			return {};
+		}
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+// --------------------------------------------------------------------------- //
+// Tool: trigger_device  (named webhooks — the "suit" control plane)
+// --------------------------------------------------------------------------- //
+
+const triggerDeviceTool: JarvisTool = {
+	definition: {
+		name: "trigger_device",
+		description:
+			"Fire a named hardware command (e.g. 'open mask', 'close mask') — each maps to a device webhook the operator configured. Use the exact command name; unknown names return the available list.",
+		input_schema: {
+			type: "object",
+			properties: {
+				command: { type: "string", description: "The named command, e.g. 'open mask'." },
+			},
+			required: ["command"],
+		},
+	},
+	async execute(input, ctx) {
+		const devices = parseDeviceMap(ctx.env.JARVIS_DEVICES);
+		const command = reqStr(asObject(input), "command").toLowerCase().trim();
+		const url = devices[command];
+		if (!url) {
+			return JSON.stringify({ ok: false, unknown: command, available: Object.keys(devices) });
+		}
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), 5000);
+		try {
+			const res = await fetch(url, {
+				method: "POST",
+				signal: controller.signal,
+				headers: { "user-agent": OUTBOUND_UA },
+			});
+			return JSON.stringify({ ok: res.ok, command, status: res.status });
+		} finally {
+			clearTimeout(timer);
+		}
+	},
+};
+
+/**
+ * Parse the JARVIS_DEVICES env var: a JSON object mapping spoken command names
+ * to https webhook URLs, e.g. {"open mask":"https://…/open"}. Non-https or
+ * malformed entries are dropped rather than trusted.
+ */
+export function parseDeviceMap(raw: string | undefined): Record<string, string> {
+	if (!raw) return {};
+	try {
+		const v = JSON.parse(raw);
+		if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+		const out: Record<string, string> = {};
+		for (const [k, u] of Object.entries(v)) {
+			if (typeof u === "string" && u.startsWith("https://") && k.trim()) {
+				out[k.toLowerCase().trim()] = u;
+			}
+		}
+		return out;
+	} catch {
+		return {};
+	}
 }
 
 // --------------------------------------------------------------------------- //
@@ -477,25 +810,21 @@ export function filterRemindersByWindow(
 ): Reminder[] {
 	if (window === "all") return reminders;
 	const nowMs = now.getTime();
-	const todayStr = new Intl.DateTimeFormat("en-CA", {
+	// One formatter for the whole pass, not one per reminder.
+	const ymd = new Intl.DateTimeFormat("en-CA", {
 		timeZone: tz,
 		year: "numeric",
 		month: "2-digit",
 		day: "2-digit",
-	}).format(now);
+	});
+	const todayStr = ymd.format(now);
 	return reminders.filter((r) => {
 		const dueMs = new Date(r.dueAt).getTime();
 		if (window === "due") return dueMs <= nowMs;
 		if (window === "upcoming") return dueMs > nowMs;
 		// "today": due on the same local calendar day, or already overdue.
 		if (dueMs <= nowMs) return true;
-		const dueStr = new Intl.DateTimeFormat("en-CA", {
-			timeZone: tz,
-			year: "numeric",
-			month: "2-digit",
-			day: "2-digit",
-		}).format(new Date(r.dueAt));
-		return dueStr === todayStr;
+		return ymd.format(new Date(r.dueAt)) === todayStr;
 	});
 }
 
@@ -869,11 +1198,18 @@ function fromCelsius(c: number, unit: "c" | "f" | "k"): number {
 // Outbound fetch (SSRF-hardened) + small parsing helpers
 // --------------------------------------------------------------------------- //
 
-/** The only hosts Jarvis is ever allowed to reach out to. */
+/** The only hosts Jarvis is ever allowed to reach out to (all keyless APIs). */
 const ALLOWED_HOSTS = new Set([
 	"geocoding-api.open-meteo.com",
 	"api.open-meteo.com",
+	"nominatim.openstreetmap.org", // address/place geocoding for directions
+	"router.project-osrm.org",     // driving routes
 ]);
+
+// Nominatim's usage policy requires an identifying User-Agent, and Cloudflare
+// bot protection elsewhere dislikes anonymous clients — send one everywhere.
+const OUTBOUND_UA =
+	"Jarvis-Worker/1.0 (+https://github.com/kadehadley-cyber/wolf-ridge-capitol-api)";
 
 /**
  * A locked-down fetch: https-only, hostname allowlist, no credentials/ports/IP
@@ -895,12 +1231,12 @@ export async function safeFetch(rawUrl: string, timeoutMs = 4000): Promise<strin
 	try {
 		const res = await fetch(url.toString(), {
 			signal: controller.signal,
-			headers: { accept: "application/json" },
+			headers: { accept: "application/json", "user-agent": OUTBOUND_UA },
 			// Don't auto-follow redirects: a 3xx could point off the allowlist. Any
 			// redirect is non-2xx, so the !res.ok check below rejects it.
 			redirect: "manual",
 		});
-		if (!res.ok) throw new Error(`weather service returned ${res.status}`);
+		if (!res.ok) throw new Error(`the service returned ${res.status}`);
 		const body = await res.text();
 		if (body.length > 256 * 1024) throw new Error("weather response too large");
 		return body;
@@ -910,12 +1246,16 @@ export async function safeFetch(rawUrl: string, timeoutMs = 4000): Promise<strin
 }
 
 async function fetchJson(url: string): Promise<Record<string, unknown>> {
+	const parsed = await fetchJsonAny(url);
+	return isObject(parsed) ? parsed : {};
+}
+
+async function fetchJsonAny(url: string): Promise<unknown> {
 	const body = await safeFetch(url);
 	try {
-		const parsed = JSON.parse(body);
-		return isObject(parsed) ? parsed : {};
+		return JSON.parse(body);
 	} catch {
-		throw new Error("couldn't read the weather service response");
+		throw new Error("couldn't read the service response");
 	}
 }
 

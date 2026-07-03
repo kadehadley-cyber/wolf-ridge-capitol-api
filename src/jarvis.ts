@@ -21,10 +21,22 @@ import {
 	formatFactsForPrompt,
 	getFactValue,
 	loadFacts,
-	markReminderFired,
+	markRemindersFired,
 } from "./longterm";
 import { formatSpokenDateTime, formatSpokenDue, safeTimeZone } from "./datetime";
-import { buildToolCatalog, runTool, type ToolContext } from "./tools";
+import {
+	buildToolCatalog,
+	homeAssistantConfigured,
+	parseDeviceMap,
+	runTool,
+	type ToolContext,
+} from "./tools";
+
+/** An image attached to the current utterance (for identification via vision). */
+export interface ImageAttachment {
+	data: string; // raw base64, no data: prefix
+	mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+}
 
 const DEFAULT_MODEL = "claude-opus-4-8";
 const DEFAULT_NAME = "Jarvis";
@@ -65,6 +77,7 @@ export async function ask(
 	env: Env,
 	sessionId: string,
 	utterance: string,
+	image?: ImageAttachment,
 ): Promise<string> {
 	const text = utterance.trim();
 
@@ -89,17 +102,31 @@ export async function ask(
 	}
 
 	const now = new Date();
-	const [history, facts] = await Promise.all([
+	// One parallel wave for everything the turn needs from D1.
+	const [history, facts, due] = await Promise.all([
 		loadHistory(env.DB, sessionId),
 		loadFacts(env.DB, sessionId, FACT_INJECT_LIMIT),
+		dueReminders(env.DB, sessionId, now),
 	]);
 
 	const tz = safeTimeZone(getFactValue(facts, "timezone") ?? env.JARVIS_TIMEZONE);
-	const due = await dueReminders(env.DB, sessionId, now);
+
+	// Advertise operator-configured powers so Jarvis knows what it can reach.
+	const extras: string[] = [];
+	if (homeAssistantConfigured(env)) {
+		extras.push(
+			"You can also control the home through the home system — lights, switches, locks, and covers (open or close things like the mask, the garage, or blinds).",
+		);
+	}
+	const deviceNames = Object.keys(parseDeviceMap(env.JARVIS_DEVICES));
+	if (deviceNames.length) {
+		extras.push(`You can trigger these named devices: ${deviceNames.join(", ")}.`);
+	}
 
 	const system = buildSystemPrompt(persona(env), {
 		// Tools only fire on the Claude path; don't claim agency the fallback lacks.
 		hasTools: Boolean(env.ANTHROPIC_API_KEY),
+		extraCapabilities: extras.join(" "),
 		nowSpoken: formatSpokenDateTime(now, tz),
 		knownFacts: formatFactsForPrompt(facts),
 		dueReminders: due
@@ -108,11 +135,12 @@ export async function ask(
 	});
 
 	const reply =
-		(await generate(env, sessionId, system, history, text, now, facts)).trim() ||
+		(await generate(env, sessionId, system, history, text, now, facts, image)).trim() ||
 		`Apologies — I didn't catch that. Could you say it again?`;
 
 	await appendTurns(env.DB, sessionId, [
-		{ role: "user", content: text },
+		// Keep a lightweight marker in history; the image itself isn't persisted.
+		{ role: "user", content: image ? `[Sent an image] ${text}` : text },
 		{ role: "assistant", content: reply },
 	]);
 
@@ -120,7 +148,7 @@ export async function ask(
 	// leave it pending so it resurfaces next turn rather than being silently lost.
 	if (due.length) {
 		const voiced = due.filter((r) => replyMentions(reply, r.text));
-		await Promise.all(voiced.map((r) => markReminderFired(env.DB, sessionId, r.id)));
+		await markRemindersFired(env.DB, sessionId, voiced.map((r) => r.id));
 	}
 
 	return reply;
@@ -134,12 +162,17 @@ async function generate(
 	utterance: string,
 	now: Date,
 	facts: Awaited<ReturnType<typeof loadFacts>>,
+	image?: ImageAttachment,
 ): Promise<string> {
 	if (env.ANTHROPIC_API_KEY) {
-		return generateWithClaude(env, sessionId, system, history, utterance, now, facts);
+		return generateWithClaude(env, sessionId, system, history, utterance, now, facts, image);
 	}
 	if (env.AI) {
-		return generateWithWorkersAI(env, system, history, utterance);
+		// The Llama fallback can't see images; say so rather than hallucinate.
+		const text = image
+			? `${utterance}\n\n(Note: an image was attached, but image viewing isn't available right now — say so if it matters.)`
+			: utterance;
+		return generateWithWorkersAI(env, system, history, text);
 	}
 	throw new Error(
 		"No language model configured. Set the ANTHROPIC_API_KEY secret or bind Workers AI as `AI`.",
@@ -160,16 +193,28 @@ async function generateWithClaude(
 	utterance: string,
 	now: Date,
 	facts: Awaited<ReturnType<typeof loadFacts>>,
+	image?: ImageAttachment,
 ): Promise<string> {
 	const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 	const model = env.JARVIS_MODEL || DEFAULT_MODEL;
-	const catalog = buildToolCatalog();
+	const catalog = buildToolCatalog(env);
 	const tools = catalog.map((t) => t.definition);
 	const ctx: ToolContext = { env, sessionId, now, facts };
 
+	// With an image attached the current turn becomes a multimodal block pair.
+	const userContent: Anthropic.MessageParam["content"] = image
+		? [
+				{
+					type: "image",
+					source: { type: "base64", media_type: image.mediaType, data: image.data },
+				},
+				{ type: "text", text: utterance },
+			]
+		: utterance;
+
 	const messages: Anthropic.MessageParam[] = [
 		...history.map((m) => ({ role: m.role, content: m.content })),
-		{ role: "user", content: utterance },
+		{ role: "user", content: userContent },
 	];
 
 	const start = Date.now();

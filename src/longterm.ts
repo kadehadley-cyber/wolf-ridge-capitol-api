@@ -79,32 +79,32 @@ export async function upsertFact(
 	const cat = FACT_CATEGORIES.has(category) ? category : "other";
 	if (!k || !v) throw new Error("A fact needs both a key and a value.");
 
-	await db
-		.prepare(
-			`INSERT INTO jarvis_facts (session_id, fact_key, fact_value, category)
-			 VALUES (?, ?, ?, ?)
-			 ON CONFLICT (session_id, fact_key)
-			 DO UPDATE SET fact_value = excluded.fact_value,
-			               category   = excluded.category,
-			               updated_at = datetime('now')`,
-		)
-		.bind(sessionId, k, v, cat)
-		.run();
-
-	// Evict the oldest beyond the ceiling so a session can't grow without bound.
-	await db
-		.prepare(
-			`DELETE FROM jarvis_facts
-			 WHERE session_id = ?
-			   AND id NOT IN (
-			     SELECT id FROM jarvis_facts
-			     WHERE session_id = ?
-			     ORDER BY updated_at DESC, id DESC
-			     LIMIT ?
-			   )`,
-		)
-		.bind(sessionId, sessionId, MAX_FACTS_PER_SESSION)
-		.run();
+	// One batched round trip: the upsert plus eviction of the oldest facts past
+	// the ceiling, so a session can't grow without bound.
+	await db.batch([
+		db
+			.prepare(
+				`INSERT INTO jarvis_facts (session_id, fact_key, fact_value, category)
+				 VALUES (?, ?, ?, ?)
+				 ON CONFLICT (session_id, fact_key)
+				 DO UPDATE SET fact_value = excluded.fact_value,
+				               category   = excluded.category,
+				               updated_at = datetime('now')`,
+			)
+			.bind(sessionId, k, v, cat),
+		db
+			.prepare(
+				`DELETE FROM jarvis_facts
+				 WHERE session_id = ?
+				   AND id NOT IN (
+				     SELECT id FROM jarvis_facts
+				     WHERE session_id = ?
+				     ORDER BY updated_at DESC, id DESC
+				     LIMIT ?
+				   )`,
+			)
+			.bind(sessionId, sessionId, MAX_FACTS_PER_SESSION),
+	]);
 }
 
 /** Delete one fact by key. Returns how many rows were removed (0 or 1). */
@@ -267,6 +267,23 @@ export async function markReminderFired(
 		.bind(id, sessionId)
 		.run();
 	return (res.meta.changes ?? 0) > 0;
+}
+
+/** Mark several reminders fired in one statement (used after surfacing). */
+export async function markRemindersFired(
+	db: D1Database,
+	sessionId: string,
+	ids: number[],
+): Promise<void> {
+	if (ids.length === 0) return;
+	const placeholders = ids.map(() => "?").join(",");
+	await db
+		.prepare(
+			`UPDATE jarvis_reminders SET fired_at = datetime('now')
+			 WHERE session_id = ? AND fired_at IS NULL AND id IN (${placeholders})`,
+		)
+		.bind(sessionId, ...ids)
+		.run();
 }
 
 /** Cancel a pending reminder by id. Returns true if one was cancelled. */
