@@ -339,13 +339,16 @@ def _speak_windows(text: str, voice: str) -> None:
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
         f.write(text)
         path = f.name
+    # In a PowerShell single-quoted literal the only escape is a doubled quote —
+    # needed when the temp path contains one (e.g. C:\Users\O'Brien\...).
+    ps_path = path.replace("'", "''")
     script = (
         "$ErrorActionPreference='SilentlyContinue';"
         "Add-Type -AssemblyName System.Speech;"
         "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer;"
         "if($env:JARVIS_TTS_VOICE){try{$s.SelectVoice($env:JARVIS_TTS_VOICE)}catch{}};"
         "if($env:JARVIS_TTS_RATE){try{$s.Rate=[int]$env:JARVIS_TTS_RATE}catch{}};"
-        f"$t=Get-Content -Raw -Encoding UTF8 -LiteralPath '{path}';"
+        f"$t=Get-Content -Raw -Encoding UTF8 -LiteralPath '{ps_path}';"
         "if($t){$s.Speak($t)};"
     )
     env = dict(os.environ)
@@ -410,7 +413,13 @@ class Listener:
                         oww_utils.download_models()
                 except Exception:  # noqa: BLE001 — let Model() surface the real cause
                     pass
-                self.oww = Model(wakeword_models=["hey_jarvis"])
+                try:
+                    self.oww = Model(wakeword_models=["hey_jarvis"])
+                except Exception:  # noqa: BLE001
+                    # Windows/macOS installs have no tflite runtime (the wheel is
+                    # Linux-only); the .onnx models were downloaded alongside, so
+                    # retry explicitly on onnxruntime before giving up.
+                    self.oww = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
                 log("Wake word active — say “Hey Jarvis”.")
             except Exception as err:  # noqa: BLE001
                 # No console (HUD double-click) → push-to-talk's input() can't be
@@ -427,11 +436,14 @@ class Listener:
             return self._record_until_silence()
         if self.mode == "auto":
             return self._record_until_silence(wait_for_speech=True)
+        # Guard before touching input(): with no usable console it raises EOFError
+        # (closed stdin) or RuntimeError (pythonw's stdin is None), and the loop's
+        # broad `except Exception` would spin on either once a second forever.
+        if not _stdin_is_interactive():
+            raise SystemExit("Push-to-talk needs a console; none is attached.")
         try:
             input("\n[mic] Press Enter to speak…")
-        except EOFError as err:
-            # No readable console: end this thread cleanly instead of looping on
-            # EOFError forever (SystemExit isn't caught by the loop's `except Exception`).
+        except (EOFError, RuntimeError) as err:
             raise SystemExit("Push-to-talk needs a console; none is attached.") from err
         return self._record_push()
 
@@ -528,6 +540,14 @@ def voice_loop(cfg: Config, state: AppState, mode: str):
         except KeyboardInterrupt:
             log("Shutting down.")
             os._exit(0)
+        except SystemExit as err:
+            # Raised for unrecoverable listener states (no console for push-to-talk).
+            # In the daemon voice thread SystemExit dies silently, so surface the
+            # reason in the HUD caption before this thread ends.
+            msg = str(err) or "Voice loop stopped."
+            log(msg)
+            state.set(state="idle", reply=msg)
+            return
         except Exception as err:  # noqa: BLE001 — one bad cycle must not kill the app
             log(f"Cycle error: {err}")
             state.set(state="idle")
