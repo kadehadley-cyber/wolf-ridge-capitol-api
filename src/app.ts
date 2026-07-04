@@ -76,6 +76,7 @@ export function renderAppHtml(env: Env): string {
 <link rel="apple-touch-icon" href="/app/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="${escapeHtml(name)}">
 <title>${escapeHtml(name)}</title>
 <style>
   :root { color-scheme: dark; --cyan:#38bdf8; --dim:#155e75; }
@@ -133,6 +134,13 @@ export function renderAppHtml(env: Env): string {
   #settings button { border-radius:10px; padding:12px; font-size:15px; border:1px solid #1f2933; background:#0b1620; color:#c9ecff; }
   #settings button.primary { background:var(--cyan); color:#02060b; border:none; font-weight:600; }
   #hint { font-size:12.5px; color:#64748b; }
+
+  #install { display:flex; align-items:center; gap:10px; margin:10px 16px 0; padding:10px 14px;
+             background:#0b1620; border:1px solid #164e63; border-radius:12px; font-size:13.5px; color:#a5d8ef; }
+  #install[hidden] { display:none; }
+  #install button { border:none; border-radius:8px; padding:7px 12px; font-size:13px; }
+  #install-go { background:var(--cyan); color:#02060b; font-weight:600; }
+  #install-x { background:none; color:#64748b; font-size:16px; }
 </style>
 </head>
 <body data-state="idle">
@@ -140,6 +148,12 @@ export function renderAppHtml(env: Env): string {
     <span class="brand">J.A.R.V.I.S.</span>
     <button id="gear" aria-label="Settings">⚙︎</button>
   </header>
+
+  <div id="install" hidden>
+    <span id="install-how" style="flex:1"></span>
+    <button id="install-go" hidden>Install</button>
+    <button id="install-x" aria-label="Dismiss">✕</button>
+  </div>
 
   <main>
     <div id="reactor" role="button" aria-label="Talk to ${escapeHtml(name)}">
@@ -185,6 +199,13 @@ export function renderAppHtml(env: Env): string {
     set voice(v) { localStorage.setItem("jarvis_voice", v); },
   };
   const NEEDS_KEY = ${needsKey ? "true" : "false"};
+
+  // Platform: iOS installs from Safari's share sheet; Android from Chrome's
+  // install prompt. (iPadOS masquerades as MacIntel with touch.)
+  const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const STANDALONE = window.matchMedia("(display-mode: standalone)").matches
+    || window.navigator.standalone === true;
 
   // ---- state / captions ----
   function setState(s) { document.body.dataset.state = s; $("status").textContent =
@@ -293,7 +314,12 @@ export function renderAppHtml(env: Env): string {
     if (handsFree) setTimeout(() => { if (handsFree && !busy) voiceTurn(); }, 250);
   }
   $("reactor").addEventListener("click", () => {
-    if (!SR) { showReply("Voice input isn't available in this browser — use the keyboard, or install from Chrome."); return; }
+    if (!SR) {
+      showReply(IS_IOS
+        ? "Voice input isn't available here — on iPhone, open me in Safari (iOS 16.4 or later), or type below."
+        : "Voice input isn't available in this browser — use the keyboard, or open me in Chrome.");
+      return;
+    }
     if (document.body.dataset.state === "listening" && rec) { rec.stop(); return; }
     voiceTurn();
   });
@@ -360,6 +386,39 @@ export function renderAppHtml(env: Env): string {
 
   // First run on a keyed Worker: ask for the key before anything else.
   if (NEEDS_KEY && !store.key) openSettings();
+
+  // ---- install coaching (only in a browser tab, until dismissed) ----
+  // Android: Chrome hands us a real install prompt via beforeinstallprompt.
+  // iOS: there is no prompt API — Safari's share sheet is the only path.
+  let installPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    installPrompt = e;
+    if (!$("install").hidden) $("install-go").hidden = false;
+  });
+  if (!STANDALONE && !localStorage.getItem("jarvis_install_done")) {
+    $("install-how").textContent = IS_IOS
+      ? "Install me: in Safari, tap Share \\u2191 then \\u201CAdd to Home Screen\\u201D."
+      : "Install me as an app: Chrome menu \\u22EE \\u2192 \\u201CInstall app\\u201D.";
+    $("install").hidden = false;
+    if (installPrompt) $("install-go").hidden = false;
+    $("install-go").addEventListener("click", async () => {
+      if (!installPrompt) return;
+      installPrompt.prompt();
+      await installPrompt.userChoice.catch(() => null);
+      installPrompt = null;
+      $("install").hidden = true;
+      localStorage.setItem("jarvis_install_done", "1");
+    });
+    $("install-x").addEventListener("click", () => {
+      $("install").hidden = true;
+      localStorage.setItem("jarvis_install_done", "1");
+    });
+  }
+  window.addEventListener("appinstalled", () => {
+    $("install").hidden = true;
+    localStorage.setItem("jarvis_install_done", "1");
+  });
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/app/sw.js").catch(() => {});
 })();
