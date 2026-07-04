@@ -400,6 +400,17 @@ class Listener:
 
         self.np, self.sd, self.cfg, self.state = np, sd, cfg, state
         self.mode = mode
+        # Which microphone: JARVIS_INPUT_DEVICE picks by index or name substring;
+        # unset uses the system default. Say which one we're on — a wrong device
+        # (continuity mic, an aggregate, a muted interface) hears only silence.
+        self.input_device = self._pick_input_device(os.environ.get("JARVIS_INPUT_DEVICE"))
+        try:
+            dev = sd.query_devices(
+                self.input_device if self.input_device is not None else None, "input"
+            )
+            log(f"Microphone: {dev['name']}")
+        except Exception:  # noqa: BLE001 — purely informational
+            pass
         self.oww = None
         if mode == "wake":
             try:
@@ -433,6 +444,22 @@ class Listener:
                 log(f"Wake word unavailable ({err}); falling back to {fallback}.")
                 self.mode = fallback
 
+    def _pick_input_device(self, want):
+        """None → system default; digits → device index; else name substring."""
+        if not want:
+            return None
+        want = want.strip()
+        if want.isdigit():
+            return int(want)
+        try:
+            for i, dev in enumerate(self.sd.query_devices()):
+                if dev.get("max_input_channels", 0) > 0 and want.lower() in dev["name"].lower():
+                    return i
+        except Exception:  # noqa: BLE001
+            pass
+        log(f'No input device matching "{want}"; using the system default.')
+        return None
+
     def wait_for_command(self):
         if self.mode == "wake" and self.oww is not None:
             self.state.set(state="idle", level=0.0)
@@ -453,18 +480,37 @@ class Listener:
 
     def _await_wake(self):
         block = 1280  # 80 ms frames, what openWakeWord expects
+        # JARVIS_WAKE_DEBUG=1 prints a once-a-second line with the peak wake
+        # score and mic level, so "it never triggers" separates cleanly into
+        # silent mic (level ~0), low scores (threshold), or a code bug.
+        debug = os.environ.get("JARVIS_WAKE_DEBUG", "") not in ("", "0")
+        peak = lvl = 0.0
+        last_report = time.time()
         self.oww.reset()
         with self.sd.InputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=block
+            samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=block,
+            device=self.input_device,
         ) as stream:
             while True:
                 data, _ = stream.read(block)
-                scores = self.oww.predict(data.flatten())
+                mono = data.flatten()
+                scores = self.oww.predict(mono)
                 # openwakeword keys its scores by the model FILE's stem
                 # ("hey_jarvis_v0.1"), not the name we requested — looking up
                 # "hey_jarvis" always misses and the wake word never fires.
                 # Only our wakeword model is loaded, so take the best score.
-                if max(scores.values(), default=0.0) >= self.cfg.wake_threshold:
+                score = max(scores.values(), default=0.0)
+                if debug:
+                    peak = max(peak, score)
+                    if mono.size:
+                        lvl = max(lvl, float(self.np.abs(mono).max()) / 32768.0)
+                    now = time.time()
+                    if now - last_report >= 1.0:
+                        log(f"[wake] peak score {peak:.3f} | mic level {lvl:.3f} | threshold {self.cfg.wake_threshold}")
+                        peak = lvl = 0.0
+                        last_report = now
+                if score >= self.cfg.wake_threshold:
+                    log("Wake word heard.")
                     return
 
     def _record_push(self):
@@ -477,7 +523,8 @@ class Listener:
             if rec["on"]:
                 frames.append(indata.copy())
 
-        with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=cb):
+        with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=cb,
+                            device=self.input_device):
             input("[rec] Recording… press Enter to stop.")
             rec["on"] = False
         return np.concatenate(frames).flatten() if frames else np.zeros(0, dtype=np.float32)
@@ -493,7 +540,7 @@ class Listener:
         silent = 0.0
         start = time.time()
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32",
-                            blocksize=block) as stream:
+                            blocksize=block, device=self.input_device) as stream:
             while True:
                 data, _ = stream.read(block)
                 mono = data.flatten()
