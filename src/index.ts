@@ -16,6 +16,7 @@ import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
 import { handleInbound, verifyWebhook } from "./whatsapp";
 import { renderHtml } from "./renderHtml";
+import { appManifest, APP_SW, iconBytes, renderAppHtml } from "./app";
 
 export default {
 	async fetch(request, env, ctx) {
@@ -25,6 +26,32 @@ export default {
 			case "GET /":
 				return new Response(renderHtml(env), {
 					headers: { "content-type": "text/html; charset=utf-8" },
+				});
+
+			// The phone app (installable PWA). Static UI only — the /jarvis calls it
+			// makes still carry the bearer key. /app/ is canonical so the service
+			// worker's scope covers the whole app.
+			case "GET /app":
+				return Response.redirect(new URL("/app/", url).toString(), 301);
+			case "GET /app/":
+				return new Response(renderAppHtml(env), {
+					headers: { "content-type": "text/html; charset=utf-8" },
+				});
+			case "GET /app/manifest.webmanifest":
+				return new Response(appManifest(env.JARVIS_NAME || "Jarvis"), {
+					headers: { "content-type": "application/manifest+json" },
+				});
+			case "GET /app/sw.js":
+				return new Response(APP_SW, {
+					headers: { "content-type": "text/javascript; charset=utf-8" },
+				});
+			case "GET /app/icon-192.png":
+			case "GET /app/icon-512.png":
+				return new Response(iconBytes(url.pathname.includes("512") ? "512" : "192"), {
+					headers: {
+						"content-type": "image/png",
+						"cache-control": "public, max-age=86400",
+					},
 				});
 
 			case "GET /whatsapp":
