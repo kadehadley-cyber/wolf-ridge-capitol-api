@@ -460,7 +460,11 @@ class Listener:
             while True:
                 data, _ = stream.read(block)
                 scores = self.oww.predict(data.flatten())
-                if scores.get("hey_jarvis", 0.0) >= self.cfg.wake_threshold:
+                # openwakeword keys its scores by the model FILE's stem
+                # ("hey_jarvis_v0.1"), not the name we requested — looking up
+                # "hey_jarvis" always misses and the wake word never fires.
+                # Only our wakeword model is loaded, so take the best score.
+                if max(scores.values(), default=0.0) >= self.cfg.wake_threshold:
                     return
 
     def _record_push(self):
