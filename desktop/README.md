@@ -26,8 +26,9 @@ memory, reminders — plus the newer powers:
 ## Setup
 
 1. Install **Python 3.9+** ([python.org](https://python.org); on Windows tick *Add to PATH*).
-2. Launch:
-   - **Windows:** double-click **`Jarvis.bat`**
+2. Launch **from inside this folder** — the launcher needs its sibling files:
+   - **Windows:** double-click **`Jarvis.bat`**. Want it on your Desktop?
+     Right-click → *Send to → Desktop (create shortcut)* — don't copy the file out.
    - **macOS / Linux:** run **`./jarvis`** (or double-click it in Finder after `chmod +x jarvis`)
 3. First run asks for your Worker URL + `JARVIS_API_KEY` once and saves them to
    `~/.jarvis/desktop.json`. It also downloads the Whisper + wake-word models.

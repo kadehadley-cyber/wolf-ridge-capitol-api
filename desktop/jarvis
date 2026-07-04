@@ -4,6 +4,14 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# This launcher only works next to its app files; a lone copy lands here.
+if [ ! -f jarvis_desktop.py ] || [ ! -f requirements.txt ]; then
+	echo "This launcher must stay in the repo's desktop folder, next to" >&2
+	echo "jarvis_desktop.py and requirements.txt — this copy is on its own." >&2
+	echo "Run it from inside the project folder (make an alias/shortcut instead of copying)." >&2
+	exit 1
+fi
+
 PY="${PYTHON:-python3}"
 if ! command -v "$PY" >/dev/null 2>&1; then
 	echo "Python 3 is required. Install it and re-run." >&2
