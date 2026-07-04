@@ -309,11 +309,15 @@ class WorkerBrain:
 def speak(text: str, voice: str) -> None:
     if not text:
         return
+    # A reply starting with "-" ("-7 degrees outside, sir.") reads to `say` and
+    # espeak-ng as an option flag and is silently never spoken. A leading space
+    # keeps it an argument without changing the speech.
+    guarded = f" {text}" if text.startswith("-") else text
     try:
         if sys.platform == "darwin":
             cmd = ["say"] + (["-v", voice] if voice else [])
-            if subprocess.run(cmd + [text], check=False).returncode != 0 and voice:
-                subprocess.run(["say", text], check=False)
+            if subprocess.run(cmd + [guarded], check=False).returncode != 0 and voice:
+                subprocess.run(["say", guarded], check=False)
         elif sys.platform.startswith("win"):
             _speak_windows(text, voice)
         else:
@@ -328,7 +332,7 @@ def speak(text: str, voice: str) -> None:
                 )
                 subprocess.run(["aplay", "-q", wav], check=False)
             else:
-                subprocess.run(["espeak-ng", "-v", "en-gb", text], check=False)
+                subprocess.run(["espeak-ng", "-v", "en-gb", guarded], check=False)
     except (OSError, subprocess.CalledProcessError):
         # OSError covers a missing binary (FileNotFoundError) and permission/spawn
         # failures alike, so a TTS hiccup never kills the turn — Jarvis prints.
