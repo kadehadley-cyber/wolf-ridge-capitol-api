@@ -185,6 +185,11 @@ class Transcriber:
 def speak(text: str, voice: str | None):
     if not text:
         return
+    # A reply starting with "-" ("-7 degrees outside, sir.") reads to `say` as
+    # an option flag and is silently never spoken. A leading space keeps it an
+    # argument without changing the speech.
+    if text.startswith("-"):
+        text = f" {text}"
     cmd = ["say"]
     if voice:
         cmd += ["-v", voice]
