@@ -33,6 +33,22 @@ interface Env {
 	 */
 	JARVIS_TIMEZONE?: string;
 
+	// --- Smart home & devices (all optional; tools appear only when configured) ---
+	/**
+	 * Home Assistant base URL (https — e.g. your Nabu Casa or tunnel URL). With
+	 * HOME_ASSISTANT_TOKEN set, Jarvis gains the `control_home` tool: lights,
+	 * switches, covers (the mask, garage, blinds), locks, scenes.
+	 */
+	HOME_ASSISTANT_URL?: string;
+	/** Home Assistant long-lived access token (secret). */
+	HOME_ASSISTANT_TOKEN?: string;
+	/**
+	 * Named hardware commands as a JSON map of command → https webhook URL,
+	 * e.g. {"open mask":"https://helmet.example.com/open"}. Gives Jarvis the
+	 * `trigger_device` tool for DIY hardware (an ESP32 servo helmet, etc.).
+	 */
+	JARVIS_DEVICES?: string;
+
 	// --- WhatsApp Cloud API bridge ---
 	/** Permanent access token for the WhatsApp Cloud API (secret). */
 	WHATSAPP_TOKEN?: string;

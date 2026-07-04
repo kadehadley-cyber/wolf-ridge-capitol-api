@@ -1,6 +1,8 @@
 // Simple status / setup page served at GET /. Shows which pieces are wired up
 // so you can tell at a glance what's left to configure.
 
+import { buildToolCatalog, parseDeviceMap } from "./tools";
+
 export function renderHtml(env: Env): string {
 	const brain = env.ANTHROPIC_API_KEY
 		? "Claude (Anthropic)"
@@ -27,10 +29,22 @@ export function renderHtml(env: Env): string {
 		: "pull-only (configure WhatsApp to push)";
 
 	// Agency (tool use) is the Claude path only; the Workers AI fallback can't
-	// call tools, so it degrades to a memory-aware conversation.
+	// call tools, so it degrades to a memory-aware conversation. Count the actual
+	// catalog so configuring Home Assistant / devices is reflected here.
+	const toolCount = buildToolCatalog(env).length;
 	const agency = env.ANTHROPIC_API_KEY
-		? "ready (10 tools)"
+		? `ready (${toolCount} tools + vision)`
 		: "limited (set ANTHROPIC_API_KEY for tools)";
+
+	const smartHome =
+		env.HOME_ASSISTANT_URL && env.HOME_ASSISTANT_TOKEN
+			? "ready (Home Assistant)"
+			: "not configured (set HOME_ASSISTANT_URL + TOKEN)";
+
+	const deviceCount = Object.keys(parseDeviceMap(env.JARVIS_DEVICES)).length;
+	const devices = deviceCount
+		? `${deviceCount} command${deviceCount === 1 ? "" : "s"} configured`
+		: "none (set JARVIS_DEVICES)";
 
 	const name = env.JARVIS_NAME || "Jarvis";
 
@@ -78,6 +92,8 @@ export function renderHtml(env: Env): string {
       ${row("Reminders", "ready (D1)")}
       ${row("Proactive briefing", "GET /briefing?sessionId=me")}
       ${row("Proactive push", proactivePush)}
+      ${row("Smart home", smartHome)}
+      ${row("Named devices", devices)}
       ${row("HTTP auth", httpAuth)}
       ${row("WhatsApp bridge", whatsapp)}
       ${row("Webhook signature", signature)}

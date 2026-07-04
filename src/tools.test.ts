@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
+	buildToolCatalog,
 	convertUnits,
 	evalMath,
 	filterRemindersByWindow,
+	formatDurationSpoken,
+	formatMilesSpoken,
 	formatNumber,
 	geocodeCandidates,
+	parseDeviceMap,
 } from "./tools";
 import type { Reminder } from "./longterm";
 
@@ -116,6 +120,64 @@ describe("geocodeCandidates", () => {
 		const c = geocodeCandidates("a b c d");
 		expect(c.length).toBeLessThanOrEqual(3);
 		expect(new Set(c).size).toBe(c.length);
+	});
+});
+
+describe("directions formatting", () => {
+	it("speaks distances in plain miles", () => {
+		expect(formatMilesSpoken(1609.344)).toBe("1 mile");
+		expect(formatMilesSpoken(2575)).toBe("1.6 miles");
+		expect(formatMilesSpoken(16093.44)).toBe("10 miles");
+		expect(formatMilesSpoken(160934.4)).toBe("100 miles");
+	});
+
+	it("speaks durations the way a person would", () => {
+		expect(formatDurationSpoken(20)).toBe("under a minute");
+		expect(formatDurationSpoken(300)).toBe("about 5 minutes");
+		expect(formatDurationSpoken(60)).toBe("about 1 minute");
+		expect(formatDurationSpoken(3900)).toBe("about 1 hour and 5 minutes");
+		expect(formatDurationSpoken(7200)).toBe("about 2 hours");
+	});
+});
+
+describe("parseDeviceMap", () => {
+	it("keeps only https entries with lowercased command names", () => {
+		const map = parseDeviceMap(
+			'{"Open Mask":"https://helmet/open","bad":"http://insecure","":"https://x"}',
+		);
+		expect(map).toEqual({ "open mask": "https://helmet/open" });
+	});
+
+	it("returns empty on malformed or missing input", () => {
+		expect(parseDeviceMap(undefined)).toEqual({});
+		expect(parseDeviceMap("not json")).toEqual({});
+		expect(parseDeviceMap('["array"]')).toEqual({});
+	});
+});
+
+describe("buildToolCatalog gating", () => {
+	const names = (env: unknown) =>
+		buildToolCatalog(env as Env).map((t) => t.definition.name);
+
+	it("ships the keyless core (incl. directions) with no config", () => {
+		const core = names({});
+		expect(core).toContain("get_directions");
+		expect(core).not.toContain("control_home");
+		expect(core).not.toContain("trigger_device");
+	});
+
+	it("adds control_home only when Home Assistant is fully configured", () => {
+		expect(names({ HOME_ASSISTANT_URL: "https://ha" })).not.toContain("control_home");
+		expect(
+			names({ HOME_ASSISTANT_URL: "https://ha", HOME_ASSISTANT_TOKEN: "t" }),
+		).toContain("control_home");
+	});
+
+	it("adds trigger_device only when a valid device map exists", () => {
+		expect(names({ JARVIS_DEVICES: "not json" })).not.toContain("trigger_device");
+		expect(
+			names({ JARVIS_DEVICES: '{"open mask":"https://helmet/open"}' }),
+		).toContain("trigger_device");
 	});
 });
 

@@ -1,0 +1,7 @@
+# Batch files must be CRLF — cmd.exe misparses parenthesized blocks and labels
+# in LF-only files. Applies to checkouts and GitHub ZIP downloads alike.
+*.bat text eol=crlf
+
+# Shell launchers must stay LF regardless of the checkout platform.
+desktop/jarvis text eol=lf
+*.sh text eol=lf

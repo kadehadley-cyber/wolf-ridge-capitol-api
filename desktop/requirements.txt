@@ -1,0 +1,12 @@
+# Jarvis Desktop dependencies (cross-platform).
+
+sounddevice        # microphone capture
+numpy              # audio buffers + level detection
+faster-whisper     # on-device speech-to-text
+openwakeword       # "Hey Jarvis" wake word (falls back to push-to-talk without it)
+mss                # screenshots for "what's on my screen?"
+pillow             # image downscale/encode before upload
+pywebview          # the HUD app window (falls back to your browser without it)
+
+# Optional extras:
+# opencv-python    # webcam capture for "what am I looking at?"

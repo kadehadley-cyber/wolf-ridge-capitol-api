@@ -341,20 +341,29 @@
   }
 
   // ---- State source: poll the device, else run a self-demo ----
-  let lastReply = "", lastYou = "", demo = false;
+  let lastReply = "", lastYou = "", demo = false, demoTimer = null, pollFails = 0;
   async function poll() {
     try {
       const r = await fetch("/state", { cache: "no-store" });
       if (!r.ok) throw 0;
       const s = await r.json();
+      pollFails = 0;
+      if (demo) stopDemo();  // real state is back — drop the scripted demo
       setState(s.state || "idle", s.level);
       if ((s.you || "") !== lastYou) { lastYou = s.you || ""; document.getElementById("you").textContent = lastYou ? `“${lastYou}”` : ""; }
       if ((s.reply || "") !== lastReply) { lastReply = s.reply || ""; typeReply(lastReply); }
     } catch (e) {
-      if (!demo) { demo = true; runDemo(); }
+      // Only fall into the demo after several consecutive misses, so one transient
+      // hiccup (a busy server, a reload) doesn't strand the HUD in Malibu weather.
+      if (!demo && ++pollFails >= 5) { demo = true; runDemo(); }
     }
   }
   setInterval(poll, 150);
+
+  function stopDemo() {
+    demo = false;
+    if (demoTimer) { clearTimeout(demoTimer); demoTimer = null; }
+  }
 
   // Standalone preview (no device): cycle through the states so the look is alive.
   function runDemo() {
@@ -367,6 +376,7 @@
     ];
     let i = 0;
     (function step() {
+      if (!demo) return;  // stopped the moment real state returned
       const [st, ms, you, reply] = script[i % script.length];
       setState(st, st === "listening" ? 0.6 + Math.random()*0.3 : undefined);
       const yEl = document.getElementById("you");
@@ -377,7 +387,7 @@
         const lv = setInterval(() => setState("listening", 0.4 + Math.random()*0.5), 120);
         setTimeout(() => clearInterval(lv), ms);
       }
-      i++; setTimeout(step, ms);
+      i++; demoTimer = setTimeout(step, ms);
     })();
   }
 })();
