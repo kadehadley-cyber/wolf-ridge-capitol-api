@@ -87,6 +87,7 @@ export function renderHtml(env: Env): string {
 
     <table>
       ${row("Brain", brain)}
+      ${row("Phone app", "install from /app (Chrome → Install app)")}
       ${row("Agency (tools)", agency)}
       ${row("Long-term memory", "ready (D1)")}
       ${row("Reminders", "ready (D1)")}

@@ -30,6 +30,7 @@ too, so you can wire Jarvis to any other speech bridge.
 >
 > | Surface | Where | Interaction |
 > | --- | --- | --- |
+> | **Phone app** (Android/iPhone) | `GET /app` on this Worker | installable app: tap-to-talk / hands-free, spoken replies, camera identify |
 > | **Desktop app** (Mac/Windows/Linux) | [`desktop/`](./desktop) | "Hey Jarvis" + the arc-reactor HUD window; screen/webcam identification |
 > | macOS voice client | [`mac/`](./mac) | push-to-talk / hands-free, natural `say` voices |
 > | Windows voice client | [`windows/`](./windows) | push-to-talk / hands-free, System.Speech |
@@ -50,10 +51,28 @@ You speak ─▶ Meta glasses ─▶ WhatsApp Cloud API ─▶  POST /whatsapp  
 | Method | Path        | Purpose                                                            |
 | ------ | ----------- | ----------------------------------------------------------------- |
 | `GET`  | `/`         | Status / setup page — shows what's configured.                    |
+| `GET`  | `/app`      | The **phone app** — open on Android/iPhone and install it.        |
 | `POST` | `/jarvis`   | Channel-agnostic voice endpoint. `{ text, sessionId? } → { reply }`. |
 | `GET`  | `/briefing` | Proactive spoken briefing. `?sessionId=me → { reply }`.           |
 | `GET`  | `/whatsapp` | WhatsApp webhook verification handshake.                          |
 | `POST` | `/whatsapp` | WhatsApp inbound messages (the glasses bridge).                   |
+
+### The phone app
+
+Open `https://<your-worker>/app` on the phone and follow the install banner:
+
+- **Android** — open in **Chrome**, then *menu ⋮ → Install app* (the banner
+  shows a one-tap **Install** button when Chrome offers it).
+- **iPhone / iPad** — open in **Safari** (installing only works from Safari),
+  then *Share ↑ → Add to Home Screen*.
+
+Jarvis installs like a native app: full-screen arc-reactor HUD, tap the
+reactor to talk (or toggle 🎙 for a hands-free conversation), replies are
+spoken with a British voice when the phone has one, and 📷 photographs
+something for *"what am I looking at?"* identification. Enter your
+`JARVIS_API_KEY` once in settings; it talks to this same Worker, so it shares
+the memory and tools of every other surface. (Voice input needs Chrome on
+Android or Safari on iOS 16.4+; typing always works.)
 
 ### The JSON endpoint
 
