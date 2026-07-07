@@ -326,7 +326,7 @@ class Listener:
         return self._record_until_silence()
 
     def _await_wake_word(self) -> None:
-        np, sd = self.np, self.sd
+        sd = self.sd
         block = 1280  # 80 ms at 16 kHz — openWakeWord's expected frame size
         self.oww.reset()
         with sd.InputStream(
@@ -339,7 +339,11 @@ class Listener:
             while True:
                 data, _ = stream.read(block)
                 scores = self.oww.predict(data.flatten())
-                if scores.get(self.cfg.wake_model, 0.0) >= self.cfg.wake_threshold:
+                # openwakeword keys its scores by the model FILE's stem
+                # ("hey_jarvis_v0.1"), not the requested name — an exact lookup
+                # always misses and the wake word never fires. Only our wakeword
+                # model is loaded, so take the best score.
+                if max(scores.values(), default=0.0) >= self.cfg.wake_threshold:
                     return
 
     def _record_until_silence(

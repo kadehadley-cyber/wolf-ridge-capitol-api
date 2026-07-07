@@ -58,6 +58,32 @@ Environment variables override `~/.jarvis/desktop.json`:
 | `WHISPER_MODEL` | `base.en` | `tiny.en` faster / `small.en` more accurate. |
 | `JARVIS_HUD_PORT` | `8090` | Local port for the HUD + `/state`. |
 | `JARVIS_WAKE_THRESHOLD` | `0.5` | Lower = more sensitive wake word. |
+| `JARVIS_INPUT_DEVICE` | system default | Microphone, by index or name substring (e.g. `MacBook`). |
+| `JARVIS_WAKE_DEBUG` | off | `1` prints a once-a-second wake score + mic level readout. |
+
+## Troubleshooting: "Hey Jarvis" doesn't trigger
+
+Run from a terminal with the debug readout on:
+
+```bash
+JARVIS_WAKE_DEBUG=1 ./jarvis        # Windows: set JARVIS_WAKE_DEBUG=1 && Jarvis.bat
+```
+
+Watch the `[wake]` lines while you say "Hey Jarvis", then read it like this:
+
+- **`mic level` stays near 0.00** — the app is listening to the wrong (or a
+  muted) microphone. The startup log prints `Microphone: <name>`; pick the
+  right one with `JARVIS_INPUT_DEVICE` (name substring like `MacBook`, or an
+  index from `python3 -c "import sounddevice as sd; print(sd.query_devices())"`).
+- **level moves but `peak score` stays low (< 0.3)** — the model can't hear
+  you well: get closer, speak "Hey Jarvis" as two clear words, or lower the
+  bar with `JARVIS_WAKE_THRESHOLD=0.35`.
+- **score spikes ≥ threshold but nothing happens** — that's a bug; share the
+  terminal output.
+
+Also make sure only **one** copy of the app is running — a second instance
+prints `HUD server couldn't start (Address already in use)` and the window
+you're looking at belongs to the old one.
 
 ## Smart home & the suit
 
