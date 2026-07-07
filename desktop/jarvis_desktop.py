@@ -478,6 +478,12 @@ class Listener:
             raise SystemExit("Push-to-talk needs a console; none is attached.") from err
         return self._record_push()
 
+    # Sustained input this quiet means the app is getting digital silence —
+    # denied mic permission (macOS delivers zeros, not an error) or a dead
+    # default device (an external monitor's phantom mic, a muted interface).
+    SILENCE_LEVEL = 0.003
+    SILENCE_SECS = 20
+
     def _await_wake(self):
         block = 1280  # 80 ms frames, what openWakeWord expects
         # JARVIS_WAKE_DEBUG=1 prints a once-a-second line with the peak wake
@@ -485,7 +491,9 @@ class Listener:
         # silent mic (level ~0), low scores (threshold), or a code bug.
         debug = os.environ.get("JARVIS_WAKE_DEBUG", "") not in ("", "0")
         peak = lvl = 0.0
-        last_report = time.time()
+        last_report = start = time.time()
+        heard_anything = False
+        warned_silent = False
         self.oww.reset()
         with self.sd.InputStream(
             samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=block,
@@ -500,15 +508,31 @@ class Listener:
                 # "hey_jarvis" always misses and the wake word never fires.
                 # Only our wakeword model is loaded, so take the best score.
                 score = max(scores.values(), default=0.0)
-                if debug:
-                    peak = max(peak, score)
-                    if mono.size:
-                        lvl = max(lvl, float(self.np.abs(mono).max()) / 32768.0)
-                    now = time.time()
-                    if now - last_report >= 1.0:
+                level = float(self.np.abs(mono).max()) / 32768.0 if mono.size else 0.0
+                heard_anything = heard_anything or level >= self.SILENCE_LEVEL
+                peak = max(peak, score)
+                lvl = max(lvl, level)
+                now = time.time()
+                if now - last_report >= 0.25:
+                    # Live diagnostics on the HUD: the ring breathes with room
+                    # sound in standby, and MIC/WAKE numbers show what's heard.
+                    self.state.set(level=min(1.0, lvl / 0.15), miclevel=round(lvl, 3),
+                                   wake=round(peak, 3))
+                    if debug and now - last_report >= 1.0:
                         log(f"[wake] peak score {peak:.3f} | mic level {lvl:.3f} | threshold {self.cfg.wake_threshold}")
-                        peak = lvl = 0.0
-                        last_report = now
+                    peak = lvl = 0.0
+                    last_report = now
+                if (not heard_anything and not warned_silent
+                        and now - start >= self.SILENCE_SECS):
+                    warned_silent = True
+                    hint = (
+                        "I can't hear the microphone at all. On a Mac: System Settings, "
+                        "Privacy and Security, Microphone — allow your terminal app, then "
+                        "relaunch me. Or pick a mic: JARVIS_INPUT_DEVICE=MacBook, "
+                        "or run ./jarvis --mic-test."
+                    )
+                    log(hint)
+                    self.state.set(reply=hint)
                 if score >= self.cfg.wake_threshold:
                     log("Wake word heard.")
                     return
@@ -565,6 +589,83 @@ class Listener:
 # --------------------------------------------------------------------------- #
 
 
+def mic_test() -> None:
+    """One-shot diagnosis: list mics, sample the chosen one, score the wake
+    word, and print a verdict. Needs no Worker URL or saved config."""
+    import numpy as np
+    import sounddevice as sd
+
+    default_in = None
+    try:
+        default_in = sd.default.device[0]
+    except Exception:  # noqa: BLE001
+        pass
+    print("Input devices:")
+    for i, dev in enumerate(sd.query_devices()):
+        if dev.get("max_input_channels", 0) > 0:
+            print(f"  [{i}] {dev['name']}" + ("   <- default" if i == default_in else ""))
+
+    want = (os.environ.get("JARVIS_INPUT_DEVICE") or "").strip()
+    device = None
+    if want.isdigit():
+        device = int(want)
+    elif want:
+        for i, dev in enumerate(sd.query_devices()):
+            if dev.get("max_input_channels", 0) > 0 and want.lower() in dev["name"].lower():
+                device = i
+                break
+
+    print("\nRecording 3 seconds — say something at normal volume…")
+    audio = sd.rec(3 * SAMPLE_RATE, samplerate=SAMPLE_RATE, channels=1,
+                   dtype="int16", device=device)
+    sd.wait()
+    peak = float(np.abs(audio).max()) / 32768.0
+    if peak < 0.003:
+        print(f"Peak level {peak:.3f}: SILENT. The app is getting no audio — on a Mac,")
+        print("allow your terminal in System Settings > Privacy & Security > Microphone,")
+        print("or pick another mic with JARVIS_INPUT_DEVICE=<index or name> from the list above.")
+        return
+    print(f"Peak level {peak:.3f}: the microphone hears you.")
+
+    try:
+        from openwakeword.model import Model
+
+        try:
+            import openwakeword.utils as oww_utils
+
+            try:
+                oww_utils.download_models(model_names=["hey_jarvis"])
+            except TypeError:
+                oww_utils.download_models()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            oww = Model(wakeword_models=["hey_jarvis"])
+        except Exception:  # noqa: BLE001
+            oww = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+    except Exception as err:  # noqa: BLE001
+        print(f"Wake model unavailable ({err}) — voice still works in --auto or --push mode.")
+        return
+
+    threshold = float(os.environ.get("JARVIS_WAKE_THRESHOLD", "0.5"))
+    print("\nScoring for 8 seconds — say 'Hey Jarvis' a couple of times…")
+    best = 0.0
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+                        blocksize=1280, device=device) as stream:
+        t0 = time.time()
+        while time.time() - t0 < 8:
+            data, _ = stream.read(1280)
+            best = max(best, max(oww.predict(data.flatten()).values(), default=0.0))
+    print(f"Best wake score: {best:.3f} (triggers at {threshold})")
+    if best >= threshold:
+        print("Verdict: the wake word WORKS on this setup.")
+    elif best >= 0.25:
+        print(f"Verdict: nearly there — start with JARVIS_WAKE_THRESHOLD={max(0.2, round(best - 0.05, 2))}")
+    else:
+        print("Verdict: it hears sound but not the phrase — get closer, say 'Hey… Jarvis'")
+        print("as two clear words, or try another mic with JARVIS_INPUT_DEVICE.")
+
+
 def voice_loop(cfg: Config, state: AppState, mode: str):
     brain = WorkerBrain(cfg)
     transcriber = Transcriber(cfg.whisper_model)
@@ -615,8 +716,14 @@ def main():
     parser.add_argument("--auto", action="store_true", help="Hands-free voice activity detection.")
     parser.add_argument("--no-hud", action="store_true", help="Voice only; don't open the HUD window.")
     parser.add_argument("--text", metavar="MSG", help="One typed message (no mic) and exit.")
+    parser.add_argument("--mic-test", action="store_true",
+                        help="Diagnose the microphone + wake word, then exit.")
     parser.add_argument("--url", help="Worker /jarvis endpoint (overrides config).")
     args = parser.parse_args()
+
+    if args.mic_test:
+        mic_test()
+        return
 
     cfg = Config(args)
     state = AppState()
