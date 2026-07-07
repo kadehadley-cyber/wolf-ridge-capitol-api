@@ -60,6 +60,9 @@
   #status { left: 0; right: 0; bottom: 15vh; text-align: center;
             font-size: clamp(13px, 1.7vw, 22px); letter-spacing: 0.7em; padding-left: 0.7em;
             color: var(--blue-bright); opacity: 0.92; }
+  #diag { left: 0; right: 0; bottom: 12.2vh; text-align: center;
+          font-size: clamp(9px, 1vw, 13px); letter-spacing: 0.3em;
+          color: var(--blue-bright); opacity: 0.55; min-height: 1.2em; }
   #captions { left: 0; right: 0; bottom: 4.5vh; text-align: center; padding: 0 7vw; }
   #you { font-size: clamp(11px, 1.3vw, 17px); opacity: 0.6; min-height: 1.4em; letter-spacing: 0.25em; }
   #reply { font-size: clamp(15px, 2.1vw, 30px); margin-top: 1vh; min-height: 1.5em;
@@ -99,6 +102,7 @@
     </div>
 
     <div class="hud" id="status">STANDBY</div>
+    <div class="hud" id="diag"></div>
     <div class="hud" id="captions">
       <div id="you"></div>
       <div id="reply"></div>
@@ -350,6 +354,12 @@
       pollFails = 0;
       if (demo) stopDemo();  // real state is back — drop the scripted demo
       setState(s.state || "idle", s.level);
+      // Wake diagnostics, when the device reports them: proof of what the
+      // mic hears (MIC) and how close "Hey Jarvis" came to firing (WAKE).
+      document.getElementById("diag").textContent =
+        (typeof s.miclevel === "number" && (s.state || "idle") === "idle")
+          ? `MIC ${Math.round(s.miclevel * 100)}%  ·  WAKE ${(s.wake ?? 0).toFixed(2)}`
+          : "";
       if ((s.you || "") !== lastYou) { lastYou = s.you || ""; document.getElementById("you").textContent = lastYou ? `“${lastYou}”` : ""; }
       if ((s.reply || "") !== lastReply) { lastReply = s.reply || ""; typeReply(lastReply); }
     } catch (e) {
