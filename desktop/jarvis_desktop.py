@@ -308,6 +308,22 @@ class WorkerBrain:
 # --------------------------------------------------------------------------- #
 
 
+# Microsoft's neural voices (the engine behind Edge's Read Aloud): keyless,
+# natural, and a world away from classic SAPI. Ryan is a calm British male —
+# the closest stock voice to the J.A.R.V.I.S. of the films.
+DEFAULT_EDGE_VOICE = "en-GB-RyanNeural"
+EDGE_VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Za-z]{2,}-\w+Neural$")
+
+
+def _wants_edge(voice: str) -> bool:
+    """Neural voices are the default wherever the platform voice is worse
+    (Windows SAPI, Linux espeak) — unless the wearer forces the classic engine
+    with JARVIS_TTS=sapi/espeak/say, or names a non-neural platform voice."""
+    if os.environ.get("JARVIS_TTS", "").lower() in ("sapi", "espeak", "say", "off"):
+        return False
+    return not voice or bool(EDGE_VOICE_RE.match(voice))
+
+
 def speak(text: str, voice: str) -> None:
     if not text:
         return
@@ -317,11 +333,17 @@ def speak(text: str, voice: str) -> None:
     guarded = f" {text}" if text.startswith("-") else text
     try:
         if sys.platform == "darwin":
+            # macOS `say` voices are already natural; neural only on request.
+            if voice and EDGE_VOICE_RE.match(voice) and _speak_edge(text, voice):
+                return
             cmd = ["say"] + (["-v", voice] if voice else [])
             if subprocess.run(cmd + [guarded], check=False).returncode != 0 and voice:
                 subprocess.run(["say", guarded], check=False)
         elif sys.platform.startswith("win"):
-            _speak_windows(text, voice)
+            # Neural first; classic System.Speech only as the offline fallback.
+            if _wants_edge(voice) and _speak_edge(text, voice or DEFAULT_EDGE_VOICE):
+                return
+            _speak_windows(text, voice if not EDGE_VOICE_RE.match(voice or "") else "")
         else:
             piper_bin = os.environ.get("PIPER_BIN")
             piper_model = os.environ.get("PIPER_MODEL")
@@ -333,12 +355,61 @@ def speak(text: str, voice: str) -> None:
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
                 subprocess.run(["aplay", "-q", wav], check=False)
+            elif _wants_edge(voice) and _speak_edge(text, voice or DEFAULT_EDGE_VOICE):
+                return
             else:
                 subprocess.run(["espeak-ng", "-v", "en-gb", guarded], check=False)
     except (OSError, subprocess.CalledProcessError):
         # OSError covers a missing binary (FileNotFoundError) and permission/spawn
         # failures alike, so a TTS hiccup never kills the turn — Jarvis prints.
         log(f"(no text-to-speech available) Jarvis: {text}")
+
+
+def _speak_edge(text: str, voice: str) -> bool:
+    """Speak with a Microsoft neural voice (keyless, needs network). Returns
+    False on ANY failure — offline, package missing, playback trouble — so the
+    caller falls back to the platform engine instead of going silent."""
+    mp3 = os.path.join(tempfile.gettempdir(), "jarvis_tts.mp3")
+    try:
+        import asyncio
+
+        import edge_tts
+
+        asyncio.run(edge_tts.Communicate(text, voice).save(mp3))
+        return _play_mp3(mp3)
+    except Exception:  # noqa: BLE001 — silence here must never mean silence out loud
+        return False
+    finally:
+        try:
+            os.remove(mp3)
+        except OSError:
+            pass
+
+
+def _play_mp3(path: str) -> bool:
+    """Decode with av (already installed for Whisper) and play via sounddevice."""
+    try:
+        import av
+        import numpy as np
+        import sounddevice as sd
+
+        rate = 24_000
+        pcm = []
+        with av.open(path) as container:
+            resampler = av.audio.resampler.AudioResampler(
+                format="s16", layout="mono", rate=rate
+            )
+            for frame in container.decode(audio=0):
+                for out in resampler.resample(frame):
+                    pcm.append(out.to_ndarray())
+        if not pcm:
+            return False
+        audio = np.concatenate(pcm, axis=1).flatten().astype(np.float32) / 32768.0
+        sd.play(audio, rate)
+        sd.wait()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _speak_windows(text: str, voice: str) -> None:
