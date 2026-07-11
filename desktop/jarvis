@@ -18,9 +18,10 @@ if ! command -v "$PY" >/dev/null 2>&1; then
 	exit 1
 fi
 
-# The stamp file is written only after a *successful* install, so a half-done
-# first run (network hiccup mid-pip) retries instead of wedging forever.
-if [ ! -f .venv/.deps-ok ]; then
+# The stamp is a copy of requirements.txt written only after a *successful*
+# install: a half-done first run retries, and a changed requirements file
+# (new dependency in an update) reinstalls automatically.
+if [ ! -f .venv/.deps-ok ] || ! cmp -s requirements.txt .venv/.deps-ok; then
 	if [ ! -d .venv ]; then
 		echo "Creating virtual environment (first run only)…"
 		"$PY" -m venv .venv
@@ -28,7 +29,7 @@ if [ ! -f .venv/.deps-ok ]; then
 	./.venv/bin/pip install --upgrade pip >/dev/null
 	echo "Installing dependencies (this takes a minute)…"
 	./.venv/bin/pip install -r requirements.txt
-	touch .venv/.deps-ok
+	cp requirements.txt .venv/.deps-ok
 fi
 
 exec ./.venv/bin/python jarvis_desktop.py "$@"

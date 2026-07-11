@@ -16,7 +16,10 @@ rem Confirm a REAL Python answers (the Microsoft Store stub does not).
 %PYCMD% -c "import sys" >nul 2>nul
 if errorlevel 1 goto nopython
 
-if exist ".venv\.deps-ok" goto run
+rem The stamp is a copy of requirements.txt written only after a successful
+rem install: a half-done first run retries, and a changed requirements file
+rem (new dependency in an update) reinstalls automatically.
+fc /b requirements.txt ".venv\.deps-ok" >nul 2>nul && goto run
 if exist ".venv\Scripts\python.exe" goto deps
 
 echo Creating virtual environment (first run only)...
@@ -29,7 +32,7 @@ if not exist ".venv\Scripts\python.exe" goto stub
 echo Installing dependencies. First run downloads a lot; give it a few minutes...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto failsetup
-type nul > ".venv\.deps-ok"
+copy /y requirements.txt ".venv\.deps-ok" >nul
 
 :run
 ".venv\Scripts\python.exe" jarvis_desktop.py %*

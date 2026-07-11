@@ -54,7 +54,16 @@ Environment variables override `~/.jarvis/desktop.json`:
 | `JARVIS_URL` | *(saved)* | Your Worker's `/jarvis` endpoint. |
 | `JARVIS_API_KEY` | *(saved)* | Bearer token, if the Worker has one set. |
 | `JARVIS_SESSION` | `desktop` | Memory bucket for this machine. |
-| `JARVIS_VOICE` | platform default | macOS: e.g. `Allison (Enhanced)`; Windows: a SAPI voice name; Linux: use `PIPER_BIN`/`PIPER_MODEL`. |
+| `JARVIS_VOICE` | see below | A neural voice (`en-GB-RyanNeural`, `en-GB-SoniaNeural`, `en-US-GuyNeural`…) on any platform; macOS also takes `say` voices (`Allison (Enhanced)`); Windows also takes SAPI names. |
+| `JARVIS_TTS` | auto | `sapi` / `espeak` / `say` forces the classic offline engine. |
+
+**Voices.** On Windows and Linux, Jarvis speaks with **Microsoft neural
+voices** by default (`en-GB-RyanNeural` — calm, British, very J.A.R.V.I.S.) —
+keyless, but they need internet; offline it falls back to the classic system
+voice automatically. List every neural voice with
+`.venv\Scripts\edge-tts --list-voices` (or pick another British one:
+`en-GB-ThomasNeural`, `en-GB-SoniaNeural`). macOS keeps its natural `say`
+voices by default; set an `…Neural` name to use the neural engine there too.
 | `WHISPER_MODEL` | `base.en` | `tiny.en` faster / `small.en` more accurate. |
 | `JARVIS_HUD_PORT` | `8090` | Local port for the HUD + `/state`. |
 | `JARVIS_WAKE_THRESHOLD` | `0.5` | Lower = more sensitive wake word. |
