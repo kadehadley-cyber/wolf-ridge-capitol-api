@@ -600,10 +600,18 @@ def mic_test() -> None:
         default_in = sd.default.device[0]
     except Exception:  # noqa: BLE001
         pass
+    inputs = [(i, dev["name"]) for i, dev in enumerate(sd.query_devices())
+              if dev.get("max_input_channels", 0) > 0]
     print("Input devices:")
-    for i, dev in enumerate(sd.query_devices()):
-        if dev.get("max_input_channels", 0) > 0:
-            print(f"  [{i}] {dev['name']}" + ("   <- default" if i == default_in else ""))
+    for i, name in inputs:
+        print(f"  [{i}] {name}" + ("   <- default" if i == default_in else ""))
+    if not inputs:
+        print("  (none)")
+        print("\nWindows sees NO microphone for this app. Turn on mic access:")
+        print("  Settings > Privacy & security > Microphone > 'Let desktop apps access")
+        print("  your microphone' = On, and set an input under Settings > System > Sound.")
+        print("Then run --mic-test again.")
+        return
 
     want = (os.environ.get("JARVIS_INPUT_DEVICE") or "").strip()
     device = None
@@ -616,9 +624,15 @@ def mic_test() -> None:
                 break
 
     print("\nRecording 3 seconds — say something at normal volume…")
-    audio = sd.rec(3 * SAMPLE_RATE, samplerate=SAMPLE_RATE, channels=1,
-                   dtype="int16", device=device)
-    sd.wait()
+    try:
+        audio = sd.rec(3 * SAMPLE_RATE, samplerate=SAMPLE_RATE, channels=1,
+                       dtype="int16", device=device)
+        sd.wait()
+    except Exception as err:  # noqa: BLE001
+        print(f"Couldn't open that microphone ({err}).")
+        print("Pick another with JARVIS_INPUT_DEVICE=<index> from the list above,")
+        print("or enable mic access for desktop apps in Windows Settings.")
+        return
     peak = float(np.abs(audio).max()) / 32768.0
     if peak < 0.003:
         print(f"Peak level {peak:.3f}: SILENT. The app is getting no audio — on a Mac,")
@@ -666,6 +680,36 @@ def mic_test() -> None:
         print("as two clear words, or try another mic with JARVIS_INPUT_DEVICE.")
 
 
+NO_MIC_HELP = (
+    "No microphone is available to Jarvis. On Windows: Settings > Privacy & security "
+    "> Microphone > turn ON 'Let desktop apps access your microphone', and pick an "
+    "input under Settings > System > Sound. On macOS: System Settings > Privacy & "
+    "Security > Microphone > allow your terminal. Then relaunch, or run --mic-test "
+    "and set JARVIS_INPUT_DEVICE."
+)
+NO_MIC_HUD = "No microphone available — enable desktop mic access, then relaunch."
+
+
+def _has_input_device(sd) -> bool:
+    """True if any device exposes input channels."""
+    try:
+        return any(d.get("max_input_channels", 0) > 0 for d in sd.query_devices())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _is_audio_device_error(err: Exception) -> bool:
+    """Recognise 'no/blocked microphone' errors (PortAudio device -1, etc.)."""
+    text = str(err).lower()
+    return (
+        err.__class__.__name__ == "PortAudioError"
+        or "querying device" in text
+        or "invalid device" in text
+        or "error querying" in text
+        or ("device" in text and "-1" in text)
+    )
+
+
 def voice_loop(cfg: Config, state: AppState, mode: str):
     brain = WorkerBrain(cfg)
     transcriber = Transcriber(cfg.whisper_model)
@@ -674,9 +718,16 @@ def voice_loop(cfg: Config, state: AppState, mode: str):
     log(f"Jarvis Desktop online (brain: {cfg.url}).")
     state.set(state="idle")
 
+    sd = getattr(listener, "sd", None)
+    if sd is not None and not _has_input_device(sd):
+        log(NO_MIC_HELP)
+        state.set(state="idle", reply=NO_MIC_HUD)
+
+    warned_mic = False
     while True:
         try:
             audio = listener.wait_for_command()
+            warned_mic = False  # a successful capture means the mic is back
             if audio is None or audio.size == 0:
                 state.set(state="idle")
                 continue
@@ -705,9 +756,18 @@ def voice_loop(cfg: Config, state: AppState, mode: str):
             state.set(state="idle", reply=msg)
             return
         except Exception as err:  # noqa: BLE001 — one bad cycle must not kill the app
-            log(f"Cycle error: {err}")
-            state.set(state="idle")
-            time.sleep(1)
+            if _is_audio_device_error(err):
+                # No usable mic: say it once, then back off (don't spam once a
+                # second). Recovers on its own if the user enables mic access.
+                if not warned_mic:
+                    log(NO_MIC_HELP)
+                    state.set(state="idle", reply=NO_MIC_HUD)
+                    warned_mic = True
+                time.sleep(8)
+            else:
+                log(f"Cycle error: {err}")
+                state.set(state="idle")
+                time.sleep(1)
 
 
 def main():
