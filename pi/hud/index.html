@@ -344,15 +344,15 @@
     }, 22);
   }
 
-  // ---- State source: poll the device, else run a self-demo ----
-  let lastReply = "", lastYou = "", demo = false, demoTimer = null, pollFails = 0;
+  // ---- State source: poll the device; show NO LINK when it's unreachable ----
+  let lastReply = "", lastYou = "", offline = false, pollFails = 0;
   async function poll() {
     try {
       const r = await fetch("/state", { cache: "no-store" });
       if (!r.ok) throw 0;
       const s = await r.json();
       pollFails = 0;
-      if (demo) stopDemo();  // real state is back — drop the scripted demo
+      offline = false;
       setState(s.state || "idle", s.level);
       // Wake diagnostics, when the device reports them: proof of what the
       // mic hears (MIC) and how close "Hey Jarvis" came to firing (WAKE).
@@ -363,43 +363,20 @@
       if ((s.you || "") !== lastYou) { lastYou = s.you || ""; document.getElementById("you").textContent = lastYou ? `“${lastYou}”` : ""; }
       if ((s.reply || "") !== lastReply) { lastReply = s.reply || ""; typeReply(lastReply); }
     } catch (e) {
-      // Only fall into the demo after several consecutive misses, so one transient
-      // hiccup (a busy server, a reload) doesn't strand the HUD in Malibu weather.
-      if (!demo && ++pollFails >= 5) { demo = true; runDemo(); }
+      // No fake conversations here: if the app is unreachable, say so. A few
+      // consecutive misses are tolerated so a transient hiccup (busy server,
+      // reload) doesn't flicker the banner.
+      if (!offline && ++pollFails >= 5) {
+        offline = true;
+        setState("idle");
+        document.getElementById("status").textContent = "NO LINK";
+        document.getElementById("diag").textContent = "WAITING FOR THE JARVIS APP — IS IT RUNNING?";
+        lastYou = ""; document.getElementById("you").textContent = "";
+        lastReply = ""; typeReply("");
+      }
     }
   }
   setInterval(poll, 150);
-
-  function stopDemo() {
-    demo = false;
-    if (demoTimer) { clearTimeout(demoTimer); demoTimer = null; }
-  }
-
-  // Standalone preview (no device): cycle through the states so the look is alive.
-  function runDemo() {
-    const script = [
-      ["idle", 2200, "", ""],
-      ["listening", 2600, "what's the weather like in Malibu?", ""],
-      ["thinking", 1500, "what's the weather like in Malibu?", ""],
-      ["speaking", 4200, "what's the weather like in Malibu?", "Seventy-two and clear over Malibu, sir. A fine day to fly."],
-      ["idle", 2000, "", ""],
-    ];
-    let i = 0;
-    (function step() {
-      if (!demo) return;  // stopped the moment real state returned
-      const [st, ms, you, reply] = script[i % script.length];
-      setState(st, st === "listening" ? 0.6 + Math.random()*0.3 : undefined);
-      const yEl = document.getElementById("you");
-      if (you !== lastYou) { lastYou = you; yEl.textContent = you ? `“${you}”` : ""; }
-      if (reply !== lastReply) { lastReply = reply; typeReply(reply); }
-      // Wobble the mic level during the listening beat.
-      if (st === "listening") {
-        const lv = setInterval(() => setState("listening", 0.4 + Math.random()*0.5), 120);
-        setTimeout(() => clearInterval(lv), ms);
-      }
-      i++; demoTimer = setTimeout(step, ms);
-    })();
-  }
 })();
 </script>
 </body>
