@@ -85,6 +85,16 @@ Also make sure only **one** copy of the app is running — a second instance
 prints `HUD server couldn't start (Address already in use)` and the window
 you're looking at belongs to the old one.
 
+**Windows: the window flashes open and closes immediately.** That's almost
+always Python: a fresh Windows ships a Microsoft Store *stub* for `python`
+that isn't a real interpreter. `Jarvis.bat` now detects this and stays open
+with instructions, but to fix it: install real Python from
+[python.org](https://www.python.org/downloads/) (tick **Add python.exe to
+PATH**), and turn **off** the stub via *Settings → search "app execution
+aliases" → switch off `python.exe` and `python3.exe`*. To see any launcher
+error directly, open **Command Prompt**, `cd` into the `desktop` folder, and
+run `Jarvis.bat` from there — the window won't close.
+
 ## Smart home & the suit
 
 Device control lives on the **Worker** (so every surface shares it):
