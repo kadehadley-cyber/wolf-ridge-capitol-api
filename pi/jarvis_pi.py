@@ -130,7 +130,9 @@ def start_hud_server(cfg: Config, app_state: AppState) -> None:
 
         def do_GET(self):  # noqa: N802 — http.server naming
             if self.path.split("?")[0] == "/state":
-                body = json.dumps(app_state.snapshot()).encode()
+                # default=float: numpy scalars (mic levels, wake scores) must
+                # never be able to crash the HUD poller.
+                body = json.dumps(app_state.snapshot(), default=float).encode()
                 self.send_response(200)
                 self.send_header("content-type", "application/json")
                 self.send_header("cache-control", "no-store")

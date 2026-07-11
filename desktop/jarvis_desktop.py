@@ -159,7 +159,9 @@ def start_hud_server(port: int, state: AppState) -> bool:
 
         def do_GET(self):  # noqa: N802
             if self.path.split("?")[0] == "/state":
-                body = json.dumps(state.snapshot()).encode()
+                # default=float: numpy scalars (wake scores, levels) must never
+                # be able to crash the HUD poller.
+                body = json.dumps(state.snapshot(), default=float).encode()
                 self.send_response(200)
                 self.send_header("content-type", "application/json")
                 self.send_header("cache-control", "no-store")
@@ -507,7 +509,9 @@ class Listener:
                 # ("hey_jarvis_v0.1"), not the name we requested — looking up
                 # "hey_jarvis" always misses and the wake word never fires.
                 # Only our wakeword model is loaded, so take the best score.
-                score = max(scores.values(), default=0.0)
+                # float() matters: the scores are numpy float32, which the
+                # HUD's /state JSON encoder refuses.
+                score = float(max(scores.values(), default=0.0))
                 level = float(self.np.abs(mono).max()) / 32768.0 if mono.size else 0.0
                 heard_anything = heard_anything or level >= self.SILENCE_LEVEL
                 peak = max(peak, score)
