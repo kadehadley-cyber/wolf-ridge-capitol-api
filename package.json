@@ -1,0 +1,29 @@
+{
+	"name": "lumera-brand-api",
+	"description": "LUMÉRA — luxury exosome skincare brand API and storefront on Cloudflare Workers + D1.",
+	"cloudflare": {
+		"label": "Worker + D1 Database",
+		"products": [
+			"Workers",
+			"D1"
+		],
+		"categories": [
+			"storage"
+		],
+		"docs_url": "https://developers.cloudflare.com/d1/",
+		"publish": true
+	},
+	"devDependencies": {
+		"typescript": "5.9.3",
+		"wrangler": "4.56.0"
+	},
+	"private": true,
+	"scripts": {
+		"cf-typegen": "wrangler types",
+		"check": "tsc && wrangler deploy --dry-run",
+		"deploy": "wrangler deploy",
+		"dev": "wrangler d1 migrations apply DB --local && wrangler dev",
+		"predeploy": "wrangler d1 migrations apply DB --remote",
+		"seedLocalD1": "wrangler d1 migrations apply DB --local"
+	}
+}
