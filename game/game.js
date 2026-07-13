@@ -91,7 +91,7 @@ const ASPECTS = {
   venom: {label:'Venom',          wing:'#3a2a4a', body:'#5a3a7a', eye:'#8cf03c'},
   flame: {label:'Flame',          wing:'#8a1a08', body:'#d84b1f', eye:'#ffd66b'},
   frost: {label:'Frost',          wing:'#1a3a6a', body:'#3a6ab0', eye:'#aef0ff'},
-  wraith:{label:'Wraith',         wing:'#12160c', body:'#232c1e', eye:'#8cf03c', runes:'#8cf03c'},
+  wraith:{label:'Wraith',         wing:'#12160c', body:'#232c1e', eye:'#8cf03c', runes:'#8cf03c', chains:'#9aa4a8'},
 };
 
 const SMITH_RECIPES = [
@@ -1736,19 +1736,48 @@ function drawMob(m, sx, sy, time) {
     ctx.fillStyle = d.glow;
     ctx.beginPath(); ctx.arc(cx, cy, pulse + 6, 0, 7); ctx.fill();
     ctx.globalAlpha = 1;
-    // oversized armored figure with spiked pauldrons
-    ctx.fillStyle = d.color;
-    ctx.beginPath(); ctx.ellipse(cx, cy + 3, 10, 12, 0, 0, 7); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(cx - 10, cy - 4); ctx.lineTo(cx - 15, cy - 12); ctx.lineTo(cx - 6, cy - 8);
-    ctx.moveTo(cx + 10, cy - 4); ctx.lineTo(cx + 15, cy - 12); ctx.lineTo(cx + 6, cy - 8);
-    ctx.fill();
-    ctx.fillStyle = '#1c1a20';
-    ctx.beginPath(); ctx.arc(cx, cy - 11, 7, 0, 7); ctx.fill();
-    ctx.fillStyle = d.glow; // burning eyes + trim
-    ctx.fillRect(cx - 4, cy - 13, 3, 3); ctx.fillRect(cx + 2, cy - 13, 3, 3);
-    ctx.fillRect(cx - 8, cy + 1, 16, 3);
+    if (m.type === 'chained_wraith') {
+      // rune circle scribed into the stone beneath it
+      ctx.strokeStyle = d.glow; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.ellipse(cx, sy + TILE - 4, 14, 5, 0, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1;
+      // lean jackal-masked figure
+      ctx.fillStyle = d.color;
+      ctx.beginPath(); ctx.ellipse(cx, cy + 3, 8, 12, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx, cy - 11, 6, 5, 0, 0, 7); ctx.fill();
+      // tall jackal ears + muzzle
+      ctx.beginPath();
+      ctx.moveTo(cx - 5, cy - 13); ctx.lineTo(cx - 7, cy - 23); ctx.lineTo(cx - 1, cy - 15);
+      ctx.moveTo(cx + 5, cy - 13); ctx.lineTo(cx + 7, cy - 23); ctx.lineTo(cx + 1, cy - 15);
+      ctx.fill();
+      ctx.fillRect(cx + 4, cy - 12, 6, 3);
+      ctx.fillStyle = d.glow; // burning eyes + rune-lit trim
+      ctx.fillRect(cx - 4, cy - 13, 2, 2); ctx.fillRect(cx + 1, cy - 13, 2, 2);
+      ctx.fillRect(cx - 7, cy + 1, 14, 2);
+      // whirling chain-sickle
+      const swing = time * 4 + m.x;
+      const hx = cx + Math.cos(swing) * 16, hy = cy - 2 + Math.sin(swing) * 10;
+      ctx.strokeStyle = '#9aa4a8'; ctx.lineWidth = 2; ctx.setLineDash([3, 2]);
+      ctx.beginPath(); ctx.moveTo(cx + 4, cy); ctx.quadraticCurveTo((cx + hx) / 2, cy - 14, hx, hy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = d.glow;
+      ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + 6, hy - 3); ctx.lineTo(hx + 1, hy + 4); ctx.closePath(); ctx.fill();
+    } else {
+      // oversized armored figure with spiked pauldrons
+      ctx.fillStyle = d.color;
+      ctx.beginPath(); ctx.ellipse(cx, cy + 3, 10, 12, 0, 0, 7); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx - 10, cy - 4); ctx.lineTo(cx - 15, cy - 12); ctx.lineTo(cx - 6, cy - 8);
+      ctx.moveTo(cx + 10, cy - 4); ctx.lineTo(cx + 15, cy - 12); ctx.lineTo(cx + 6, cy - 8);
+      ctx.fill();
+      ctx.fillStyle = '#1c1a20';
+      ctx.beginPath(); ctx.arc(cx, cy - 11, 7, 0, 7); ctx.fill();
+      ctx.fillStyle = d.glow; // burning eyes + trim
+      ctx.fillRect(cx - 4, cy - 13, 3, 3); ctx.fillRect(cx + 2, cy - 13, 3, 3);
+      ctx.fillRect(cx - 8, cy + 1, 16, 3);
+    }
     ctx.font = 'bold 11px Verdana'; ctx.textAlign = 'center';
+    ctx.fillStyle = d.glow;
     ctx.fillText('⭐ ' + d.name, cx, sy - 12);
   } else if (m.type === 'direwolf') {
     ctx.fillStyle = d.color;
@@ -1815,6 +1844,24 @@ function drawPlayer(sx, sy, time) {
     ctx.quadraticCurveTo(cx - 20, cy + dy + 12, cx - 11, cy + dy + 9); ctx.fill();
     ctx.beginPath(); ctx.ellipse(cx + 12, cy + dy - 3, 5, 7, 0.5, 0, 7); ctx.fill();
     ctx.beginPath(); ctx.arc(cx + 16, cy + dy - 9, 5, 0, 7); ctx.fill();
+    if (asp.runes) { // wraith: glowing spine-spikes down the neck and back
+      ctx.fillStyle = asp.runes;
+      ctx.beginPath();
+      ctx.moveTo(cx + 10, cy + dy - 8); ctx.lineTo(cx + 12, cy + dy - 14); ctx.lineTo(cx + 14, cy + dy - 7);
+      ctx.moveTo(cx + 4, cy + dy - 3); ctx.lineTo(cx + 6, cy + dy - 9); ctx.lineTo(cx + 8, cy + dy - 2);
+      ctx.moveTo(cx - 8, cy + dy + 1); ctx.lineTo(cx - 6, cy + dy - 4); ctx.lineTo(cx - 4, cy + dy + 2);
+      ctx.fill();
+    }
+    if (asp.chains) { // wraith: the Drowned Bastion's chains still cling to it
+      ctx.strokeStyle = asp.chains; ctx.lineWidth = 1.5; ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(cx - 12, cy + dy); ctx.quadraticCurveTo(cx, cy + dy + 10, cx + 12, cy + dy - 2);
+      ctx.moveTo(cx - 9, cy + dy + 9); ctx.quadraticCurveTo(cx + 2, cy + dy + 13, cx + 13, cy + dy + 4);
+      // a snapped length swinging free from the neck
+      ctx.moveTo(cx + 14, cy + dy - 4); ctx.lineTo(cx + 16 + Math.sin(time * 3) * 3, cy + dy + 6);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     // horns + eye
     ctx.fillStyle = '#e8d8b0';
     ctx.beginPath(); ctx.moveTo(cx + 13, cy + dy - 12); ctx.lineTo(cx + 11, cy + dy - 18); ctx.lineTo(cx + 15, cy + dy - 13); ctx.fill();
