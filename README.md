@@ -226,3 +226,10 @@ small deployments, not thousands of users.
   unset only for local dev). The WhatsApp webhook **fails closed** — with no
   `WHATSAPP_APP_SECRET` configured, inbound messages are rejected rather than
   trusted, since an accepted message now writes durable state.
+
+## Bonus: EMBERFALL 🐉
+
+This repo also hosts [`game/`](game/README.md) — **Emberfall**, a self-contained
+browser RPG: RuneScape-style skilling (13 skills, levels 1–99) in a Game of
+Thrones-inspired realm, with dragon riding, dragonfire castle raids, and five
+elemental bosses. No build step — open `game/index.html` and play.
