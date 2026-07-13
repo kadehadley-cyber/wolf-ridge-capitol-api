@@ -1152,8 +1152,9 @@ function openHelp() {
     Flamebrand Katana and the Frost Sentinel's Frostscale Armor. And sailors whisper of a fifth: <b>The Chained Wraith</b>
     (lvl 90), bound to the Drowned Bastion islet in the southern sea, where only a dragon can carry you.
     It guards the black-and-viridian <b>Wraith aspect</b> and a Runed Chain-Glaive, the finest weapon in the realm.</p>
-    <p style="margin-top:8px"><b>Keys:</b> M mount/dismount · Esc close windows · ← → swing the camera around you ·
-    ↑ ↓ or scroll wheel zoom in and out.</p>
+    <p style="margin-top:8px"><b>Keys:</b> M mount/dismount · V switch camera (close third-person chase ↔ overhead) ·
+    ← → swing the camera around you · ↑ ↓ or scroll wheel zoom · Esc close windows.
+    In chase view the camera swings behind you as you travel.</p>
     <p style="margin-top:8px"><b>Map 🗺️:</b> click the minimap to unroll a chart of the whole realm.</p>`);
 }
 
@@ -1584,16 +1585,52 @@ const mmCanvas = document.getElementById('minimap');
 const mmCtx = mmCanvas.getContext('2d');
 let mmBase = null;
 
-/* camera: arrows swing the view around the hero, wheel / ↑↓ zoom — all eased */
-let camAngle = 0, camAngleT = 0, camZoom = 1, camZoomT = 1;
-const ZOOM_MIN = 0.45, ZOOM_MAX = 2.4;
+/* camera: two views. 'chase' is a close third-person view — the camera hangs
+   behind the hero, swings to follow the direction of travel (Dark Souls
+   style), and the ground plane is tilted while characters stand upright.
+   'overhead' is the classic top-down view. ←→ orbit, wheel / ↑↓ zoom, V or
+   the HUD button switches views. */
+let camMode = localStorage.getItem('kandarin_cam') === 'overhead' ? 'overhead' : 'chase';
+const CHASE_TILT = 0.68, CHASE_ANCHOR = 0.66, CHASE_ZOOM = 2.1;
+let camAngle = 0, camAngleT = 0;
+let camZoom = camMode === 'chase' ? CHASE_ZOOM : 1, camZoomT = camZoom;
+const zoomMin = () => camMode === 'chase' ? 1.3 : 0.45;
+const zoomMax = () => camMode === 'chase' ? 3.4 : 2.4;
 const keysHeld = {};
-function screenToTile(sx, sy) { // invert the camera transform: screen px → tile
-  const dx = (sx - viewW / 2) / camZoom, dy = (sy - viewH / 2) / camZoom;
+let labelAngle = 0; // what label() counter-rotates by in the current pass
+
+function camMatrix() { // world px → screen px
+  const pcx = player.px * TILE + TILE / 2, pcy = player.py * TILE + TILE / 2;
+  const chase = camMode === 'chase';
+  const ax = viewW / 2, ay = chase ? viewH * CHASE_ANCHOR : viewH / 2;
   const cos = Math.cos(camAngle), sin = Math.sin(camAngle);
-  const wx = dx * cos + dy * sin + player.px * TILE + TILE / 2;
-  const wy = -dx * sin + dy * cos + player.py * TILE + TILE / 2;
+  const zx = camZoom, zy = camZoom * (chase ? CHASE_TILT : 1);
+  const a = zx * cos, c = -zx * sin, b = zy * sin, d = zy * cos;
+  return {a, b, c, d, e: ax - (a * pcx + c * pcy), f: ay - (b * pcx + d * pcy)};
+}
+function screenToWorldPx(sx, sy) {
+  const M = camMatrix(), det = M.a * M.d - M.c * M.b;
+  const dx = sx - M.e, dy = sy - M.f;
+  return [(M.d * dx - M.c * dy) / det, (-M.b * dx + M.a * dy) / det];
+}
+function screenToTile(sx, sy) {
+  const [wx, wy] = screenToWorldPx(sx, sy);
   return [Math.floor(wx / TILE), Math.floor(wy / TILE)];
+}
+function nearestAngle(from, to) { // unwrap `to` onto the turn nearest `from`
+  let d = (to - from) % (2 * Math.PI);
+  if (d > Math.PI) d -= 2 * Math.PI;
+  if (d < -Math.PI) d += 2 * Math.PI;
+  return from + d;
+}
+let lastHX = null, lastHY = null; // last tile, for chase heading-follow
+function toggleView() {
+  camMode = camMode === 'chase' ? 'overhead' : 'chase';
+  camZoomT = camMode === 'chase' ? CHASE_ZOOM : 1;
+  if (camMode === 'overhead') camAngleT = nearestAngle(camAngle, 0);
+  try { localStorage.setItem('kandarin_cam', camMode); } catch (e) { /* private mode */ }
+  const btn = document.getElementById('viewBtn');
+  if (btn) btn.textContent = camMode === 'chase' ? '📷 Chase' : '📷 Overhead';
 }
 
 let viewW = 0, viewH = 0, DPR = 1, vignette = null;
@@ -1795,17 +1832,21 @@ function paintTransitions(c, x, y, ox, oy) {
 }
 
 function buildTerrain() {
+  // each chunk carries a 1-tile gutter of its neighbours so bilinear sampling
+  // under a rotated/zoomed camera never bleeds a seam at chunk borders
   terrainChunks = [];
   const nx = Math.ceil(W / CHUNK), ny = Math.ceil(H / CHUNK);
   for (let cy = 0; cy < ny; cy++) for (let cx = 0; cx < nx; cx++) {
     const cv = document.createElement('canvas');
-    cv.width = CHUNK_PX; cv.height = CHUNK_PX;
+    cv.width = CHUNK_PX + 2 * TILE; cv.height = CHUNK_PX + 2 * TILE;
     const c = cv.getContext('2d');
-    const xEnd = Math.min(W, (cx + 1) * CHUNK), yEnd = Math.min(H, (cy + 1) * CHUNK);
-    for (let y = cy * CHUNK; y < yEnd; y++) for (let x = cx * CHUNK; x < xEnd; x++)
-      paintTile(c, x, y, (x - cx * CHUNK) * TILE, (y - cy * CHUNK) * TILE);
-    for (let y = cy * CHUNK; y < yEnd; y++) for (let x = cx * CHUNK; x < xEnd; x++)
-      paintTransitions(c, x, y, (x - cx * CHUNK) * TILE, (y - cy * CHUNK) * TILE);
+    const gx0 = Math.max(0, cx * CHUNK - 1), gy0 = Math.max(0, cy * CHUNK - 1);
+    const gx1 = Math.min(W, (cx + 1) * CHUNK + 1), gy1 = Math.min(H, (cy + 1) * CHUNK + 1);
+    const ox = x => (x - cx * CHUNK + 1) * TILE, oy = y => (y - cy * CHUNK + 1) * TILE;
+    for (let y = gy0; y < gy1; y++) for (let x = gx0; x < gx1; x++)
+      paintTile(c, x, y, ox(x), oy(y));
+    for (let y = gy0; y < gy1; y++) for (let x = gx0; x < gx1; x++)
+      paintTransitions(c, x, y, ox(x), oy(y));
     terrainChunks.push({cv, px: cx * CHUNK_PX, py: cy * CHUNK_PX});
   }
 }
@@ -1845,11 +1886,20 @@ function frame(now) {
     // camera input: ←→ orbit the hero, ↑↓ zoom (wheel does too)
     if (keysHeld.ArrowLeft) camAngleT -= dt * 2.2;
     if (keysHeld.ArrowRight) camAngleT += dt * 2.2;
-    if (keysHeld.ArrowUp) camZoomT = Math.min(ZOOM_MAX, camZoomT * (1 + dt * 1.5));
-    if (keysHeld.ArrowDown) camZoomT = Math.max(ZOOM_MIN, camZoomT * (1 - dt * 1.5));
-    const ceases = Math.min(1, dt * 10);
+    if (keysHeld.ArrowUp) camZoomT = Math.min(zoomMax(), camZoomT * (1 + dt * 1.5));
+    if (keysHeld.ArrowDown) camZoomT = Math.max(zoomMin(), camZoomT * (1 - dt * 1.5));
+    // chase view: the camera swings around to follow the direction of travel
+    if (lastHX === null) { lastHX = player.x; lastHY = player.y; }
+    if (player.x !== lastHX || player.y !== lastHY) {
+      if (camMode === 'chase') {
+        const hdx = player.x - lastHX, hdy = player.y - lastHY;
+        camAngleT = nearestAngle(camAngle, -Math.atan2(hdx, -hdy));
+      }
+      lastHX = player.x; lastHY = player.y;
+    }
+    const ceases = Math.min(1, dt * (camMode === 'chase' ? 4 : 10));
     camAngle += (camAngleT - camAngle) * ceases;
-    camZoom += (camZoomT - camZoom) * ceases;
+    camZoom += (camZoomT - camZoom) * Math.min(1, dt * 10);
     draw(now / 1000, dt);
   }
   requestAnimationFrame(frame);
@@ -1858,32 +1908,34 @@ function frame(now) {
 function draw(time, dt) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const cw = viewW, ch = viewH;
-  const camX = player.px * TILE + TILE / 2 - cw / 2;
-  const camY = player.py * TILE + TILE / 2 - ch / 2;
+  const chase = camMode === 'chase';
   ctx.fillStyle = '#0a1522';
   ctx.fillRect(0, 0, cw, ch);
 
-  // orbit + zoom about the hero (screen centre), then draw in world space as before
-  ctx.translate(cw / 2, ch / 2);
-  ctx.scale(camZoom, camZoom);
-  ctx.rotate(camAngle);
-  ctx.translate(-cw / 2, -ch / 2);
+  const M = camMatrix();
+  const proj = (wx, wy) => [M.a * wx + M.c * wy + M.e, M.b * wx + M.d * wy + M.f];
 
-  // visible bounds: a rotated view sees up to the half-diagonal in every direction
-  const pad = Math.hypot(cw, ch) / 2 / camZoom;
-  const pcx = player.px * TILE + TILE / 2, pcy = player.py * TILE + TILE / 2;
-  const x0 = Math.max(0, Math.floor((pcx - pad) / TILE) - 1), x1 = Math.min(W - 1, Math.ceil((pcx + pad) / TILE) + 1);
-  const y0 = Math.max(0, Math.floor((pcy - pad) / TILE) - 1), y1 = Math.min(H - 1, Math.ceil((pcy + pad) / TILE) + 1);
+  // visible tile bounds: invert the four screen corners
+  let wx0 = Infinity, wy0 = Infinity, wx1 = -Infinity, wy1 = -Infinity;
+  for (const [sx, sy] of [[0, 0], [cw, 0], [0, ch], [cw, ch]]) {
+    const [wx, wy] = screenToWorldPx(sx, sy);
+    wx0 = Math.min(wx0, wx); wx1 = Math.max(wx1, wx);
+    wy0 = Math.min(wy0, wy); wy1 = Math.max(wy1, wy);
+  }
+  const x0 = Math.max(0, Math.floor(wx0 / TILE) - 1), x1 = Math.min(W - 1, Math.ceil(wx1 / TILE) + 1);
+  const y0 = Math.max(0, Math.floor(wy0 / TILE) - 1), y1 = Math.min(H - 1, Math.ceil(wy1 / TILE) + 1);
 
-  // terrain: pre-rendered chunks, then animated water/lava on top
+  // world-space pass: terrain chunks, then animated water/lava on top
+  ctx.transform(M.a, M.b, M.c, M.d, M.e, M.f);
+  labelAngle = camAngle;
   if (terrainChunks) for (const chk of terrainChunks) {
-    if (chk.px > pcx + pad || chk.px + CHUNK_PX < pcx - pad || chk.py > pcy + pad || chk.py + CHUNK_PX < pcy - pad) continue;
-    ctx.drawImage(chk.cv, chk.px - camX, chk.py - camY);
+    if (chk.px > wx1 || chk.px + CHUNK_PX < wx0 || chk.py > wy1 || chk.py + CHUNK_PX < wy0) continue;
+    ctx.drawImage(chk.cv, TILE, TILE, CHUNK_PX, CHUNK_PX, chk.px, chk.py, CHUNK_PX, CHUNK_PX);
   }
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const t = map[idx(x, y)];
     if (t !== T.WATER && t !== T.LAVA) continue;
-    const sx = x * TILE - camX, sy = y * TILE - camY;
+    const sx = x * TILE, sy = y * TILE;
     if (t === T.WATER) {
       const wv = Math.sin(time * 1.5 + x * 0.9 + y * 1.3) * 0.5 + 0.5;
       ctx.fillStyle = 'rgba(120,180,220,' + (0.05 + wv * 0.08) + ')';
@@ -1902,60 +1954,85 @@ function draw(time, dt) {
     }
   }
 
-  // nodes (objects)
+  /* entity pass. Overhead: draw flat in world space, as ever. Chase: the
+     ground is tilted, so characters are projected to their ground point and
+     drawn upright in screen space, far-to-near so nearer ones overdraw. */
+  const ents = [];
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const n = nodes[key(x, y)];
-    if (n) drawNode(n, x * TILE - camX, y * TILE - camY, time);
+    if (n) ents.push({wx: x * TILE, wy: y * TILE, fn: (sx, sy) => drawNode(n, sx, sy, time)});
   }
-
-  // npcs
   for (const n of npcs) {
     if (n.x < x0 || n.x > x1 || n.y < y0 || n.y > y1) continue;
-    drawHumanoid(n.x * TILE - camX, n.y * TILE - camY, n.color, '#3a3227');
-    ctx.fillStyle = '#f4e3a1'; ctx.font = 'bold 11px Verdana'; ctx.textAlign = 'center';
-    label(n.name, n.x * TILE - camX + TILE / 2, n.y * TILE - camY - 6);
+    ents.push({wx: n.x * TILE, wy: n.y * TILE, fn: (sx, sy) => {
+      drawHumanoid(sx, sy, n.color, '#3a3227');
+      ctx.fillStyle = '#f4e3a1'; ctx.font = 'bold 11px Verdana'; ctx.textAlign = 'center';
+      label(n.name, sx + TILE / 2, sy - 6);
+    }});
   }
-
-  // fake players
   for (const f of fakePlayers) {
     if (f.px < x0 - 1 || f.px > x1 + 1 || f.py < y0 - 1 || f.py > y1 + 1) continue;
-    drawHumanoid(f.px * TILE - camX, f.py * TILE - camY, f.color, '#2a2a2a');
-    ctx.fillStyle = '#8fd48f'; ctx.font = '10px Verdana'; ctx.textAlign = 'center';
-    label(f.name, f.px * TILE - camX + TILE / 2, f.py * TILE - camY - 4);
+    ents.push({wx: f.px * TILE, wy: f.py * TILE, fn: (sx, sy) => {
+      drawHumanoid(sx, sy, f.color, '#2a2a2a');
+      ctx.fillStyle = '#8fd48f'; ctx.font = '10px Verdana'; ctx.textAlign = 'center';
+      label(f.name, sx + TILE / 2, sy - 4);
+    }});
   }
-
-  // mobs
   for (const m of mobs) {
     if (m.dead) continue;
     if (m.px < x0 - 1 || m.px > x1 + 1 || m.py < y0 - 1 || m.py > y1 + 1) continue;
-    drawMob(m, m.px * TILE - camX, m.py * TILE - camY, time);
+    ents.push({wx: m.px * TILE, wy: m.py * TILE, fn: (sx, sy) => drawMob(m, sx, sy, time)});
+  }
+  ents.push({wx: player.px * TILE, wy: player.py * TILE, player: true,
+    fn: (sx, sy) => drawPlayer(sx, sy, time)});
+
+  if (!chase) {
+    for (const en of ents) en.fn(en.wx, en.wy);
+  } else {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    labelAngle = 0;
+    for (const en of ents) {
+      const [px, py] = proj(en.wx + TILE / 2, en.wy + TILE / 2);
+      en.px = px; en.py = py;
+      // characters read larger up close; the hero slightly larger still
+      en.k = camZoom * (0.8 + 0.34 * Math.max(0, Math.min(1, py / ch))) * (en.player ? 1.12 : 1);
+    }
+    ents.sort((a, b) => a.py - b.py);
+    for (const en of ents) {
+      ctx.save();
+      ctx.translate(en.px, en.py);
+      ctx.scale(en.k, en.k);
+      en.fn(-TILE / 2, -TILE / 2);
+      ctx.restore();
+    }
   }
 
-  // player (+dragon)
-  drawPlayer(player.px * TILE - camX, player.py * TILE - camY, time);
-
-  // particles
+  // particles + floaters follow the active space: world (overhead) or projected (chase)
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.life -= dt; if (p.life <= 0) { particles.splice(i, 1); continue; }
     p.x += p.vx * dt; p.y += p.vy * dt;
     ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2));
     ctx.fillStyle = p.color;
-    ctx.fillRect(p.x * TILE - camX, p.y * TILE - camY, p.size, p.size);
+    if (chase) {
+      const [px, py] = proj(p.x * TILE, p.y * TILE);
+      ctx.fillRect(px, py, p.size * camZoom, p.size * camZoom);
+    } else {
+      ctx.fillRect(p.x * TILE, p.y * TILE, p.size, p.size);
+    }
     ctx.globalAlpha = 1;
   }
 
-  // floaters
   ctx.font = 'bold 13px Verdana'; ctx.textAlign = 'center';
   for (let i = floaters.length - 1; i >= 0; i--) {
     const f = floaters[i];
     f.life -= dt; if (f.life <= 0) { floaters.splice(i, 1); continue; }
     f.y -= dt * 0.8;
     ctx.globalAlpha = Math.min(1, f.life);
-    ctx.fillStyle = '#000';
-    label(f.text, f.x * TILE - camX + TILE / 2 + 1, f.y * TILE - camY + 1);
-    ctx.fillStyle = f.color;
-    label(f.text, f.x * TILE - camX + TILE / 2, f.y * TILE - camY);
+    let fx = f.x * TILE + TILE / 2, fy = f.y * TILE;
+    if (chase) { const [px, py] = proj(fx, fy); fx = px; fy = py; }
+    ctx.fillStyle = '#000'; label(f.text, fx + 1, fy + 1);
+    ctx.fillStyle = f.color; label(f.text, fx, fy);
     ctx.globalAlpha = 1;
   }
 
@@ -1969,11 +2046,11 @@ function draw(time, dt) {
   ctx.fillStyle = lg; ctx.fillRect(0, 0, cw, ch);
   if (vignette) ctx.drawImage(vignette, 0, 0, cw, ch);
 
-  drawMinimap(camX, camY, cw, ch);
+  drawMinimap(cw, ch);
 }
 
 function label(text, x, y) { // text at a world point, kept upright under camera rotation
-  ctx.save(); ctx.translate(x, y); ctx.rotate(-camAngle); ctx.fillText(text, 0, 0); ctx.restore();
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-labelAngle); ctx.fillText(text, 0, 0); ctx.restore();
 }
 
 function drawNode(n, sx, sy, time) {
@@ -2151,6 +2228,165 @@ function drawNode(n, sx, sy, time) {
   }
 }
 
+/* --- the detailed armoured-knight renderer: segmented plate with a lit-left
+       gradient, spiked pauldrons, crested helm with glowing visor eyes, cape,
+       tassets, rim light, and a class weapon. Vector-drawn, so it stays sharp
+       at chase-camera scale. --- */
+const ARMOR_LOOKS = {
+  bronze:     {armor:'#8a5a2a', dark:'#5a3a18', trim:'#c9a558', eyes:'#ffd66b'},
+  iron:       {armor:'#8a8a92', dark:'#55555e', trim:'#c9ccd4', eyes:'#ffd66b'},
+  steel:      {armor:'#a8b0bc', dark:'#6a7078', trim:'#e0e6ee', eyes:'#8fd4ff'},
+  obsidian:   {armor:'#3a3a44', dark:'#20202a', trim:'#8a7aa8', eyes:'#b090ff', spikes:true},
+  valyrian:   {armor:'#7a2020', dark:'#451010', trim:'#d4a545', eyes:'#58c8ff', spikes:true},
+  frostscale: {armor:'#3a6ab0', dark:'#1f3c6a', trim:'#a8d8f0', eyes:'#bfefff', spikes:true},
+  none:       {armor:'#4a5a3a', dark:'#32402a', trim:'#8a7a58', eyes:'#e8d8b0'},
+};
+function playerLook() {
+  const tier = player.equip.armor ? player.equip.armor.split('_')[0] : 'none';
+  const look = Object.assign({cape:'#6a1616'}, ARMOR_LOOKS[tier] || ARMOR_LOOKS.none);
+  const w = player.equip.weapon || '';
+  look.weapon = w.includes('katana') ? 'katana' : w === 'runed_chain' ? 'glaive' :
+    w.includes('bow') ? 'bow' : w.includes('staff') ? 'staff' : w ? 'sword' : null;
+  look.glow = w.includes('serpent') ? '#7ad44a' : '#ff5e2a';
+  return look;
+}
+
+function drawKnight(sx, sy, o, time) {
+  const cx = sx + TILE / 2;
+  const bob = Math.sin(time * 2.1 + (o.phase || 0)) * 0.6;
+  const top = sy + 2 + bob, feet = sy + TILE - 3;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath(); ctx.ellipse(cx, feet + 1, 9, 3.2, 0, 0, 7); ctx.fill();
+  if (o.cape) { // swaying cape, behind everything
+    const sw = Math.sin(time * 1.7 + (o.phase || 0)) * 2;
+    ctx.fillStyle = o.cape;
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, top + 9);
+    ctx.quadraticCurveTo(cx - 9 - sw, top + 18, cx - 7 - sw, feet - 1);
+    ctx.lineTo(cx + 6 + sw * 0.5, feet - 2);
+    ctx.quadraticCurveTo(cx + 8, top + 16, cx + 5, top + 9);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; // fold shadow
+    ctx.beginPath();
+    ctx.moveTo(cx - 2 - sw, top + 12); ctx.lineTo(cx - 4 - sw, feet - 2); ctx.lineTo(cx - 1, feet - 2);
+    ctx.closePath(); ctx.fill();
+  }
+  // greaves and boots
+  ctx.fillStyle = o.dark;
+  ctx.fillRect(cx - 5.5, feet - 8, 4, 7); ctx.fillRect(cx + 1.5, feet - 8, 4, 7);
+  ctx.fillStyle = shade(o.armor, -0.12);
+  ctx.fillRect(cx - 5.5, feet - 8, 4, 4); ctx.fillRect(cx + 1.5, feet - 8, 4, 4);
+  ctx.fillStyle = '#1a1512';
+  ctx.fillRect(cx - 6, feet - 2, 5, 2.5); ctx.fillRect(cx + 1, feet - 2, 5, 2.5);
+  // cuirass: tapered plate, lit from the west, centre ridge, belt and buckle
+  const g = ctx.createLinearGradient(cx - 8, top + 8, cx + 8, top + 20);
+  g.addColorStop(0, shade(o.armor, 0.3)); g.addColorStop(0.55, o.armor); g.addColorStop(1, shade(o.armor, -0.35));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(cx - 8, top + 9); ctx.lineTo(cx + 8, top + 9);
+  ctx.lineTo(cx + 6, top + 17); ctx.lineTo(cx + 5, top + 22);
+  ctx.lineTo(cx - 5, top + 22); ctx.lineTo(cx - 6, top + 17);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(10,8,8,0.85)'; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, top + 9); ctx.lineTo(cx, top + 19); ctx.stroke();
+  ctx.fillStyle = o.trim;
+  ctx.fillRect(cx - 5.5, top + 19, 11, 2.2);
+  ctx.fillRect(cx - 1.2, top + 18.4, 2.4, 3.4);
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillRect(cx - 6.2, top + 10, 1.5, 6);
+  // tassets
+  ctx.fillStyle = shade(o.armor, -0.25);
+  ctx.beginPath(); ctx.moveTo(cx - 5, top + 22); ctx.lineTo(cx - 3, top + 26); ctx.lineTo(cx - 1, top + 22); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 1, top + 22); ctx.lineTo(cx + 3, top + 26); ctx.lineTo(cx + 5, top + 22); ctx.closePath(); ctx.fill();
+  // pauldrons, spiked on the high tiers
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = shade(o.armor, s < 0 ? 0.18 : -0.18);
+    ctx.beginPath(); ctx.ellipse(cx + s * 8, top + 10, 4.4, 3.6, s * 0.35, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(10,8,8,0.8)'; ctx.lineWidth = 1; ctx.stroke();
+    if (o.spikes) {
+      ctx.fillStyle = o.trim;
+      for (let i = 0; i < 3; i++) {
+        const bx = cx + s * (6 + i * 2.6), by = top + 8.5 - i * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(bx - 1.2, by + 1.6); ctx.lineTo(bx + s * 1.4, by - 3.6 - i * 0.7); ctx.lineTo(bx + 1.4, by + 1.8);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+  }
+  // helm: dome, cheek guards, dark visor, burning eyes, crest spike
+  ctx.fillStyle = shade(o.armor, 0.08);
+  ctx.beginPath();
+  ctx.arc(cx, top + 4.6, 4.6, Math.PI, 0);
+  ctx.lineTo(cx + 4.6, top + 8.4); ctx.lineTo(cx - 4.6, top + 8.4);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(10,8,8,0.85)'; ctx.lineWidth = 1.1; ctx.stroke();
+  ctx.fillStyle = '#0c0a0e';
+  ctx.fillRect(cx - 3.6, top + 4.4, 7.2, 2.6);
+  ctx.save();
+  ctx.shadowColor = o.eyes; ctx.shadowBlur = 6;
+  ctx.fillStyle = o.eyes;
+  ctx.fillRect(cx - 2.8, top + 5, 1.8, 1.4); ctx.fillRect(cx + 1, top + 5, 1.8, 1.4);
+  ctx.restore();
+  ctx.fillStyle = o.trim;
+  ctx.beginPath(); ctx.moveTo(cx - 1.2, top + 1); ctx.lineTo(cx, top - 4.5); ctx.lineTo(cx + 1.2, top + 1); ctx.closePath(); ctx.fill();
+  // rim light down the lit flank
+  ctx.strokeStyle = 'rgba(255,240,210,0.35)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx - 8, top + 10); ctx.lineTo(cx - 6, top + 17); ctx.lineTo(cx - 5, top + 22); ctx.stroke();
+  drawKnightWeapon(cx, top, o, time);
+}
+
+function drawKnightWeapon(cx, top, o, time) {
+  const hy = top + 14, gl = o.glow || o.trim;
+  if (o.weapon === 'sword') {
+    ctx.strokeStyle = '#d8dde6'; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(cx + 9, hy + 6); ctx.lineTo(cx + 15, hy - 10); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(cx + 9.6, hy + 5); ctx.lineTo(cx + 15, hy - 9); ctx.stroke();
+    ctx.strokeStyle = o.trim; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(cx + 7.6, hy + 2.4); ctx.lineTo(cx + 12, hy + 4.6); ctx.stroke();
+  } else if (o.weapon === 'katana') {
+    ctx.save(); // ember-cracked curve, haloed in heat
+    ctx.shadowColor = '#ff5e2a'; ctx.shadowBlur = 7;
+    ctx.strokeStyle = '#3a3038'; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.moveTo(cx + 8, hy + 7); ctx.quadraticCurveTo(cx + 17, hy - 3, cx + 20, hy - 13); ctx.stroke();
+    ctx.restore();
+    const fl = 0.55 + Math.sin(time * 6 + (o.phase || 0)) * 0.25;
+    ctx.strokeStyle = 'rgba(255,120,42,' + fl.toFixed(3) + ')'; ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.moveTo(cx + 8.6, hy + 6); ctx.quadraticCurveTo(cx + 16.4, hy - 3, cx + 19, hy - 12); ctx.stroke();
+    ctx.fillStyle = '#c9a558'; ctx.fillRect(cx + 6.6, hy + 6.4, 3.4, 1.6);
+  } else if (o.weapon === 'bow') {
+    ctx.strokeStyle = '#7a5a2f'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx + 12, hy - 1, 9, -Math.PI / 2.4, Math.PI / 2.4); ctx.stroke();
+    ctx.strokeStyle = '#e8e2d0'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(cx + 14.8, hy - 9.4); ctx.lineTo(cx + 14.8, hy + 7.4); ctx.stroke();
+  } else if (o.weapon === 'staff') {
+    ctx.strokeStyle = '#4a3a26'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx + 10, hy + 9); ctx.lineTo(cx + 12, hy - 10); ctx.stroke();
+    ctx.save();
+    ctx.shadowColor = gl; ctx.shadowBlur = 8;
+    ctx.fillStyle = gl; ctx.globalAlpha = 0.55 + Math.sin(time * 5) * 0.25;
+    ctx.beginPath(); ctx.arc(cx + 12.4, hy - 12, 2.8, 0, 7); ctx.fill();
+    ctx.restore(); ctx.globalAlpha = 1;
+  } else if (o.weapon === 'twin') {
+    ctx.save();
+    ctx.shadowColor = gl; ctx.shadowBlur = 6;
+    ctx.strokeStyle = gl; ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 9, hy + 5); ctx.lineTo(cx - 16, hy - 9);
+    ctx.moveTo(cx + 9, hy + 5); ctx.lineTo(cx + 16, hy - 9);
+    ctx.stroke(); ctx.restore();
+  } else if (o.weapon === 'glaive') {
+    ctx.strokeStyle = '#5a5148'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx + 9, hy + 10); ctx.lineTo(cx + 14, hy - 12); ctx.stroke();
+    ctx.save();
+    ctx.shadowColor = gl; ctx.shadowBlur = 7;
+    ctx.fillStyle = gl;
+    ctx.beginPath(); ctx.moveTo(cx + 14, hy - 12); ctx.lineTo(cx + 19, hy - 15); ctx.lineTo(cx + 14.6, hy - 8); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
 function drawHumanoid(sx, sy, tunic, trim) {
   const cx = sx + TILE / 2, cy = sy + TILE / 2;
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
@@ -2210,67 +2446,56 @@ function drawMob(m, sx, sy, time) {
       ctx.fillStyle = d.glow;
       ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + 6, hy - 3); ctx.lineTo(hx + 1, hy + 4); ctx.closePath(); ctx.fill();
     } else {
-      // oversized armored figure with spiked pauldrons
-      ctx.fillStyle = d.color;
-      ctx.beginPath(); ctx.ellipse(cx, cy + 3, 10, 12, 0, 0, 7); ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(cx - 10, cy - 4); ctx.lineTo(cx - 15, cy - 12); ctx.lineTo(cx - 6, cy - 8);
-      ctx.moveTo(cx + 10, cy - 4); ctx.lineTo(cx + 15, cy - 12); ctx.lineTo(cx + 6, cy - 8);
-      ctx.fill();
-      ctx.fillStyle = '#1c1a20';
-      ctx.beginPath(); ctx.arc(cx, cy - 11, 7, 0, 7); ctx.fill();
-      ctx.fillStyle = d.glow; // burning eyes + trim
-      ctx.fillRect(cx - 4, cy - 13, 3, 3); ctx.fillRect(cx + 2, cy - 13, 3, 3);
-      ctx.fillRect(cx - 8, cy + 1, 16, 3);
-      // each Guardian wields the max-tier arm of its class
-      if (m.type === 'gilded_sentinel') {
-        // the Sunforged Bow, arrow nocked and burning
-        ctx.strokeStyle = d.glow; ctx.lineWidth = 2.5;
-        ctx.beginPath(); ctx.arc(cx + 13, cy - 3, 10, -Math.PI / 2.6, Math.PI / 2.6); ctx.stroke();
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(cx + 16, cy - 12); ctx.lineTo(cx + 16, cy + 6); ctx.stroke();
-        ctx.strokeStyle = '#fff2a0'; ctx.lineWidth = 2;
-        const dr = Math.sin(time * 3 + m.x) * 2;
-        ctx.beginPath(); ctx.moveTo(cx + 6, cy - 3); ctx.lineTo(cx + 24 + dr, cy - 3); ctx.stroke();
-      } else if (m.type === 'venom_sentinel') {
-        // the Serpent Staff, crowned with a pulsing venom orb
-        ctx.strokeStyle = '#2c3c22'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(cx + 12, cy + 12); ctx.lineTo(cx + 14, cy - 12); ctx.stroke();
-        ctx.fillStyle = d.glow;
-        ctx.globalAlpha = 0.6 + Math.sin(time * 5 + m.x) * 0.3;
-        ctx.beginPath(); ctx.arc(cx + 14, cy - 15, 4, 0, 7); ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = d.glow; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(cx + 14, cy - 15, 6, 0.6, 4.2); ctx.stroke();
-      } else if (m.type === 'flame_sentinel') {
-        // the Flamebrand Katana, sheathed in fire
-        ctx.strokeStyle = d.glow; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(cx + 8, cy + 8); ctx.quadraticCurveTo(cx + 20, cy - 4, cx + 24, cy - 16); ctx.stroke();
-        ctx.strokeStyle = '#ffd66b'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(cx + 9, cy + 6); ctx.quadraticCurveTo(cx + 19, cy - 5, cx + 22, cy - 14); ctx.stroke();
-      } else if (m.type === 'frost_sentinel') {
-        // twin Frostfang blades, one in each fist
-        ctx.strokeStyle = d.glow; ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(cx - 9, cy + 6); ctx.lineTo(cx - 19, cy - 12);
-        ctx.moveTo(cx + 9, cy + 6); ctx.lineTo(cx + 19, cy - 12);
-        ctx.stroke();
-        ctx.strokeStyle = '#e8f8ff'; ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(cx - 9, cy + 6); ctx.lineTo(cx - 18, cy - 10);
-        ctx.moveTo(cx + 9, cy + 6); ctx.lineTo(cx + 18, cy - 10);
-        ctx.stroke();
-      }
+      // an armoured colossus: the knight renderer scaled up, spiked, in its
+      // element's plate, wielding the max-tier arm of its class
+      const looks = {
+        gilded_sentinel: {armor:'#8a6a20', dark:'#4a3a10', trim:'#ffd75e', weapon:'bow'},
+        venom_sentinel:  {armor:'#3a5a2a', dark:'#1f3416', trim:'#7ad44a', weapon:'staff'},
+        flame_sentinel:  {armor:'#7a2020', dark:'#451010', trim:'#ff9e3c', weapon:'katana'},
+        frost_sentinel:  {armor:'#2f4a7a', dark:'#182a4a', trim:'#9adcff', weapon:'twin'},
+      };
+      const lk = Object.assign({eyes: d.glow, glow: d.glow, spikes: true, phase: m.x}, looks[m.type]);
+      lk.cape = shade(lk.armor, -0.45);
+      ctx.save();
+      ctx.translate(cx, sy + TILE - 3); ctx.scale(1.45, 1.45); ctx.translate(-cx, -(sy + TILE - 3));
+      drawKnight(sx, sy, lk, time);
+      ctx.restore();
     }
     ctx.font = 'bold 11px Verdana'; ctx.textAlign = 'center';
     ctx.fillStyle = d.glow;
     label('⭐ ' + d.name, cx, sy - 12);
   } else if (m.type === 'direwolf') {
-    ctx.fillStyle = d.color;
-    ctx.beginPath(); ctx.ellipse(cx, cy + 3, 11, 6, 0, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx + 9, cy - 1, 5, 0, 7); ctx.fill();
-    ctx.fillStyle = '#3a3f45';
-    ctx.beginPath(); ctx.moveTo(cx + 7, cy - 5); ctx.lineTo(cx + 9, cy - 10); ctx.lineTo(cx + 11, cy - 5); ctx.fill();
+    // shaggy direwolf: haunch, ribcage, lowered head, lashing tail, fur streaks
+    const lope = Math.sin(time * 4 + m.x) * 0.8;
+    const g = ctx.createLinearGradient(cx, cy - 8, cx, cy + 9);
+    g.addColorStop(0, shade(d.color, 0.28)); g.addColorStop(1, shade(d.color, -0.3));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(cx - 6, cy + 3, 6, 5, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 1, cy + 2 + lope * 0.4, 8, 4.6, -0.08, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 9.5, cy - 2 + lope, 4.6, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 13.5, cy - 0.5 + lope, 3.2, 2, 0.2, 0, 7); ctx.fill();
+    ctx.fillStyle = shade(d.color, -0.35);
+    ctx.beginPath(); // ears
+    ctx.moveTo(cx + 6.5, cy - 5 + lope); ctx.lineTo(cx + 7.5, cy - 10 + lope); ctx.lineTo(cx + 9.5, cy - 5.5 + lope);
+    ctx.moveTo(cx + 10, cy - 5.5 + lope); ctx.lineTo(cx + 11.5, cy - 9.5 + lope); ctx.lineTo(cx + 12.5, cy - 5 + lope);
+    ctx.fill();
+    ctx.strokeStyle = shade(d.color, -0.35); ctx.lineWidth = 2.4; // tail
+    ctx.beginPath(); ctx.moveTo(cx - 11, cy + 1);
+    ctx.quadraticCurveTo(cx - 16, cy - 3 + Math.sin(time * 3 + m.x) * 2.5, cx - 15, cy - 7);
+    ctx.stroke();
+    ctx.fillStyle = shade(d.color, -0.4); // legs
+    ctx.fillRect(cx - 8.5, cy + 6, 2.2, 5); ctx.fillRect(cx - 3.5, cy + 6.5, 2.2, 5);
+    ctx.fillRect(cx + 2.5, cy + 6, 2.2, 5); ctx.fillRect(cx + 7, cy + 5.5, 2.2, 5);
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 1; // fur streaks
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, cy - 1); ctx.lineTo(cx - 5, cy + 1);
+    ctx.moveTo(cx - 2, cy - 2); ctx.lineTo(cx + 1, cy);
+    ctx.moveTo(cx + 3, cy - 2.5); ctx.lineTo(cx + 6, cy - 0.5);
+    ctx.stroke();
+    ctx.save(); // amber eye
+    ctx.shadowColor = '#ffb84a'; ctx.shadowBlur = 4;
+    ctx.fillStyle = '#ffb84a'; ctx.fillRect(cx + 10.5, cy - 3.4 + lope, 1.6, 1.4);
+    ctx.restore();
   } else if (m.type === 'drake') {
     const flap = Math.sin(time * 5 + m.x) * 5;
     ctx.fillStyle = '#7a221a';
@@ -2282,12 +2507,39 @@ function drawMob(m, sx, sy, time) {
     ctx.beginPath(); ctx.ellipse(cx, cy + 2, 9, 6, 0, 0, 7); ctx.fill();
     ctx.beginPath(); ctx.arc(cx, cy - 6, 4, 0, 7); ctx.fill();
     ctx.fillStyle = '#ffd66b'; ctx.fillRect(cx - 3, cy - 8, 2, 2); ctx.fillRect(cx + 1, cy - 8, 2, 2);
+  } else if (m.type === 'wight') {
+    // frost-wight: ragged shroud, skeletal face, burning blue eyes, cold wisps
+    const g = ctx.createLinearGradient(cx, cy - 14, cx, cy + 12);
+    g.addColorStop(0, '#3a4450'); g.addColorStop(1, '#161a20');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(cx - 7, cy + 12);
+    ctx.lineTo(cx - 8, cy - 2);
+    ctx.quadraticCurveTo(cx - 6, cy - 12, cx, cy - 13);
+    ctx.quadraticCurveTo(cx + 6, cy - 12, cx + 8, cy - 2);
+    ctx.lineTo(cx + 7, cy + 12);
+    // ragged hem
+    ctx.lineTo(cx + 4.5, cy + 8); ctx.lineTo(cx + 2, cy + 12); ctx.lineTo(cx - 0.5, cy + 8);
+    ctx.lineTo(cx - 3, cy + 12); ctx.lineTo(cx - 5, cy + 8.5);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(90,218,240,0.25)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#cfd8de'; // skull
+    ctx.beginPath(); ctx.arc(cx, cy - 7, 4.5, 0, 7); ctx.fill();
+    ctx.save();
+    ctx.shadowColor = '#5adaf0'; ctx.shadowBlur = 6;
+    ctx.fillStyle = '#5adaf0';
+    ctx.fillRect(cx - 3, cy - 8.4, 2, 1.8); ctx.fillRect(cx + 1, cy - 8.4, 2, 1.8);
+    ctx.restore();
+    ctx.strokeStyle = '#8a959e'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(cx - 2.4, cy - 4.2); ctx.lineTo(cx + 2.4, cy - 4.2); ctx.stroke();
+    const wp = time * 2 + m.x;
+    ctx.strokeStyle = 'rgba(90,218,240,' + (0.25 + 0.2 * Math.sin(wp)).toFixed(3) + ')'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - 6, cy + 2);
+    ctx.quadraticCurveTo(cx - 10, cy - 2 + Math.sin(wp) * 2, cx - 8, cy - 8);
+    ctx.stroke();
   } else {
-    drawHumanoid(sx, sy, d.color, m.type === 'wight' ? '#5adaf0' : '#2a2a2a');
-    if (m.type === 'wight') {
-      ctx.fillStyle = '#5adaf0';
-      ctx.fillRect(cx - 4, cy - 9, 2, 2); ctx.fillRect(cx + 2, cy - 9, 2, 2);
-    }
+    drawHumanoid(sx, sy, d.color, '#2a2a2a');
   }
   // hp bar when hurt recently
   if (tickCount - m.hurtAt < 12) {
@@ -2359,15 +2611,11 @@ function drawPlayer(sx, sy, time) {
     ctx.beginPath(); ctx.arc(cx - 1, cy + dy - 14, 4, 0, 7); ctx.fill();
     ctx.fillStyle = '#c9a558'; ctx.fillRect(cx - 5, cy + dy - 17, 8, 2);
   } else {
-    const tier = player.equip.armor ? player.equip.armor.split('_')[0] : null;
-    const tunic = {bronze:'#8a5a2a', iron:'#8a8a92', steel:'#a8b0bc', obsidian:'#3a3a44', valyrian:'#7a4a4a', frostscale:'#3a6ab0'}[tier] || '#4a5a3a';
-    drawHumanoid(sx, sy, tunic, '#c9a558');
-    if (player.equip.weapon) {
-      ctx.strokeStyle = '#d8d8e0'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(cx + 7, cy + 5); ctx.lineTo(cx + 13, cy - 8); ctx.stroke();
-    }
+    const lk = playerLook();
+    lk.phase = 1.7;
+    drawKnight(sx, sy, lk, time);
     ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Verdana'; ctx.textAlign = 'center';
-    label('You', cx, sy - 8);
+    label('You', cx, sy - 10);
   }
 }
 
@@ -2412,7 +2660,7 @@ function openWorldMap() {
 }
 mmCanvas.addEventListener('click', openWorldMap);
 
-function drawMinimap(camX, camY, cw, ch) {
+function drawMinimap(cw, ch) {
   if (!mmBase) return;
   mmCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
   mmCtx.imageSmoothingEnabled = false;
@@ -2440,7 +2688,7 @@ canvas.addEventListener('click', e => {
 canvas.addEventListener('wheel', e => {
   if (!gameStarted) return;
   e.preventDefault();
-  camZoomT = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, camZoomT * Math.exp(-e.deltaY * 0.0012)));
+  camZoomT = Math.max(zoomMin(), Math.min(zoomMax(), camZoomT * Math.exp(-e.deltaY * 0.0012)));
 }, {passive: false});
 canvas.addEventListener('mousemove', e => {
   if (!gameStarted) return;
@@ -2467,11 +2715,14 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModal();
   if (!gameStarted) return;
   if (e.key === 'm' || e.key === 'M') toggleMount();
+  if (e.key === 'v' || e.key === 'V') toggleView();
   if (e.key.startsWith('Arrow')) { keysHeld[e.key] = true; e.preventDefault(); }
 });
 window.addEventListener('keyup', e => { delete keysHeld[e.key]; });
 window.addEventListener('blur', () => { for (const k in keysHeld) delete keysHeld[k]; });
 document.getElementById('mountBtn').onclick = toggleMount;
+document.getElementById('viewBtn').onclick = toggleView;
+document.getElementById('viewBtn').textContent = camMode === 'chase' ? '📷 Chase' : '📷 Overhead';
 document.getElementById('helpBtn').onclick = openHelp;
 window.addEventListener('beforeunload', saveGame);
 
