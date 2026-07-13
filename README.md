@@ -229,7 +229,9 @@ small deployments, not thousands of users.
 
 ## Bonus: EMBERFALL 🐉
 
-This repo also hosts [`game/`](game/README.md) — **Emberfall**, a self-contained
-browser RPG: RuneScape-style skilling (13 skills, levels 1–99) in a Game of
-Thrones-inspired realm, with dragon riding, dragonfire castle raids, and five
-elemental bosses. No build step — open `game/index.html` and play.
+This repo also hosts [`public/game/`](public/game/README.md) — **Emberfall**, a
+self-contained browser RPG: RuneScape-style skilling (13 skills, levels 1–99) in
+a Game of Thrones-inspired realm, with dragon riding, dragonfire castle raids,
+stores, and five elemental bosses. No build step — open `public/game/index.html`
+locally, or play it on the deployed Worker at **`/game/`** (it ships as
+Workers static assets).

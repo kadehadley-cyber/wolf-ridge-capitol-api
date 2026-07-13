@@ -5,11 +5,12 @@ ticks, 13 skills with the real exponential 1–99 XP curve — set in a Game of
 Thrones-inspired realm, with **Dragonriding** as a first-class skill.
 
 **No build, no server, no dependencies.** Open `index.html` in any browser and
-play. Progress autosaves to `localStorage`.
+play. Progress autosaves to `localStorage`. On the deployed Worker it's served
+as static assets at **`/game/`**.
 
 ```bash
 # from the repo root — any static server works, or just double-click index.html
-cd game && python3 -m http.server 8080
+cd public/game && python3 -m http.server 8080
 # → http://localhost:8080
 ```
 
