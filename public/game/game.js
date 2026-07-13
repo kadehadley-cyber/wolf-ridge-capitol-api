@@ -1,6 +1,6 @@
 'use strict';
 /* =====================================================================
-   EMBERFALL — A Game of Wolves & Dragons
+   KANDARIN — Realm of Kings
    A RuneScape-inspired skilling/combat RPG with Dragonriding.
    Single-player client; world state is deterministic from a fixed seed.
    ===================================================================== */
@@ -9,7 +9,8 @@
 const TILE = 32, W = 144, H = 144, TICK_MS = 600;
 const T = {GRASS:0, WATER:1, SNOW:2, SAND:3, STONE:4, WALL:5, LAVA:6, VOLC:7, FLOOR:8, MTN:9};
 const BLOCKED = new Set([T.WATER, T.WALL, T.LAVA, T.MTN]);
-const SAVE_KEY = 'emberfall_save_v1';
+const SAVE_KEY = 'kandarin_save_v1';
+const LEGACY_SAVE_KEY = 'emberfall_save_v1'; // saves from before the rename still load
 
 /* RuneScape XP curve: XP_TABLE[n] = xp required for level n (1..99) */
 const XP_TABLE = (() => {
@@ -1124,7 +1125,7 @@ document.getElementById('modalClose').onclick = closeModal;
 modalWrap.addEventListener('click', e => { if (e.target === modalWrap) closeModal(); });
 
 function openHelp() {
-  openModal('❓ How to play Emberfall', `
+  openModal('❓ How to play Kandarin', `
     <img src="assets/dragon-rider-valley.webp" alt="A dragonrider over the realm">
     <p><b>Click</b> anywhere to walk. Click trees, rocks and fishing spots to gather; monsters to fight;
     people to talk. Everything grants XP — levels 1 to 99 per skill, with the classic exponential curve.</p>
@@ -1367,7 +1368,7 @@ function saveGame() {
 }
 function loadGame() {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(SAVE_KEY) || localStorage.getItem(LEGACY_SAVE_KEY);
     if (!raw) return false;
     const d = JSON.parse(raw);
     Object.assign(player.skills, d.skills);
@@ -1581,10 +1582,24 @@ const mmCanvas = document.getElementById('minimap');
 const mmCtx = mmCanvas.getContext('2d');
 let mmBase = null;
 
+let viewW = 0, viewH = 0, DPR = 1, vignette = null;
 function resize() {
   const vp = document.getElementById('viewport');
-  canvas.width = vp.clientWidth;
-  canvas.height = vp.clientHeight;
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  viewW = vp.clientWidth; viewH = vp.clientHeight;
+  canvas.width = Math.max(1, Math.round(viewW * DPR));
+  canvas.height = Math.max(1, Math.round(viewH * DPR));
+  mmCanvas.width = Math.round(150 * DPR); mmCanvas.height = Math.round(150 * DPR);
+  // soft vignette, rebuilt at half resolution per size
+  vignette = document.createElement('canvas');
+  vignette.width = Math.max(2, Math.round(viewW / 2));
+  vignette.height = Math.max(2, Math.round(viewH / 2));
+  const vc = vignette.getContext('2d');
+  const g = vc.createRadialGradient(
+    vignette.width / 2, vignette.height / 2, Math.min(vignette.width, vignette.height) * 0.45,
+    vignette.width / 2, vignette.height / 2, Math.max(vignette.width, vignette.height) * 0.75);
+  g.addColorStop(0, 'rgba(8,6,10,0)'); g.addColorStop(1, 'rgba(8,6,10,0.42)');
+  vc.fillStyle = g; vc.fillRect(0, 0, vignette.width, vignette.height);
 }
 window.addEventListener('resize', resize);
 
@@ -1594,6 +1609,192 @@ const TILE_COLORS = {
   [T.FLOOR]:'#a5977f', [T.MTN]:'#6b6f77',
 };
 function hash2(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967296; }
+function shade(color, f) {
+  if (color[0] !== '#') return color;
+  const n = parseInt(color.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const adj = v => Math.max(0, Math.min(255, Math.round(v + (f > 0 ? (255 - v) : v) * f)));
+  return 'rgb(' + adj(r) + ',' + adj(g) + ',' + adj(b) + ')';
+}
+
+/* --- pre-rendered terrain: the whole map is painted once, in detail,
+       into chunk canvases; per-frame drawing is a handful of blits --- */
+const CHUNK = 36, CHUNK_PX = CHUNK * TILE;
+let terrainChunks = null;
+
+function paintTile(c, x, y, ox, oy) {
+  const t = map[idx(x, y)];
+  const h = hash2(x, y), h2 = hash2(x * 3 + 1, y * 7 + 2), h3 = hash2(x * 5 + 3, y * 11 + 5);
+  c.fillStyle = shade(TILE_COLORS[t], (h - 0.5) * 0.14);
+  c.fillRect(ox, oy, TILE, TILE);
+  switch (t) {
+    case T.GRASS: {
+      for (let i = 0; i < 3; i++) { // mottled undergrowth
+        const px = ox + hash2(x * 13 + i, y * 17) * TILE, py = oy + hash2(x * 19, y * 23 + i) * TILE;
+        c.fillStyle = 'rgba(20,40,16,' + (0.10 + 0.10 * hash2(x + i, y - i)).toFixed(3) + ')';
+        c.beginPath(); c.ellipse(px, py, 5 + 4 * h2, 3 + 3 * h3, h * 3, 0, 7); c.fill();
+      }
+      c.strokeStyle = 'rgba(150,200,110,0.45)'; c.lineWidth = 1;
+      for (let i = 0; i < 4; i++) { // grass blades
+        const bx = ox + 3 + hash2(x * 29 + i, y * 31) * (TILE - 6), by = oy + 5 + hash2(x * 37, y * 41 + i) * (TILE - 9);
+        c.beginPath(); c.moveTo(bx, by + 3); c.quadraticCurveTo(bx + 1, by, bx + 2 - 4 * hash2(x + i, y + i), by - 3); c.stroke();
+      }
+      if (h > 0.96) { // rare wildflowers
+        c.fillStyle = h2 > 0.5 ? '#e8d868' : '#d8788a';
+        c.fillRect(ox + h2 * 24 + 3, oy + h3 * 24 + 3, 2, 2);
+      }
+      break;
+    }
+    case T.SNOW: {
+      c.fillStyle = 'rgba(150,175,210,0.22)'; // wind-carved drifts
+      c.beginPath(); c.ellipse(ox + h2 * TILE, oy + h3 * TILE, 8, 5, h * 3, 0, 7); c.fill();
+      c.fillStyle = 'rgba(255,255,255,0.85)';
+      for (let i = 0; i < 3; i++) c.fillRect(ox + hash2(x * 7 + i, y * 13) * 29 + 1, oy + hash2(x * 17, y * 19 + i) * 29 + 1, 1.5, 1.5);
+      break;
+    }
+    case T.SAND: {
+      c.strokeStyle = 'rgba(120,95,45,0.28)'; c.lineWidth = 1;
+      for (let i = 0; i < 3; i++) { // wind ripples
+        const ry = oy + 5 + i * 10 + h2 * 4;
+        c.beginPath(); c.moveTo(ox + 2, ry); c.quadraticCurveTo(ox + TILE / 2, ry + (h - 0.5) * 7, ox + TILE - 2, ry); c.stroke();
+      }
+      c.fillStyle = 'rgba(255,240,190,0.4)';
+      c.fillRect(ox + h2 * 28 + 1, oy + h3 * 28 + 1, 2, 2);
+      break;
+    }
+    case T.WATER: {
+      if (h2 > 0.55) { // occasional deep-water shadow
+        c.fillStyle = 'rgba(6,22,44,0.14)';
+        c.beginPath(); c.ellipse(ox + h2 * TILE, oy + h3 * TILE, 6 + 5 * h, 4 + 3 * h2, h * 3, 0, 7); c.fill();
+      }
+      if (h3 > 0.7) { // pale caustic wisp
+        c.strokeStyle = 'rgba(150,200,230,0.14)'; c.lineWidth = 1.5;
+        c.beginPath(); c.moveTo(ox + 3, oy + h * 26 + 3);
+        c.quadraticCurveTo(ox + TILE / 2, oy + h * 26 - 4, ox + TILE - 3, oy + h * 26 + 3); c.stroke();
+      }
+      break;
+    }
+    case T.STONE: case T.FLOOR: {
+      c.strokeStyle = t === T.FLOOR ? 'rgba(70,58,42,0.5)' : 'rgba(50,48,44,0.5)';
+      c.lineWidth = 1.5;
+      const off = (x + y) % 2 ? TILE / 4 : -TILE / 4; // staggered flagstones
+      c.beginPath();
+      c.moveTo(ox, oy + TILE / 2); c.lineTo(ox + TILE, oy + TILE / 2);
+      c.moveTo(ox + TILE / 2 + off, oy); c.lineTo(ox + TILE / 2 + off, oy + TILE / 2);
+      c.moveTo(ox + TILE / 2 - off, oy + TILE / 2); c.lineTo(ox + TILE / 2 - off, oy + TILE);
+      c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.05)'; c.fillRect(ox, oy, TILE, 2);
+      if (h > 0.85) { c.strokeStyle = 'rgba(40,38,34,0.4)'; c.beginPath(); c.moveTo(ox + h2 * 20 + 4, oy + 6); c.lineTo(ox + h3 * 20 + 8, oy + TILE - 8); c.stroke(); }
+      break;
+    }
+    case T.WALL: {
+      c.fillStyle = shade('#5b5d68', (h - 0.5) * 0.18);
+      c.fillRect(ox, oy, TILE, TILE);
+      c.strokeStyle = 'rgba(26,26,32,0.75)'; c.lineWidth = 1; // brick courses
+      for (let r = 0; r < 4; r++) {
+        const by = oy + r * 8;
+        c.beginPath(); c.moveTo(ox, by + 8); c.lineTo(ox + TILE, by + 8); c.stroke();
+        for (let bx = (r % 2) * 8; bx < TILE; bx += 16) { c.beginPath(); c.moveTo(ox + bx, by); c.lineTo(ox + bx, by + 8); c.stroke(); }
+      }
+      c.fillStyle = 'rgba(255,255,255,0.15)'; c.fillRect(ox, oy, TILE, 4);
+      c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(ox, oy + TILE - 4, TILE, 4);
+      break;
+    }
+    case T.MTN: {
+      const ax = ox + TILE * (0.35 + h * 0.3), ay = oy + 3 + h2 * 4; // each peak its own summit
+      c.fillStyle = shade('#6b6f77', -0.22);
+      c.beginPath(); c.moveTo(ox + 1 + h3 * 3, oy + TILE - 2); c.lineTo(ax, ay); c.lineTo(ox + TILE - 1 - h2 * 3, oy + TILE - 2); c.closePath(); c.fill();
+      c.fillStyle = 'rgba(235,240,248,' + (0.3 + h3 * 0.35).toFixed(3) + ')'; // snow cap
+      c.beginPath(); c.moveTo(ax, ay); c.lineTo(ax + 5, ay + 7 + h * 3); c.lineTo(ax - 5, ay + 8); c.closePath(); c.fill();
+      c.fillStyle = 'rgba(0,0,0,0.22)'; // shaded east face
+      c.beginPath(); c.moveTo(ax, ay); c.lineTo(ox + TILE - 1 - h2 * 3, oy + TILE - 2); c.lineTo(ax + 3, oy + TILE - 2); c.closePath(); c.fill();
+      break;
+    }
+    case T.VOLC: {
+      c.strokeStyle = 'rgba(255,96,40,' + (0.2 + 0.3 * h2).toFixed(3) + ')'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(ox + h2 * 20, oy + TILE); c.lineTo(ox + 6 + h * 16, oy + h3 * 16 + 8); c.lineTo(ox + h3 * 24 + 4, oy + 2); c.stroke();
+      c.fillStyle = 'rgba(0,0,0,0.25)';
+      c.beginPath(); c.ellipse(ox + h * TILE, oy + h2 * TILE, 6, 4, 0, 0, 7); c.fill();
+      break;
+    }
+    case T.LAVA: {
+      c.fillStyle = 'rgba(40,10,4,0.55)'; // cooling crust islands
+      c.beginPath(); c.ellipse(ox + h2 * TILE, oy + h3 * TILE, 7 + 5 * h, 5 + 3 * h2, h * 3, 0, 7); c.fill();
+      c.fillStyle = 'rgba(255,220,90,0.5)';
+      c.fillRect(ox + h * 24 + 2, oy + h2 * 24 + 2, 3, 2);
+      break;
+    }
+  }
+}
+
+const SOFT = new Set([T.GRASS, T.SNOW, T.SAND, T.VOLC, T.STONE, T.FLOOR]);
+function paintTransitions(c, x, y, ox, oy) {
+  const t = map[idx(x, y)];
+  const nb = [[0, -1, 't'], [0, 1, 'b'], [-1, 0, 'l'], [1, 0, 'r']];
+  const edgeRect = side =>
+    side === 't' ? [ox, oy, TILE, 9] : side === 'b' ? [ox, oy + TILE - 9, TILE, 9] :
+    side === 'l' ? [ox, oy, 9, TILE] : [ox + TILE - 9, oy, 9, TILE];
+  if (t === T.WATER) {
+    for (const [dx, dy, side] of nb) {
+      const n = tileAt(x + dx, y + dy);
+      if (n === T.WATER || n === T.LAVA) continue;
+      // sunlit shallows shelving off the shore, edged with foam
+      const [rx, ry, rw, rh] = edgeRect(side);
+      const g = side === 't' || side === 'b'
+        ? c.createLinearGradient(0, side === 't' ? ry : ry + rh, 0, side === 't' ? ry + rh : ry)
+        : c.createLinearGradient(side === 'l' ? rx : rx + rw, 0, side === 'l' ? rx + rw : rx, 0);
+      g.addColorStop(0, 'rgba(96,160,170,0.5)'); g.addColorStop(1, 'rgba(96,160,170,0)');
+      c.fillStyle = g; c.fillRect(rx, ry, rw, rh);
+      c.strokeStyle = 'rgba(230,246,255,0.55)'; c.lineWidth = 1.5;
+      c.beginPath();
+      for (let i = 0; i <= 4; i++) {
+        const f = i / 4, wob = (hash2(x * 7 + i, y * 9 + i) - 0.5) * 3;
+        const px = side === 'l' ? ox + 1.5 + wob : side === 'r' ? ox + TILE - 1.5 + wob : ox + f * TILE;
+        const py = side === 't' ? oy + 1.5 + wob : side === 'b' ? oy + TILE - 1.5 + wob : oy + f * TILE;
+        i ? c.lineTo(px, py) : c.moveTo(px, py);
+      }
+      c.stroke();
+    }
+  } else if (SOFT.has(t)) {
+    for (const [dx, dy, side] of nb) {
+      const n = tileAt(x + dx, y + dy);
+      if (n === t || !SOFT.has(n)) continue;
+      // feather the neighbouring biome a little way into this tile
+      c.fillStyle = TILE_COLORS[n];
+      c.globalAlpha = 0.22;
+      for (let i = 0; i < 5; i++) {
+        const f = (i + 0.5) / 5, r = 3 + hash2(x * 11 + i, y * 13 + side.charCodeAt(0)) * 4;
+        const px = side === 'l' ? ox : side === 'r' ? ox + TILE : ox + f * TILE;
+        const py = side === 't' ? oy : side === 'b' ? oy + TILE : oy + f * TILE;
+        c.beginPath(); c.arc(px, py, r, 0, 7); c.fill();
+      }
+      c.globalAlpha = 1;
+    }
+  }
+  // contact shadow cast by walls and peaks onto the tile below them
+  const up = tileAt(x, y - 1);
+  if ((up === T.WALL || up === T.MTN) && t !== T.WALL && t !== T.MTN) {
+    const g = c.createLinearGradient(0, oy, 0, oy + 10);
+    g.addColorStop(0, 'rgba(0,0,0,0.32)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g; c.fillRect(ox, oy, TILE, 10);
+  }
+}
+
+function buildTerrain() {
+  terrainChunks = [];
+  const nx = Math.ceil(W / CHUNK), ny = Math.ceil(H / CHUNK);
+  for (let cy = 0; cy < ny; cy++) for (let cx = 0; cx < nx; cx++) {
+    const cv = document.createElement('canvas');
+    cv.width = CHUNK_PX; cv.height = CHUNK_PX;
+    const c = cv.getContext('2d');
+    const xEnd = Math.min(W, (cx + 1) * CHUNK), yEnd = Math.min(H, (cy + 1) * CHUNK);
+    for (let y = cy * CHUNK; y < yEnd; y++) for (let x = cx * CHUNK; x < xEnd; x++)
+      paintTile(c, x, y, (x - cx * CHUNK) * TILE, (y - cy * CHUNK) * TILE);
+    for (let y = cy * CHUNK; y < yEnd; y++) for (let x = cx * CHUNK; x < xEnd; x++)
+      paintTransitions(c, x, y, (x - cx * CHUNK) * TILE, (y - cy * CHUNK) * TILE);
+    terrainChunks.push({cv, px: cx * CHUNK_PX, py: cy * CHUNK_PX});
+  }
+}
 
 function buildMinimap() {
   mmBase = document.createElement('canvas');
@@ -1633,7 +1834,8 @@ function frame(now) {
 }
 
 function draw(time, dt) {
-  const cw = canvas.width, ch = canvas.height;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const cw = viewW, ch = viewH;
   const camX = player.px * TILE + TILE / 2 - cw / 2;
   const camY = player.py * TILE + TILE / 2 - ch / 2;
   ctx.fillStyle = '#0a1522';
@@ -1642,40 +1844,30 @@ function draw(time, dt) {
   const x0 = Math.max(0, Math.floor(camX / TILE) - 1), x1 = Math.min(W - 1, Math.ceil((camX + cw) / TILE) + 1);
   const y0 = Math.max(0, Math.floor(camY / TILE) - 1), y1 = Math.min(H - 1, Math.ceil((camY + ch) / TILE) + 1);
 
-  // terrain
+  // terrain: pre-rendered chunks, then animated water/lava on top
+  if (terrainChunks) for (const chk of terrainChunks) {
+    if (chk.px > camX + cw || chk.px + CHUNK_PX < camX || chk.py > camY + ch || chk.py + CHUNK_PX < camY) continue;
+    ctx.drawImage(chk.cv, chk.px - camX, chk.py - camY);
+  }
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const t = map[idx(x, y)];
+    if (t !== T.WATER && t !== T.LAVA) continue;
     const sx = x * TILE - camX, sy = y * TILE - camY;
-    const h = hash2(x, y);
-    let col = TILE_COLORS[t];
-    ctx.fillStyle = col;
-    ctx.fillRect(sx, sy, TILE, TILE);
-    // texture
-    if (t === T.GRASS || t === T.SNOW || t === T.VOLC || t === T.SAND) {
-      ctx.fillStyle = 'rgba(0,0,0,' + (0.04 + h * 0.07) + ')';
-      if (h > 0.5) ctx.fillRect(sx + h * 20, sy + ((h * 977) % 1) * 20, 6, 6);
-    }
     if (t === T.WATER) {
       const wv = Math.sin(time * 1.5 + x * 0.9 + y * 1.3) * 0.5 + 0.5;
       ctx.fillStyle = 'rgba(120,180,220,' + (0.05 + wv * 0.08) + ')';
       ctx.fillRect(sx, sy + (wv * 20) % TILE, TILE, 3);
-    }
-    if (t === T.LAVA) {
+      if (hash2(x * 3, y * 5) > 0.88) { // drifting sun-glints
+        const sp = Math.sin(time * 2.5 + x * 7 + y * 3);
+        if (sp > 0.72) {
+          ctx.fillStyle = 'rgba(235,250,255,' + ((sp - 0.72) * 2.2).toFixed(3) + ')';
+          ctx.fillRect(sx + hash2(x, y * 2) * 26 + 2, sy + hash2(x * 2, y) * 26 + 2, 2, 2);
+        }
+      }
+    } else {
       const gl = Math.sin(time * 2 + x + y) * 0.5 + 0.5;
       ctx.fillStyle = 'rgba(255,200,80,' + (0.15 + gl * 0.25) + ')';
       ctx.fillRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
-    }
-    if (t === T.WALL) {
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.fillRect(sx, sy, TILE, 5);
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.fillRect(sx, sy + TILE - 5, TILE, 5);
-    }
-    if (t === T.MTN) {
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.beginPath();
-      ctx.moveTo(sx + 6, sy + TILE - 6); ctx.lineTo(sx + TILE / 2, sy + 6); ctx.lineTo(sx + TILE - 6, sy + TILE - 6);
-      ctx.closePath(); ctx.fill();
     }
   }
 
@@ -1736,6 +1928,14 @@ function draw(time, dt) {
     ctx.globalAlpha = 1;
   }
 
+  // warm light pooled around the hero, cool shadow at the edges of sight
+  const lg = ctx.createRadialGradient(cw / 2, ch / 2, 40, cw / 2, ch / 2, Math.max(cw, ch) * 0.55);
+  lg.addColorStop(0, 'rgba(255,214,140,0.09)');
+  lg.addColorStop(0.55, 'rgba(255,190,110,0.025)');
+  lg.addColorStop(1, 'rgba(255,180,100,0)');
+  ctx.fillStyle = lg; ctx.fillRect(0, 0, cw, ch);
+  if (vignette) ctx.drawImage(vignette, 0, 0, cw, ch);
+
   drawMinimap(camX, camY, cw, ch);
 }
 
@@ -1748,31 +1948,55 @@ function drawNode(n, sx, sy, time) {
   }
   switch (n.kind) {
     case 'pine': case 'ironwood': case 'weirwood': {
+      const sway = Math.sin(time * 1.1 + n.x * 1.7) * 1.5;
       const trunk = n.kind === 'weirwood' ? '#e8e4dc' : '#5b4228';
       const leaf = n.kind === 'pine' ? '#2c5d2a' : n.kind === 'ironwood' ? '#37474a' : '#b0342c';
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.beginPath(); ctx.ellipse(cx, sy + TILE - 4, 11, 4, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.beginPath(); ctx.ellipse(cx + 3, sy + TILE - 4, 12, 4, 0, 0, 7); ctx.fill();
       ctx.fillStyle = trunk; ctx.fillRect(cx - 3, cy, 6, TILE / 2 - 4);
-      ctx.fillStyle = leaf;
-      ctx.beginPath();
-      ctx.moveTo(cx - 12, cy + 6); ctx.lineTo(cx, sy - 10); ctx.lineTo(cx + 12, cy + 6);
-      ctx.closePath(); ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(cx - 9, cy - 4); ctx.lineTo(cx, sy - 16); ctx.lineTo(cx + 9, cy - 4);
-      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(cx + 1, cy, 2, TILE / 2 - 4); // bark shade
+      // layered canopy — shadowed skirt, body, sunlit crown — swaying gently
+      const layer = (ry, w2, hgt, col) => {
+        ctx.fillStyle = col; ctx.beginPath();
+        ctx.moveTo(cx - w2, cy + ry);
+        ctx.lineTo(cx + sway * (1 - ry / 8), cy + ry - hgt);
+        ctx.lineTo(cx + w2, cy + ry);
+        ctx.closePath(); ctx.fill();
+      };
+      layer(6, 13, 18, shade(leaf, -0.28));
+      layer(0, 11, 17, leaf);
+      layer(-6, 8, 14, shade(leaf, 0.2));
+      if (n.kind === 'weirwood') { // the carved face weeps sap
+        ctx.fillStyle = '#7a1f1a';
+        ctx.fillRect(cx - 2.5, cy + 3, 1.5, 4); ctx.fillRect(cx + 1, cy + 3, 1.5, 4);
+      }
       break;
     }
     case 'copper': case 'iron': case 'glassrock': case 'valrock': {
       const spek = {copper:'#c47f33', iron:'#cfcbc0', glassrock:'#141418', valrock:'#5adad4'}[n.kind];
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.beginPath(); ctx.ellipse(cx, sy + TILE - 5, 11, 4, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = '#7a7568';
+      // faceted boulder: outline, sunlit west face, shaded east face
+      ctx.fillStyle = '#6e6a5e';
       ctx.beginPath();
       ctx.moveTo(sx + 4, sy + TILE - 6); ctx.lineTo(sx + 8, sy + 10); ctx.lineTo(cx, sy + 6);
       ctx.lineTo(sx + TILE - 7, sy + 12); ctx.lineTo(sx + TILE - 4, sy + TILE - 6);
       ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(20,18,14,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.beginPath();
+      ctx.moveTo(sx + 8, sy + 10); ctx.lineTo(cx, sy + 6); ctx.lineTo(cx - 1, sy + TILE - 7); ctx.lineTo(sx + 7, sy + TILE - 7);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath();
+      ctx.moveTo(cx, sy + 6); ctx.lineTo(sx + TILE - 7, sy + 12); ctx.lineTo(sx + TILE - 5, sy + TILE - 7); ctx.lineTo(cx + 1, sy + TILE - 7);
+      ctx.closePath(); ctx.fill();
+      // ore veins, glinting as the light catches them
       ctx.fillStyle = spek;
       ctx.fillRect(cx - 6, cy - 2, 4, 4); ctx.fillRect(cx + 2, cy + 3, 4, 4); ctx.fillRect(cx - 1, cy - 7, 3, 3);
+      if (Math.sin(time * 3 + n.x * 2) > 0.6) {
+        ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(cx - 5, cy - 1, 1.5, 1.5);
+      }
       break;
     }
     case 'fish_trout': case 'fish_salmon': case 'fish_black': {
@@ -1892,12 +2116,20 @@ function drawNode(n, sx, sy, time) {
 
 function drawHumanoid(sx, sy, tunic, trim) {
   const cx = sx + TILE / 2, cy = sy + TILE / 2;
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath(); ctx.ellipse(cx, sy + TILE - 4, 8, 3, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = tunic;
+  // cloaked body, lit from the west, inked outline
+  const g = ctx.createLinearGradient(cx - 7, cy - 5, cx + 7, cy + 13);
+  g.addColorStop(0, shade(tunic, 0.22)); g.addColorStop(1, shade(tunic, -0.3));
+  ctx.fillStyle = g;
   ctx.beginPath(); ctx.ellipse(cx, cy + 4, 7, 9, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(12,10,8,0.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+  // head, hair, outline
   ctx.fillStyle = '#d8b28f';
   ctx.beginPath(); ctx.arc(cx, cy - 7, 6, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(12,10,8,0.6)'; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.fillStyle = '#4a3524';
+  ctx.beginPath(); ctx.arc(cx, cy - 8.5, 6, Math.PI * 1.05, Math.PI * 1.95); ctx.fill();
   ctx.fillStyle = trim;
   ctx.fillRect(cx - 7, cy + 1, 14, 3);
 }
@@ -2104,6 +2336,7 @@ function drawPlayer(sx, sy, time) {
 
 function drawMinimap(camX, camY, cw, ch) {
   if (!mmBase) return;
+  mmCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
   mmCtx.imageSmoothingEnabled = false;
   mmCtx.drawImage(mmBase, 0, 0, W, H, 0, 0, 150, 150);
   const s = 150 / W;
@@ -2122,8 +2355,8 @@ function drawMinimap(camX, camY, cw, ch) {
 const hoverTip = document.getElementById('hoverTip');
 canvas.addEventListener('click', e => {
   const r = canvas.getBoundingClientRect();
-  const camX = player.px * TILE + TILE / 2 - canvas.width / 2;
-  const camY = player.py * TILE + TILE / 2 - canvas.height / 2;
+  const camX = player.px * TILE + TILE / 2 - viewW / 2;
+  const camY = player.py * TILE + TILE / 2 - viewH / 2;
   const tx = Math.floor((e.clientX - r.left + camX) / TILE);
   const ty = Math.floor((e.clientY - r.top + camY) / TILE);
   if (inB(tx, ty)) clickWorld(tx, ty);
@@ -2131,8 +2364,8 @@ canvas.addEventListener('click', e => {
 canvas.addEventListener('mousemove', e => {
   if (!gameStarted) return;
   const r = canvas.getBoundingClientRect();
-  const camX = player.px * TILE + TILE / 2 - canvas.width / 2;
-  const camY = player.py * TILE + TILE / 2 - canvas.height / 2;
+  const camX = player.px * TILE + TILE / 2 - viewW / 2;
+  const camY = player.py * TILE + TILE / 2 - viewH / 2;
   const tx = Math.floor((e.clientX - r.left + camX) / TILE);
   const ty = Math.floor((e.clientY - r.top + camY) / TILE);
   let tip = '';
@@ -2181,25 +2414,27 @@ function startGame(fresh) {
   player.hp = Math.min(player.hp, maxHp());
   renderTab(); renderHud(); updateMountBtn(); updateCoinHud();
   if (fresh) {
-    log('<span class="lvl">⚔ Welcome to EMBERFALL. You wake outside the gates of Wolf Ridge with a rusty sword and three fish.</span>');
+    log('<span class="lvl">⚔ Welcome to KANDARIN. You wake outside the gates of Wolf Ridge with a rusty sword and three fish.</span>');
     log('<span class="sys">Click to move. Lady Maera awaits inside the town — she has work for you. Press ❓ Help any time.</span>');
   } else {
-    log('<span class="lvl">⚔ Welcome back to EMBERFALL. The realm remembers you.</span>');
+    log('<span class="lvl">⚔ Welcome back to KANDARIN. The realm remembers you.</span>');
   }
   log('<span class="chat"><b>Snowbastard92:</b> welcome to world 3 :)</span>');
 }
 
 genWorld();
 initSkills();
+buildTerrain();
 buildMinimap();
 resize();
 
-const hasSave = !!localStorage.getItem(SAVE_KEY);
+const hasSave = !!(localStorage.getItem(SAVE_KEY) || localStorage.getItem(LEGACY_SAVE_KEY));
 if (hasSave) document.getElementById('btnContinue').style.display = '';
 document.getElementById('btnContinue').onclick = () => { if (loadGame()) startGame(false); else newGame(); };
 document.getElementById('btnNew').onclick = () => {
   if (hasSave && !confirm('Start a fresh saga? Your saved progress will be overwritten.')) return;
   localStorage.removeItem(SAVE_KEY);
+  localStorage.removeItem(LEGACY_SAVE_KEY);
   newGame();
 };
 

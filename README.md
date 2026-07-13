@@ -227,9 +227,9 @@ small deployments, not thousands of users.
   `WHATSAPP_APP_SECRET` configured, inbound messages are rejected rather than
   trusted, since an accepted message now writes durable state.
 
-## Bonus: EMBERFALL 🐉
+## Bonus: KANDARIN — Realm of Kings 👑
 
-This repo also hosts [`public/game/`](public/game/README.md) — **Emberfall**, a
+This repo also hosts [`public/game/`](public/game/README.md) — **Kandarin: Realm of Kings**, a
 self-contained browser RPG: RuneScape-style skilling (13 skills, levels 1–99) in
 a Game of Thrones-inspired realm, with dragon riding, dragonfire castle raids,
 stores, and five elemental bosses. No build step — open `public/game/index.html`

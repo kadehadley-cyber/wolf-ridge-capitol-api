@@ -1,4 +1,4 @@
-# EMBERFALL — A Game of Wolves & Dragons 🐉
+# KANDARIN: Realm of Kings 👑
 
 A browser RPG that plays like classic RuneScape — point-and-click, 600 ms game
 ticks, 13 skills with the real exponential 1–99 XP curve — set in a Game of
