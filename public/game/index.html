@@ -41,7 +41,8 @@
   .xpdrop{color:#f4e3a1; text-shadow:0 1px 2px #000; animation:xprise 2.2s forwards;}
   @keyframes xprise{0%{opacity:0; transform:translateY(8px);}15%{opacity:1;}75%{opacity:1;}100%{opacity:0; transform:translateY(-22px);}}
   #minimap{position:absolute; top:10px; right:10px; width:150px; height:150px;
-    border:2px solid var(--border); border-radius:4px; background:#000;}
+    border:2px solid var(--border); border-radius:4px; background:#000; cursor:pointer;}
+  #minimap:hover{border-color:var(--gold);}
 
   /* Sidebar */
   #sidebar{grid-row:1 / span 2; grid-column:2; background:var(--panel); border-left:2px solid var(--border);
@@ -159,7 +160,7 @@
     </div>
     <div id="hoverTip"></div>
     <div id="xpDrops"></div>
-    <canvas id="minimap" width="150" height="150"></canvas>
+    <canvas id="minimap" width="150" height="150" title="Click to open the world map"></canvas>
   </div>
 
   <div id="sidebar">

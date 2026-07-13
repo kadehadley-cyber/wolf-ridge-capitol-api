@@ -1152,7 +1152,9 @@ function openHelp() {
     Flamebrand Katana and the Frost Sentinel's Frostscale Armor. And sailors whisper of a fifth: <b>The Chained Wraith</b>
     (lvl 90), bound to the Drowned Bastion islet in the southern sea, where only a dragon can carry you.
     It guards the black-and-viridian <b>Wraith aspect</b> and a Runed Chain-Glaive, the finest weapon in the realm.</p>
-    <p style="margin-top:8px"><b>Keys:</b> M mount/dismount · Esc close windows.</p>`);
+    <p style="margin-top:8px"><b>Keys:</b> M mount/dismount · Esc close windows · ← → swing the camera around you ·
+    ↑ ↓ or scroll wheel zoom in and out.</p>
+    <p style="margin-top:8px"><b>Map 🗺️:</b> click the minimap to unroll a chart of the whole realm.</p>`);
 }
 
 function openSkillGuide(id) {
@@ -1582,6 +1584,18 @@ const mmCanvas = document.getElementById('minimap');
 const mmCtx = mmCanvas.getContext('2d');
 let mmBase = null;
 
+/* camera: arrows swing the view around the hero, wheel / ↑↓ zoom — all eased */
+let camAngle = 0, camAngleT = 0, camZoom = 1, camZoomT = 1;
+const ZOOM_MIN = 0.45, ZOOM_MAX = 2.4;
+const keysHeld = {};
+function screenToTile(sx, sy) { // invert the camera transform: screen px → tile
+  const dx = (sx - viewW / 2) / camZoom, dy = (sy - viewH / 2) / camZoom;
+  const cos = Math.cos(camAngle), sin = Math.sin(camAngle);
+  const wx = dx * cos + dy * sin + player.px * TILE + TILE / 2;
+  const wy = -dx * sin + dy * cos + player.py * TILE + TILE / 2;
+  return [Math.floor(wx / TILE), Math.floor(wy / TILE)];
+}
+
 let viewW = 0, viewH = 0, DPR = 1, vignette = null;
 function resize() {
   const vp = document.getElementById('viewport');
@@ -1828,6 +1842,14 @@ function frame(now) {
     player.py += (player.y - player.py) * lerp;
     for (const m of mobs) { m.px += (m.x - m.px) * lerp; m.py += (m.y - m.py) * lerp; }
     for (const f of fakePlayers) { f.px += (f.x - f.px) * lerp; f.py += (f.y - f.py) * lerp; }
+    // camera input: ←→ orbit the hero, ↑↓ zoom (wheel does too)
+    if (keysHeld.ArrowLeft) camAngleT -= dt * 2.2;
+    if (keysHeld.ArrowRight) camAngleT += dt * 2.2;
+    if (keysHeld.ArrowUp) camZoomT = Math.min(ZOOM_MAX, camZoomT * (1 + dt * 1.5));
+    if (keysHeld.ArrowDown) camZoomT = Math.max(ZOOM_MIN, camZoomT * (1 - dt * 1.5));
+    const ceases = Math.min(1, dt * 10);
+    camAngle += (camAngleT - camAngle) * ceases;
+    camZoom += (camZoomT - camZoom) * ceases;
     draw(now / 1000, dt);
   }
   requestAnimationFrame(frame);
@@ -1841,12 +1863,21 @@ function draw(time, dt) {
   ctx.fillStyle = '#0a1522';
   ctx.fillRect(0, 0, cw, ch);
 
-  const x0 = Math.max(0, Math.floor(camX / TILE) - 1), x1 = Math.min(W - 1, Math.ceil((camX + cw) / TILE) + 1);
-  const y0 = Math.max(0, Math.floor(camY / TILE) - 1), y1 = Math.min(H - 1, Math.ceil((camY + ch) / TILE) + 1);
+  // orbit + zoom about the hero (screen centre), then draw in world space as before
+  ctx.translate(cw / 2, ch / 2);
+  ctx.scale(camZoom, camZoom);
+  ctx.rotate(camAngle);
+  ctx.translate(-cw / 2, -ch / 2);
+
+  // visible bounds: a rotated view sees up to the half-diagonal in every direction
+  const pad = Math.hypot(cw, ch) / 2 / camZoom;
+  const pcx = player.px * TILE + TILE / 2, pcy = player.py * TILE + TILE / 2;
+  const x0 = Math.max(0, Math.floor((pcx - pad) / TILE) - 1), x1 = Math.min(W - 1, Math.ceil((pcx + pad) / TILE) + 1);
+  const y0 = Math.max(0, Math.floor((pcy - pad) / TILE) - 1), y1 = Math.min(H - 1, Math.ceil((pcy + pad) / TILE) + 1);
 
   // terrain: pre-rendered chunks, then animated water/lava on top
   if (terrainChunks) for (const chk of terrainChunks) {
-    if (chk.px > camX + cw || chk.px + CHUNK_PX < camX || chk.py > camY + ch || chk.py + CHUNK_PX < camY) continue;
+    if (chk.px > pcx + pad || chk.px + CHUNK_PX < pcx - pad || chk.py > pcy + pad || chk.py + CHUNK_PX < pcy - pad) continue;
     ctx.drawImage(chk.cv, chk.px - camX, chk.py - camY);
   }
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
@@ -1882,7 +1913,7 @@ function draw(time, dt) {
     if (n.x < x0 || n.x > x1 || n.y < y0 || n.y > y1) continue;
     drawHumanoid(n.x * TILE - camX, n.y * TILE - camY, n.color, '#3a3227');
     ctx.fillStyle = '#f4e3a1'; ctx.font = 'bold 11px Verdana'; ctx.textAlign = 'center';
-    ctx.fillText(n.name, n.x * TILE - camX + TILE / 2, n.y * TILE - camY - 6);
+    label(n.name, n.x * TILE - camX + TILE / 2, n.y * TILE - camY - 6);
   }
 
   // fake players
@@ -1890,7 +1921,7 @@ function draw(time, dt) {
     if (f.px < x0 - 1 || f.px > x1 + 1 || f.py < y0 - 1 || f.py > y1 + 1) continue;
     drawHumanoid(f.px * TILE - camX, f.py * TILE - camY, f.color, '#2a2a2a');
     ctx.fillStyle = '#8fd48f'; ctx.font = '10px Verdana'; ctx.textAlign = 'center';
-    ctx.fillText(f.name, f.px * TILE - camX + TILE / 2, f.py * TILE - camY - 4);
+    label(f.name, f.px * TILE - camX + TILE / 2, f.py * TILE - camY - 4);
   }
 
   // mobs
@@ -1922,12 +1953,14 @@ function draw(time, dt) {
     f.y -= dt * 0.8;
     ctx.globalAlpha = Math.min(1, f.life);
     ctx.fillStyle = '#000';
-    ctx.fillText(f.text, f.x * TILE - camX + TILE / 2 + 1, f.y * TILE - camY + 1);
+    label(f.text, f.x * TILE - camX + TILE / 2 + 1, f.y * TILE - camY + 1);
     ctx.fillStyle = f.color;
-    ctx.fillText(f.text, f.x * TILE - camX + TILE / 2, f.y * TILE - camY);
+    label(f.text, f.x * TILE - camX + TILE / 2, f.y * TILE - camY);
     ctx.globalAlpha = 1;
   }
 
+  // post FX are screen-space: drop the camera transform first
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   // warm light pooled around the hero, cool shadow at the edges of sight
   const lg = ctx.createRadialGradient(cw / 2, ch / 2, 40, cw / 2, ch / 2, Math.max(cw, ch) * 0.55);
   lg.addColorStop(0, 'rgba(255,214,140,0.09)');
@@ -1937,6 +1970,10 @@ function draw(time, dt) {
   if (vignette) ctx.drawImage(vignette, 0, 0, cw, ch);
 
   drawMinimap(camX, camY, cw, ch);
+}
+
+function label(text, x, y) { // text at a world point, kept upright under camera rotation
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-camAngle); ctx.fillText(text, 0, 0); ctx.restore();
 }
 
 function drawNode(n, sx, sy, time) {
@@ -2227,7 +2264,7 @@ function drawMob(m, sx, sy, time) {
     }
     ctx.font = 'bold 11px Verdana'; ctx.textAlign = 'center';
     ctx.fillStyle = d.glow;
-    ctx.fillText('⭐ ' + d.name, cx, sy - 12);
+    label('⭐ ' + d.name, cx, sy - 12);
   } else if (m.type === 'direwolf') {
     ctx.fillStyle = d.color;
     ctx.beginPath(); ctx.ellipse(cx, cy + 3, 11, 6, 0, 0, 7); ctx.fill();
@@ -2330,9 +2367,50 @@ function drawPlayer(sx, sy, time) {
       ctx.beginPath(); ctx.moveTo(cx + 7, cy + 5); ctx.lineTo(cx + 13, cy - 8); ctx.stroke();
     }
     ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Verdana'; ctx.textAlign = 'center';
-    ctx.fillText('You', cx, sy - 8);
+    label('You', cx, sy - 8);
   }
 }
+
+function openWorldMap() {
+  if (!mmBase || !gameStarted) return;
+  const S = 3; // 144 tiles → 432 px
+  openModal('🗺️ Kandarin — Realm of Kings', `
+    <canvas id="worldMap" width="${W * S * 2}" height="${H * S * 2}"
+      style="width:100%;max-width:${W * S}px;display:block;margin:0 auto;border:1px solid #4a3f2f;border-radius:4px;background:#000"></canvas>
+    <p style="text-align:center;color:#9a8f78;font-size:11px;margin-top:8px">
+      ⚪ you &nbsp;·&nbsp; 🟡 banks, shops &amp; ferries &nbsp;·&nbsp; 🔶 keep towers &nbsp;·&nbsp; colored stars: bosses</p>`);
+  const c = document.getElementById('worldMap').getContext('2d');
+  c.scale(2, 2); // backing store at 2× for hi-dpi crispness
+  c.imageSmoothingEnabled = false;
+  c.drawImage(mmBase, 0, 0, W, H, 0, 0, W * S, H * S);
+  const dot = (x, y, r, color) => {
+    c.fillStyle = color; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.lineWidth = 1.5;
+    c.beginPath(); c.arc(x * S + S / 2, y * S + S / 2, r, 0, 7); c.fill(); c.stroke();
+  };
+  for (const k in nodes) {
+    const n = nodes[k];
+    if (['bank', 'anvil', 'range', 'roost', 'throne', 'shop', 'ferry'].includes(n.kind)) dot(n.x, n.y, 3, '#f4e34a');
+    if (n.kind === 'tower') dot(n.x, n.y, 3, '#ff5e2a');
+  }
+  for (const m of mobs) {
+    const d = MOB_DEFS[m.type];
+    if (d.boss) dot(m.homeX, m.homeY, 4.5, d.glow);
+  }
+  dot(player.x, player.y, 4.5, '#ffffff');
+  // the realm's regions, lettered like a proper chart
+  const labels = [
+    ['BEYOND THE FROSTWALL', 56, 11], ['THE NORTH', 84, 28], ['WOLF RIDGE', 40, 34],
+    ['THE RIVERLANDS', 78, 64], ['THE CAPITOL', 57, 94], ['THE SOUTHERN REACH', 32, 112],
+    ['DRAGONMONT', 120, 44], ['THE EMBER KEEP', 119, 72], ['THE DROWNED BASTION', 121, 111],
+    ['THE NARROW SEA', 80, 127], ['DORNE', 28, 136], ['SUNSPEAR', 53, 140],
+  ];
+  c.font = '600 10px Georgia'; c.textAlign = 'center';
+  for (const [name, lx, ly] of labels) {
+    c.fillStyle = 'rgba(0,0,0,0.8)'; c.fillText(name, lx * S + 1, ly * S + 1);
+    c.fillStyle = '#f4e3a1'; c.fillText(name, lx * S, ly * S);
+  }
+}
+mmCanvas.addEventListener('click', openWorldMap);
 
 function drawMinimap(camX, camY, cw, ch) {
   if (!mmBase) return;
@@ -2340,9 +2418,10 @@ function drawMinimap(camX, camY, cw, ch) {
   mmCtx.imageSmoothingEnabled = false;
   mmCtx.drawImage(mmBase, 0, 0, W, H, 0, 0, 150, 150);
   const s = 150 / W;
-  // viewport rect
+  // viewport rect (zoom-aware, centred on the hero; rotation not shown)
   mmCtx.strokeStyle = 'rgba(255,255,255,0.5)'; mmCtx.lineWidth = 1;
-  mmCtx.strokeRect(camX / TILE * s, camY / TILE * s, cw / TILE * s, ch / TILE * s);
+  const vw = cw / camZoom / TILE * s, vh = ch / camZoom / TILE * s;
+  mmCtx.strokeRect((player.px + 0.5) * s - vw / 2, (player.py + 0.5) * s - vh / 2, vw, vh);
   // player
   mmCtx.fillStyle = '#fff';
   mmCtx.fillRect(player.px * s - 2, player.py * s - 2, 4, 4);
@@ -2355,19 +2434,18 @@ function drawMinimap(camX, camY, cw, ch) {
 const hoverTip = document.getElementById('hoverTip');
 canvas.addEventListener('click', e => {
   const r = canvas.getBoundingClientRect();
-  const camX = player.px * TILE + TILE / 2 - viewW / 2;
-  const camY = player.py * TILE + TILE / 2 - viewH / 2;
-  const tx = Math.floor((e.clientX - r.left + camX) / TILE);
-  const ty = Math.floor((e.clientY - r.top + camY) / TILE);
+  const [tx, ty] = screenToTile(e.clientX - r.left, e.clientY - r.top);
   if (inB(tx, ty)) clickWorld(tx, ty);
 });
+canvas.addEventListener('wheel', e => {
+  if (!gameStarted) return;
+  e.preventDefault();
+  camZoomT = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, camZoomT * Math.exp(-e.deltaY * 0.0012)));
+}, {passive: false});
 canvas.addEventListener('mousemove', e => {
   if (!gameStarted) return;
   const r = canvas.getBoundingClientRect();
-  const camX = player.px * TILE + TILE / 2 - viewW / 2;
-  const camY = player.py * TILE + TILE / 2 - viewH / 2;
-  const tx = Math.floor((e.clientX - r.left + camX) / TILE);
-  const ty = Math.floor((e.clientY - r.top + camY) / TILE);
+  const [tx, ty] = screenToTile(e.clientX - r.left, e.clientY - r.top);
   let tip = '';
   const mob = mobs.find(m => !m.dead && m.x === tx && m.y === ty);
   const npc = npcs.find(n => n.x === tx && n.y === ty);
@@ -2389,7 +2467,10 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModal();
   if (!gameStarted) return;
   if (e.key === 'm' || e.key === 'M') toggleMount();
+  if (e.key.startsWith('Arrow')) { keysHeld[e.key] = true; e.preventDefault(); }
 });
+window.addEventListener('keyup', e => { delete keysHeld[e.key]; });
+window.addEventListener('blur', () => { for (const k in keysHeld) delete keysHeld[k]; });
 document.getElementById('mountBtn').onclick = toggleMount;
 document.getElementById('helpBtn').onclick = openHelp;
 window.addEventListener('beforeunload', saveGame);
