@@ -23,6 +23,8 @@ cd game && python3 -m http.server 8080
 | **The North & the Frostwall** | Ironwood trees, iron ore, direwolves; a great wall with one gate |
 | **Beyond the Frostwall** | Weirwood trees, wights (weak to dragonfire), the **Frost Sentinel** |
 | **Dragonmont** | Volcanic isle: dragonglass, Valyrian ore, wild drakes, the Dragon Roost, and the **Ember Keep** raid |
+| **The Narrow Sea** | The Sunspit Strait severs the south — no bridge crosses it. Take the ferry (25 gold) south of the Capitol, or fly |
+| **Dorne** | The desert across the strait: **Sunspear** (bank, fire, the Sunspear Bazaar), buried dragonglass and Valyrian veins, Dornish sellswords |
 | **The Drowned Bastion** | An islet in the southern sea no bridge reaches — only a dragon's wings. Home of the level 90 **Chained Wraith** |
 
 ## Skills (levels 1–99, RuneScape XP table)
@@ -32,9 +34,21 @@ Gathering: **Woodcutting · Mining · Fishing**
 Artisan: **Smithing · Cooking**
 And the thirteenth: **Dragonriding**
 
-Gear tiers: bronze → iron → castle-forged steel → obsidian → Valyrian steel,
-all smithable at any anvil. Arrows for Archery are smithed too. Bury bones for
-Faith (faster natural healing). Eat cooked fish to heal.
+Every combat class has its own RuneScape-style gear ladder, and a weapon only
+lends power to its own class:
+
+| Class | 1 | 10–20 | 30–40 | 50 | 60 (boss drop) |
+|---|---|---|---|---|---|
+| **Melee** (Attack) | bronze | iron · steel | obsidian | Valyrian steel | **Flamebrand Katana** (Flame Sentinel) / **Runed Chain-Glaive** (Chained Wraith) |
+| **Archery** | shortbow | ironwood bow | weirwood bow | — | **Sunforged Bow** (Gilded Sentinel) |
+| **Sorcery** | apprentice staff | acolyte staff | pyromancer staff | — | **Serpent Staff** (Venom Sentinel) |
+| **Armor** (Defence) | bronze | iron · steel | obsidian | Valyrian plate | **Frostscale Armor** (Frost Sentinel) |
+
+Melee gear and arrows are smithable at any anvil; bows and staves come from
+the **stores** — the Wolf Ridge General Store (starter), the Capitol's Crown
+Armory (mid tiers) and the Sunspear Bazaar in Dorne (lvl 30–40 wares). Shops
+buy your goods at 40% value. Bury bones for Faith (faster natural healing).
+Eat cooked fish to heal.
 
 ## Dragonriding 🐉
 
@@ -55,8 +69,10 @@ dodging.
 
 Four elemental bosses guard the corners of the realm — **Gilded** (lvl 60,
 southwest barrows), **Venom** (lvl 65, deep south), **Flame** (lvl 70, Ember
-Keep) and **Frost** (lvl 75, beyond the Frostwall). Each drops a **Dragon
-Aspect** that recolors your drake in its element.
+Keep) and **Frost** (lvl 75, beyond the Frostwall). Each wields the max-tier
+gear of its combat class — you can see the bow, staff, katana and twin blades
+on the bosses themselves — and drops both that gear and a **Dragon Aspect**
+that recolors your drake in its element.
 
 Slay all four for **Thrones of the Elements**, then fly to the Drowned Bastion
 and break **The Chained Wraith** (lvl 90) for the black-and-viridian Wraith

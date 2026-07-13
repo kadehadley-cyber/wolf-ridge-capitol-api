@@ -42,47 +42,65 @@ const SKILLS = [
   {id:'dragonriding', name:'Dragonriding', icon:'🐉'},
 ];
 
-/* ---------------- Items ---------------- */
+/* ---------------- Items ----------------
+   Weapons carry a combat class (melee / archery / sorcery) and follow the
+   RuneScape tier ladder 1/10-20/30-40/50-60 per class. `value` is the shop
+   price; shops buy back at 40%. Items without a value cannot be traded. */
 const ITEMS = {
   coins:          {name:'Gold Dragons', icon:'💰', stack:true},
-  logs:           {name:'Pine Logs', icon:'🪵', stack:true},
-  ironwood_logs:  {name:'Ironwood Logs', icon:'🪵', stack:true},
-  weirwood_logs:  {name:'Weirwood Logs', icon:'🪵', stack:true},
-  raw_trout:      {name:'Raw River Trout', icon:'🐟', stack:true},
-  trout:          {name:'River Trout', icon:'🍥', stack:true, heal:4},
-  raw_salmon:     {name:'Raw Salmon', icon:'🐟', stack:true},
-  salmon:         {name:'Smoked Salmon', icon:'🍣', stack:true, heal:9},
-  raw_blackfish:  {name:'Raw Blackfish', icon:'🐡', stack:true},
-  blackfish:      {name:'Blackwater Blackfish', icon:'🍱', stack:true, heal:16},
-  copper_ore:     {name:'Copper Ore', icon:'🟤', stack:true},
-  iron_ore:       {name:'Iron Ore', icon:'⚪', stack:true},
-  dragonglass:    {name:'Dragonglass', icon:'⬛', stack:true},
-  valyrian_ore:   {name:'Valyrian Ore', icon:'🔷', stack:true},
-  bronze_bar:     {name:'Bronze Bar', icon:'🟧', stack:true},
-  iron_bar:       {name:'Iron Bar', icon:'⬜', stack:true},
-  steel_bar:      {name:'Castle-forged Steel Bar', icon:'🔳', stack:true},
-  obsidian_bar:   {name:'Obsidian Bar', icon:'🌑', stack:true},
-  valyrian_bar:   {name:'Valyrian Steel Bar', icon:'💠', stack:true},
-  arrows:         {name:'Arrows', icon:'🎯', stack:true},
-  bones:          {name:'Bones', icon:'🦴', stack:true, faith:15},
-  big_bones:      {name:'Drake Bones', icon:'🦴', stack:true, faith:45},
-  bronze_sword:   {name:'Bronze Sword', icon:'🗡️', slot:'weapon', lvl:1,  power:4},
-  iron_sword:     {name:'Iron Sword', icon:'🗡️', slot:'weapon', lvl:10, power:7},
-  steel_sword:    {name:'Castle-forged Sword', icon:'🗡️', slot:'weapon', lvl:20, power:11},
-  obsidian_sword: {name:'Obsidian Blade', icon:'🗡️', slot:'weapon', lvl:30, power:16},
-  valyrian_sword: {name:'Valyrian Steel Sword', icon:'🗡️', slot:'weapon', lvl:50, power:25},
-  bronze_armor:   {name:'Bronze Plate', icon:'🛡️', slot:'armor', lvl:1,  armor:4},
-  iron_armor:     {name:'Iron Plate', icon:'🛡️', slot:'armor', lvl:10, armor:7},
-  steel_armor:    {name:'Castle-forged Plate', icon:'🛡️', slot:'armor', lvl:20, armor:11},
-  obsidian_armor: {name:'Obsidian Scale', icon:'🛡️', slot:'armor', lvl:30, armor:16},
-  valyrian_armor: {name:'Valyrian Plate', icon:'🛡️', slot:'armor', lvl:50, armor:25},
+  logs:           {name:'Pine Logs', icon:'🪵', stack:true, value:4},
+  ironwood_logs:  {name:'Ironwood Logs', icon:'🪵', stack:true, value:16},
+  weirwood_logs:  {name:'Weirwood Logs', icon:'🪵', stack:true, value:45},
+  raw_trout:      {name:'Raw River Trout', icon:'🐟', stack:true, value:3},
+  trout:          {name:'River Trout', icon:'🍥', stack:true, heal:4, value:8},
+  raw_salmon:     {name:'Raw Salmon', icon:'🐟', stack:true, value:10},
+  salmon:         {name:'Smoked Salmon', icon:'🍣', stack:true, heal:9, value:25},
+  raw_blackfish:  {name:'Raw Blackfish', icon:'🐡', stack:true, value:25},
+  blackfish:      {name:'Blackwater Blackfish', icon:'🍱', stack:true, heal:16, value:60},
+  copper_ore:     {name:'Copper Ore', icon:'🟤', stack:true, value:4},
+  iron_ore:       {name:'Iron Ore', icon:'⚪', stack:true, value:14},
+  dragonglass:    {name:'Dragonglass', icon:'⬛', stack:true, value:40},
+  valyrian_ore:   {name:'Valyrian Ore', icon:'🔷', stack:true, value:100},
+  bronze_bar:     {name:'Bronze Bar', icon:'🟧', stack:true, value:10},
+  iron_bar:       {name:'Iron Bar', icon:'⬜', stack:true, value:35},
+  steel_bar:      {name:'Castle-forged Steel Bar', icon:'🔳', stack:true, value:65},
+  obsidian_bar:   {name:'Obsidian Bar', icon:'🌑', stack:true, value:110},
+  valyrian_bar:   {name:'Valyrian Steel Bar', icon:'💠', stack:true, value:260},
+  arrows:         {name:'Arrows', icon:'🎯', stack:true, value:2},
+  bones:          {name:'Bones', icon:'🦴', stack:true, faith:15, value:1},
+  big_bones:      {name:'Drake Bones', icon:'🦴', stack:true, faith:45, value:20},
+  /* Melee tier ladder (Attack) */
+  bronze_sword:   {name:'Bronze Sword', icon:'🗡️', slot:'weapon', lvl:1,  power:4,  value:25},
+  iron_sword:     {name:'Iron Sword', icon:'🗡️', slot:'weapon', lvl:10, power:7,  value:70},
+  steel_sword:    {name:'Castle-forged Sword', icon:'🗡️', slot:'weapon', lvl:20, power:11, value:140},
+  obsidian_sword: {name:'Obsidian Blade', icon:'🗡️', slot:'weapon', lvl:30, power:16, value:280},
+  valyrian_sword: {name:'Valyrian Steel Sword', icon:'🗡️', slot:'weapon', lvl:50, power:25, value:650},
+  flamebrand_katana:{name:'Flamebrand Katana', icon:'⚔️', slot:'weapon', lvl:60, power:30, value:2000},
+  /* Archery tier ladder */
+  shortbow:       {name:'Shortbow', icon:'🏹', slot:'weapon', class:'archery', lvl:1,  power:4,  value:20},
+  ironwood_bow:   {name:'Ironwood Bow', icon:'🏹', slot:'weapon', class:'archery', lvl:20, power:11, value:140},
+  weirwood_bow:   {name:'Weirwood Bow', icon:'🏹', slot:'weapon', class:'archery', lvl:40, power:18, value:400},
+  sunforged_bow:  {name:'Sunforged Bow', icon:'🌞', slot:'weapon', class:'archery', lvl:60, power:30, value:2000},
+  /* Sorcery tier ladder */
+  apprentice_staff:{name:'Apprentice Staff', icon:'🪄', slot:'weapon', class:'sorcery', lvl:1,  power:4,  value:20},
+  acolyte_staff:  {name:'Acolyte Staff', icon:'🪄', slot:'weapon', class:'sorcery', lvl:20, power:11, value:140},
+  pyromancer_staff:{name:'Pyromancer Staff', icon:'🪄', slot:'weapon', class:'sorcery', lvl:40, power:18, value:400},
+  serpent_staff:  {name:'Serpent Staff', icon:'🐍', slot:'weapon', class:'sorcery', lvl:60, power:30, value:2000},
+  /* Armor tier ladder (Defence) */
+  bronze_armor:   {name:'Bronze Plate', icon:'🛡️', slot:'armor', lvl:1,  armor:4,  value:25},
+  iron_armor:     {name:'Iron Plate', icon:'🛡️', slot:'armor', lvl:10, armor:7,  value:70},
+  steel_armor:    {name:'Castle-forged Plate', icon:'🛡️', slot:'armor', lvl:20, armor:11, value:140},
+  obsidian_armor: {name:'Obsidian Scale', icon:'🛡️', slot:'armor', lvl:30, armor:16, value:280},
+  valyrian_armor: {name:'Valyrian Plate', icon:'🛡️', slot:'armor', lvl:50, armor:25, value:650},
+  frostscale_armor:{name:'Frostscale Armor', icon:'🧊', slot:'armor', lvl:60, armor:30, value:2000},
   aspect_gild:  {name:'Gilded Dragon Aspect', icon:'🟡', aspect:'gild'},
   aspect_venom: {name:'Venom Dragon Aspect', icon:'🟢', aspect:'venom'},
   aspect_flame: {name:'Flame Dragon Aspect', icon:'🔥', aspect:'flame'},
   aspect_frost: {name:'Frost Dragon Aspect', icon:'❄️', aspect:'frost'},
   aspect_wraith:{name:'Wraith Dragon Aspect', icon:'🐲', aspect:'wraith'},
-  runed_chain:  {name:'Runed Chain-Glaive', icon:'⛓️', slot:'weapon', lvl:60, power:30},
+  runed_chain:  {name:'Runed Chain-Glaive', icon:'⛓️', slot:'weapon', lvl:60, power:32, value:3000},
 };
+const weaponClass = id => ITEMS[id].class || 'melee';
 
 /* Dragon aspect palettes — unlocked from the Throne Guardians */
 const ASPECTS = {
@@ -138,6 +156,22 @@ const NODE_DEFS = {
   throne:     {name:'The Ember Throne', verb:'Approach'},
   tower:      {name:'Ember Keep Tower', verb:'Inspect', hp:40},
   gate:       {name:'Frostwall Gate', verb:'Pass'},
+  shop:       {name:'Store', verb:'Trade at'},
+  ferry:      {name:'Ferry', verb:'Board'},
+};
+
+/* ---------------- Stores ---------------- */
+const FERRY_FARE = 25;
+const SHOPS = {
+  wolfridge: {name:'Wolf Ridge General Store',
+    greet:'"Welcome, welcome. Everything a smallfolk needs to make a start."',
+    stock:['trout','arrows','bronze_sword','bronze_armor','shortbow','apprentice_staff']},
+  capitol:   {name:'The Crown Armory',
+    greet:'"Castle-forged steel, strung bows, charged staves — the Crown taxes it all, so buy plenty."',
+    stock:['salmon','arrows','iron_sword','steel_sword','iron_armor','steel_armor','ironwood_bow','acolyte_staff']},
+  dorne:     {name:'Sunspear Bazaar',
+    greet:'"You crossed the Narrow Sea for the good wares, friend. Wise. Obsidian, weirwood, pyromancy — name it."',
+    stock:['blackfish','arrows','obsidian_sword','obsidian_armor','weirwood_bow','pyromancer_staff']},
 };
 
 /* ---------------- Mob definitions ---------------- */
@@ -152,19 +186,21 @@ const MOB_DEFS = {
               drops:[['coins',20,80,1],['bones',1,1,1],['iron_ore',1,3,0.5],['steel_bar',1,1,0.15]]},
   drake:     {name:'Wild Drake', lvl:45, hp:90, atk:40, def:34, maxhit:9, aggro:true, color:'#b03326',
               drops:[['big_bones',1,1,1],['dragonglass',1,3,0.8],['valyrian_ore',1,1,0.2],['coins',40,150,0.8]]},
-  /* Throne Guardians — elemental bosses of the four corners of the realm */
+  /* Throne Guardians — elemental bosses of the four corners of the realm.
+     Each wields (and drops) the max-tier item of its combat class:
+     Gilded = archery, Venom = sorcery, Flame = melee, Frost = armor. */
   gilded_sentinel: {name:'The Gilded Sentinel', lvl:60, hp:150, atk:52, def:45, maxhit:11, aggro:true, boss:true,
               color:'#8a6a1a', glow:'#ffe95c',
-              drops:[['aspect_gild',1,1,1],['coins',150,400,1],['valyrian_ore',1,2,0.6],['arrows',30,60,0.8],['big_bones',1,1,1]]},
+              drops:[['aspect_gild',1,1,1],['sunforged_bow',1,1,0.3],['coins',150,400,1],['valyrian_ore',1,2,0.6],['arrows',30,60,0.8],['big_bones',1,1,1]]},
   venom_sentinel:  {name:'The Venom Sentinel', lvl:65, hp:170, atk:58, def:50, maxhit:12, aggro:true, boss:true,
               color:'#4a3060', glow:'#8cf03c',
-              drops:[['aspect_venom',1,1,1],['coins',200,500,1],['valyrian_ore',1,2,0.6],['dragonglass',2,5,0.8],['big_bones',1,1,1]]},
+              drops:[['aspect_venom',1,1,1],['serpent_staff',1,1,0.3],['coins',200,500,1],['valyrian_ore',1,2,0.6],['dragonglass',2,5,0.8],['big_bones',1,1,1]]},
   flame_sentinel:  {name:'The Flame Sentinel', lvl:70, hp:190, atk:64, def:56, maxhit:14, aggro:true, boss:true,
               color:'#8a2015', glow:'#ff7b2a',
-              drops:[['aspect_flame',1,1,1],['coins',250,600,1],['valyrian_ore',1,3,0.7],['obsidian_bar',1,2,0.5],['big_bones',1,1,1]]},
+              drops:[['aspect_flame',1,1,1],['flamebrand_katana',1,1,0.3],['coins',250,600,1],['valyrian_ore',1,3,0.7],['obsidian_bar',1,2,0.5],['big_bones',1,1,1]]},
   frost_sentinel:  {name:'The Frost Sentinel', lvl:75, hp:220, atk:70, def:62, maxhit:15, aggro:true, boss:true,
               color:'#26437a', glow:'#5ac8f0',
-              drops:[['aspect_frost',1,1,1],['coins',300,800,1],['valyrian_ore',2,4,0.8],['valyrian_bar',1,1,0.25],['big_bones',1,1,1]]},
+              drops:[['aspect_frost',1,1,1],['frostscale_armor',1,1,0.3],['coins',300,800,1],['valyrian_ore',2,4,0.8],['valyrian_bar',1,1,0.25],['big_bones',1,1,1]]},
   /* The final terror: chained on a drowned islet, reachable only on dragonback */
   chained_wraith:  {name:'The Chained Wraith', lvl:90, hp:300, atk:85, def:75, maxhit:18, aggro:true, boss:true,
               color:'#161c12', glow:'#aef05c',
@@ -209,6 +245,10 @@ function walkable(x, y) {
 }
 
 /* ---------------- World generation ---------------- */
+/* Centerline of the Sunspit Strait — the narrow sea that cuts Dorne's
+   deserts off from the mainland. Shared with regionName(). */
+const chanY = x => 129 + Math.round(2 * Math.sin(x / 9));
+
 function genWorld() {
   const rng = mulberry32(777001);
   const R = (a, b) => a + Math.floor(rng() * (b - a + 1));
@@ -230,9 +270,9 @@ function genWorld() {
       if (inB(x, y) && (x-cx)*(x-cx)+(y-cy)*(y-cy) <= r*r) map[idx(x, y)] = T.MTN;
   }
 
-  // The river: north to south, west of the sea
+  // The river: north to south, west of the sea (it drains into the strait)
   let rx = 78;
-  for (let y = 0; y < H; y++) {
+  for (let y = 0; y < 124; y++) {
     rx += R(-1, 1); rx = Math.max(56, Math.min(100, rx));
     for (let dx = -1; dx <= 1; dx++) if (inB(rx + dx, y)) map[idx(rx + dx, y)] = T.WATER;
     if (y === 52 || y === 96) // bridges
@@ -242,6 +282,17 @@ function genWorld() {
   // A lake in the west
   for (let y = 62; y <= 74; y++) for (let x = 24; x <= 38; x++)
     if ((x-31)*(x-31)/49 + (y-68)*(y-68)/36 <= 1) map[idx(x, y)] = T.WATER;
+
+  // The Sunspit Strait: a narrow sea severing the southern deserts of Dorne
+  // from the mainland. No bridge crosses it — take the ferry, or fly.
+  for (let x = 0; x <= 112; x++) {
+    const cy = chanY(x);
+    for (let y = cy - 2; y <= cy + 2; y++) if (inB(x, y)) map[idx(x, y)] = T.WATER;
+    for (let y = cy + 3; y < H; y++) {
+      const t = map[idx(x, y)];
+      if (t !== T.WATER && t !== T.MTN) map[idx(x, y)] = T.SAND; // the Dornish wastes
+    }
+  }
 
   // Dragonmont: volcanic island in the sea
   for (let y = 38; y <= 76; y++) for (let x = 112; x <= 142; x++) {
@@ -271,10 +322,23 @@ function genWorld() {
   // Wolf Ridge (northern home town)
   town(33, 29, 47, 41, [[40, 41], [41, 41], [33, 35]]);
   addNode(36, 32, 'bank'); addNode(43, 32, 'anvil'); addNode(39, 36, 'range');
+  addNode(43, 36, 'shop').shop = 'wolfridge';
   // The Capitol (southern city)
-  town(47, 87, 67, 105, [[56, 87], [57, 87], [47, 96]]);
+  town(47, 87, 67, 105, [[56, 87], [57, 87], [47, 96], [54, 105]]); // south gate opens to the ferry road
   addNode(51, 91, 'bank'); addNode(62, 91, 'anvil'); addNode(55, 95, 'range');
   addNode(57, 102, 'throne');
+  addNode(62, 95, 'shop').shop = 'capitol';
+  // Sunspear (walled desert town of Dorne, across the Sunspit Strait)
+  town(46, 134, 60, 142, [[54, 134]]);
+  addNode(49, 137, 'bank'); addNode(53, 138, 'range');
+  addNode(57, 137, 'shop').shop = 'dorne';
+  // Ferry across the strait, with roads to either landing
+  const fN = {x:54, y:chanY(54) - 3}, fS = {x:54, y:chanY(54) + 3};
+  map[idx(fN.x, fN.y)] = T.STONE; map[idx(fS.x, fS.y)] = T.STONE;
+  addNode(fN.x, fN.y, 'ferry').dest = fS;
+  addNode(fS.x, fS.y, 'ferry').dest = fN;
+  for (let y = 106; y < fN.y; y++) map[idx(54, y)] = T.STONE;   // Capitol -> north landing
+  for (let y = fS.y + 1; y < 134; y++) map[idx(54, y)] = T.STONE; // south landing -> Sunspear
   // Dragon roost on Dragonmont
   addNode(127, 47, 'roost');
   // Ember Keep towers (southern half of Dragonmont)
@@ -300,6 +364,9 @@ function genWorld() {
   scatter('iron', 20, (x, y, t) => (t === T.SNOW && y > 21) || (t === T.GRASS && x < 26));
   scatter('glassrock', 14, (x, y, t) => t === T.VOLC);
   scatter('valrock', 6, (x, y, t) => t === T.VOLC);
+  // the Dornish wastes hide obsidian and Valyrian veins under the sand
+  scatter('glassrock', 8, (x, y, t) => t === T.SAND && y > chanY(x) + 3);
+  scatter('valrock', 3, (x, y, t) => t === T.SAND && y > chanY(x) + 3);
 
   // Fishing spots: on water adjacent to land
   function fishSpots(kind, count, ok) {
@@ -316,7 +383,7 @@ function genWorld() {
   }
   fishSpots('fish_trout', 14, (x, y) => x < 105 && y > 34);
   fishSpots('fish_salmon', 8, (x, y) => x < 105 && y <= 60);
-  fishSpots('fish_black', 6, (x, y) => x >= 105 || (x >= 24 && x <= 38 && y >= 62));
+  fishSpots('fish_black', 6, (x, y) => x >= 105 || (x >= 24 && x <= 38 && y >= 62) || y >= 122);
 
   // --- NPCs ---
   npcs = [
@@ -338,7 +405,8 @@ function genWorld() {
   spawn('bandit', 9, 30, 44, 100, 86);
   spawn('direwolf', 8, 8, 22, 100, 40);
   spawn('wight', 9, 6, 3, 100, 18);
-  spawn('sellsword', 7, 30, 106, 100, 134);
+  spawn('sellsword', 7, 30, 106, 100, 122);
+  spawn('sellsword', 6, 6, 133, 100, 142); // Dornish sellswords roam the wastes
   spawn('drake', 7, 114, 40, 140, 74);
 
   // Throne Guardians: one per corner of the realm (nudged to nearest open ground)
@@ -580,19 +648,26 @@ function clickWorld(tx, ty) {
 }
 
 /* ---------------- Combat ---------------- */
-function weaponPower() { return player.equip.weapon ? ITEMS[player.equip.weapon].power : 1; }
+/* Weapon power counts only toward its own class — a bow does nothing for a
+   melee swing. Unarmed melee is fists (1); archery/sorcery fall back to
+   thrown stones / raw cantrips (2) until a bow or staff is equipped. */
+function classPower(cls) {
+  const w = player.equip.weapon;
+  if (w && weaponClass(w) === cls) return ITEMS[w].power;
+  return cls === 'melee' ? 1 : 2;
+}
 function armorValue()  { return player.equip.armor ? ITEMS[player.equip.armor].armor : 0; }
 
 function styleReach() { return player.style === 'melee' ? 1 : player.style === 'archery' ? 6 : 7; }
 function playerMaxHit() {
-  if (player.style === 'melee')   return Math.max(1, Math.floor(1 + lvlOf('strength') * 0.12 + weaponPower() * 0.6));
-  if (player.style === 'archery') return Math.max(1, Math.floor(1 + lvlOf('archery') * 0.12 + 6));
-  return Math.max(1, Math.floor(1 + lvlOf('sorcery') * 0.11 + 4));
+  if (player.style === 'melee')   return Math.max(1, Math.floor(1 + lvlOf('strength') * 0.12 + classPower('melee') * 0.6));
+  if (player.style === 'archery') return Math.max(1, Math.floor(1 + lvlOf('archery') * 0.12 + classPower('archery') * 0.6));
+  return Math.max(1, Math.floor(1 + lvlOf('sorcery') * 0.11 + classPower('sorcery') * 0.6));
 }
 function playerAccStat() {
-  if (player.style === 'melee')   return lvlOf('attack') + weaponPower();
-  if (player.style === 'archery') return lvlOf('archery') + 4;
-  return lvlOf('sorcery') + 4;
+  if (player.style === 'melee')   return lvlOf('attack') + classPower('melee');
+  if (player.style === 'archery') return lvlOf('archery') + classPower('archery');
+  return lvlOf('sorcery') + classPower('sorcery');
 }
 
 function playerAttack(mob) {
@@ -733,6 +808,8 @@ function performNodeAction(node) {
   switch (node.kind) {
     case 'bank':   openBank(); player.goal = null; break;
     case 'anvil':  openSmith(); player.goal = null; break;
+    case 'shop':   openShop(node.shop); player.goal = null; break;
+    case 'ferry':  rideFerry(node); player.goal = null; break;
     case 'range':  startCooking(); break;
     case 'roost':  openRoost(); player.goal = null; break;
     case 'throne': sitThrone(); player.goal = null; break;
@@ -814,7 +891,7 @@ const QUESTS = [
    desc:'Take wing and raze the five towers of the Ember Keep on southern Dragonmont with dragonfire. Beware their ballistae. (Requires: Blood of the Dragon)',
    progress:() => player.quests.q3 ? 'Complete — you are a true Dragonlord' : `Towers razed ${player.quests.q3burned}/5 — then return to Rhaella`},
   {id:'q4', name:'Thrones of the Elements',
-   desc:'Four Throne Guardians haunt the corners of the realm — the Gilded Sentinel in the southwest barrows, the Venom Sentinel in the deep south, the Flame Sentinel in the Ember Keep, and the Frost Sentinel beyond the Frostwall. Each guards a Dragon Aspect that can recolor your drake.',
+   desc:'Four Throne Guardians haunt the corners of the realm — the Gilded Sentinel in the southwest barrows, the Venom Sentinel in the deep south, the Flame Sentinel in the Ember Keep, and the Frost Sentinel beyond the Frostwall. Each guards a Dragon Aspect that can recolor your drake, and wields the finest gear of its combat class — bow, staff, katana and armor.',
    progress:() => player.quests.q4 ? 'Complete — the elements kneel' : `Guardians felled ${SENTINELS.filter(k => player.quests.slain[k]).length}/4`},
   {id:'q5', name:'The Chained Wraith',
    desc:'A fifth terror is bound to the Drowned Bastion, a ruined islet deep in the southern sea where no bridge reaches — only a dragon\'s wings. Slay the level 90 Chained Wraith to claim the Wraith Dragon Aspect and, if fortune favors you, its Runed Chain-Glaive.',
@@ -892,6 +969,71 @@ function openRoost() {
   } else {
     openModal('Dragon Roost', '<p>A wild red drake circles the roost, all fang and fury. Dragonkeeper Rhaella stands nearby — she knows how such beasts are won.</p>');
   }
+}
+
+/* ---------------- Ferry ---------------- */
+function rideFerry(node) {
+  if (invCount('coins') < FERRY_FARE) {
+    log(`<span class="bad">The ferryman spits over the rail. "Fare's ${FERRY_FARE} gold. No coin, no crossing."</span>`);
+    return;
+  }
+  removeItem('coins', FERRY_FARE);
+  player.x = node.dest.x; player.y = node.dest.y;
+  player.px = player.x; player.py = player.y;
+  player.path = []; player.goal = null; player.combat = null;
+  log(`<span class="good">⛵ You pay ${FERRY_FARE} gold and the ferry hauls you across the Narrow Sea. ${node.dest.y > node.y ? 'The heat of Dorne rolls over you like an open forge.' : 'The green of the mainland never looked so kind.'}</span>`);
+  renderHud();
+}
+
+/* ---------------- Stores ---------------- */
+const sellPrice = id => Math.max(1, Math.floor((ITEMS[id].value || 0) * 0.4));
+let shopOpen = null;
+function openShop(shopId) {
+  shopOpen = shopId;
+  renderShop();
+}
+function renderShop() {
+  if (!shopOpen) return;
+  const shop = SHOPS[shopOpen];
+  const coins = invCount('coins');
+  let html = `<p style="color:var(--dim); font-size:12px; margin-bottom:8px">${shop.greet}<br>You have <b style="color:var(--gold)">💰 ${fmtQty(coins)}</b>. Click wares to buy; click your pack to sell (40% value).</p>`;
+  html += '<h3 class="pane">Wares</h3>';
+  for (const id of shop.stock) {
+    const def = ITEMS[id];
+    const can = coins >= def.value;
+    const stat = def.power ? ` · power ${def.power}` : def.armor ? ` · armor ${def.armor}` : def.heal ? ` · heals ${def.heal}` : '';
+    html += `<div class="mrow ${can ? '' : 'off'}" data-buy="${id}">
+      <span class="ico">${def.icon}</span>
+      <span>${def.name}<div class="sub">${def.slot ? 'lvl ' + def.lvl + ' ' + (def.slot === 'armor' ? 'defence' : def.class || 'attack') : ''}${stat}</div></span>
+      <span class="right">${def.value} gold</span></div>`;
+  }
+  html += '<h3 class="pane" style="margin-top:10px">Your pack</h3><div class="bankGrid" id="shopGridI">';
+  player.inv.forEach((s, i) => {
+    const def = ITEMS[s.id];
+    const sellable = s.id !== 'coins' && def.value;
+    html += `<div class="slot" data-i="${i}" title="${def.name}${sellable ? ' — sell for ' + sellPrice(s.id) + ' gold' : ' — the merchant has no interest'}">${def.icon}<span class="qty">${s.qty > 1 ? fmtQty(s.qty) : ''}</span></div>`;
+  });
+  html += '</div>';
+  openModal('🪙 ' + shop.name, html, () => { shopOpen = null; });
+  document.querySelectorAll('#modalBody .mrow[data-buy]').forEach(el => el.onclick = () => {
+    const id = el.dataset.buy, def = ITEMS[id];
+    if (invCount('coins') < def.value) { log('<span class="bad">You cannot afford that.</span>'); return; }
+    const room = def.stack ? player.inv.some(x => x.id === id) || player.inv.length < INV_MAX : player.inv.length < INV_MAX;
+    if (!room) { log('<span class="bad">Your pack is full.</span>'); return; }
+    removeItem('coins', def.value);
+    addItem(id, 1, true);
+    log(`<span class="sys">You buy a ${def.name} for ${def.value} gold.</span>`);
+    renderShop();
+  });
+  document.querySelectorAll('#shopGridI .slot').forEach(el => el.onclick = () => {
+    const s = player.inv[+el.dataset.i];
+    if (!s || s.id === 'coins' || !ITEMS[s.id].value) { log('<span class="sys">"I\'ve no use for that," the merchant shrugs.</span>'); return; }
+    const price = sellPrice(s.id);
+    removeItem(s.id, 1);
+    addItem('coins', price, true);
+    log(`<span class="sys">You sell a ${ITEMS[s.id].name} for ${price} gold.</span>`);
+    renderShop();
+  });
 }
 
 /* ---------------- Bank / Smith modals ---------------- */
@@ -993,12 +1135,20 @@ function openHelp() {
     press <b>M</b> to mount anywhere. Flying is fast, crosses water and mountains, and earns Dragonriding XP.
     Click any monster from the air to roast it with <b>dragonfire</b> (bonus vs wights). Raze the Ember Keep's
     towers for the best XP in the game — but its ballistae shoot back.</p>
-    <p style="margin-top:8px"><b>Combat styles</b> (Equipment tab): Melee trains Attack/Strength, Archery needs arrows,
-    Sorcery needs nothing. Eat cooked fish to heal. Bury bones for Faith. Death is gentle — you keep everything.</p>
+    <p style="margin-top:8px"><b>Combat classes</b> (Equipment tab): Melee trains Attack/Strength with swords; Archery needs
+    arrows and a <b>bow</b>; Sorcery needs a <b>staff</b>. Each class has its own gear ladder to level 60 — a weapon only
+    helps its own class. Eat cooked fish to heal. Bury bones for Faith. Death is gentle — you keep everything.</p>
+    <p style="margin-top:8px"><b>Stores 🪙:</b> the Wolf Ridge General Store sells starter gear, the Capitol's Crown Armory
+    stocks mid tiers, and the Sunspear Bazaar in Dorne carries the level 30–40 wares. Shops buy your goods at 40% value.</p>
+    <p style="margin-top:8px"><b>Dorne & the Narrow Sea ⛵:</b> the deserts of Dorne lie across the Sunspit Strait, severed
+    from the mainland. Board the ferry south of the Capitol (${FERRY_FARE} gold each way) or fly over on dragonback. The wastes
+    hide dragonglass and Valyrian veins — and Dornish sellswords.</p>
     <p style="margin-top:8px"><b>Throne Guardians ⭐:</b> four elemental bosses haunt the corners of the realm —
     <b>Gilded</b> (southwest barrows, lvl 60), <b>Venom</b> (deep south, lvl 65), <b>Flame</b> (Ember Keep, lvl 70) and
     <b>Frost</b> (beyond the Frostwall, lvl 75). Each drops a <b>Dragon Aspect</b> — click it in your pack to
-    recolor your drake in that Guardian's element. And sailors whisper of a fifth: <b>The Chained Wraith</b>
+    recolor your drake in that Guardian's element — and each wields (and can drop) the <b>max-tier gear of its
+    class</b>: the Gilded Sentinel's Sunforged Bow, the Venom Sentinel's Serpent Staff, the Flame Sentinel's
+    Flamebrand Katana and the Frost Sentinel's Frostscale Armor. And sailors whisper of a fifth: <b>The Chained Wraith</b>
     (lvl 90), bound to the Drowned Bastion islet in the southern sea, where only a dragon can carry you.
     It guards the black-and-viridian <b>Wraith aspect</b> and a Runed Chain-Glaive, the finest weapon in the realm.</p>
     <p style="margin-top:8px"><b>Keys:</b> M mount/dismount · Esc close windows.</p>`);
@@ -1009,12 +1159,12 @@ function openSkillGuide(id) {
   const lvl = lvlOf(id), xp = Math.floor(player.skills[id]);
   const next = lvl < 99 ? XP_TABLE[lvl + 1] - xp : 0;
   const guides = {
-    attack:'Trains with melee combat. Higher Attack = more accurate blows. Weapons require Attack levels: bronze 1, iron 10, steel 20, obsidian 30, Valyrian steel 50.',
+    attack:'Trains with melee combat. Higher Attack = more accurate blows. Melee tiers: bronze 1 · iron 10 · steel 20 · obsidian 30 · Valyrian steel 50 · Flamebrand Katana 60 (Flame Sentinel) · Runed Chain-Glaive 60 (Chained Wraith).',
     strength:'Trains with melee combat. Raises your max hit.',
-    defence:'Trains from all combat. Reduces damage taken; armor requires Defence levels matching its tier.',
+    defence:'Trains from all combat. Reduces damage taken. Armor tiers: bronze 1 · iron 10 · steel 20 · obsidian 30 · Valyrian 50 · Frostscale 60 (Frost Sentinel).',
     hitpoints:'Your life force. Trains from all damage you deal. Eat cooked fish to heal.',
-    archery:'Shoot from 6 tiles away. Consumes arrows — smith 15 per bronze bar (Smithing 5).',
-    sorcery:'Hurl fire from 7 tiles with no ammunition. The old powers are weaker but never run dry.',
+    archery:'Shoot from 6 tiles away. Consumes arrows — smith 15 per bronze bar (Smithing 5). Bow tiers: shortbow 1 · ironwood 20 · weirwood 40 · Sunforged Bow 60 (Gilded Sentinel). Buy bows from stores; without one you sling stones.',
+    sorcery:'Hurl fire from 7 tiles with no ammunition. Staff tiers: apprentice 1 · acolyte 20 · pyromancer 40 · Serpent Staff 60 (Venom Sentinel). Buy staves from stores; without one your cantrips are feeble.',
     faith:'Bury bones (15xp) and drake bones (45xp). The Old Gods speed your natural healing as Faith rises.',
     woodcutting:'Sentinel pine lvl 1 · Ironwood (northern snows) lvl 20 · Weirwood (beyond the Frostwall) lvl 45.',
     mining:'Copper lvl 1 · Iron lvl 15 · Dragonglass (Dragonmont) lvl 30 · Valyrian ore lvl 55.',
@@ -1193,6 +1343,8 @@ function tick() {
         'the salmon spot up north is free', 'W ridge bank is closest to the pines fyi',
         'who keeps burning the ember keep before me >:(', 'gz', 'winter is coming... to grind wc',
         'lost my whole inv to a drake... jk you keep stuff here haha', 'selling 200 arrows, meet @ capitol',
+        'sunspear bazaar has weirwood bows!!', 'ferry took my last 25gp and a sellsword jumped me lol',
+        'got the serpent staff drop first kill :o', 'dorne valyrian rocks are free rn',
       ];
       log(`<span class="chat"><b>${f.name}:</b> ${lines[Math.floor(Math.random() * lines.length)]}</span>`);
     }
@@ -1289,9 +1441,9 @@ function useItem(i) {
     burst(player.x, player.y, ASPECTS[def.aspect].eye, 20);
     renderEquip();
   } else if (def.slot) {
-    const req = def.slot === 'weapon' ? 'attack' : 'defence';
+    const req = def.slot === 'armor' ? 'defence' : def.class === 'archery' ? 'archery' : def.class === 'sorcery' ? 'sorcery' : 'attack';
     if (lvlOf(req) < def.lvl) {
-      log(`<span class="bad">You need ${req === 'attack' ? 'Attack' : 'Defence'} level ${def.lvl} to equip the ${def.name}.</span>`);
+      log(`<span class="bad">You need ${SKILLS.find(s => s.id === req).name} level ${def.lvl} to equip the ${def.name}.</span>`);
       return;
     }
     const old = player.equip[def.slot];
@@ -1328,7 +1480,7 @@ function renderEquip() {
   const w = player.equip.weapon, a = player.equip.armor;
   let html = '<h3 class="pane">Equipment</h3>';
   html += `<div class="eqslot" id="eqW"><span class="ico">${w ? ITEMS[w].icon : '✋'}</span>
-    <span>${w ? ITEMS[w].name : 'Bare fists'}<div class="lbl">WEAPON${w ? ' — click to unequip' : ''}</div></span></div>`;
+    <span>${w ? ITEMS[w].name : 'Bare fists'}<div class="lbl">WEAPON${w ? ' (' + weaponClass(w) + ') — click to unequip' : ''}</div></span></div>`;
   html += `<div class="eqslot" id="eqA"><span class="ico">${a ? ITEMS[a].icon : '👕'}</span>
     <span>${a ? ITEMS[a].name : 'Roughspun tunic'}<div class="lbl">ARMOR${a ? ' — click to unequip' : ''}</div></span></div>`;
   html += '<h3 class="pane" style="margin-top:12px">Combat style</h3><div class="stylebtns">';
@@ -1338,6 +1490,7 @@ function renderEquip() {
   html += `<div id="eqStats">Max hit: <b>${playerMaxHit()}</b><br>
     Armor: <b>${armorValue()}</b> · Combat level: <b>${combatLevel()}</b><br>
     Arrows: <b>${invCount('arrows')}</b><br>
+    ${w && weaponClass(w) !== player.style ? '<span style="color:var(--dim)">⚠ Your ' + ITEMS[w].name + ' is a ' + weaponClass(w) + ' weapon — it lends no power to ' + player.style + '.</span><br>' : ''}
     ${player.dragonTamed ? '🐉 Drake bonded (' + ASPECTS[player.dragonAspect].label + ') — dragonfire max ~<b>' + (2 + Math.floor(3 + lvlOf('dragonriding') * 0.3)) + '</b>' : '🐉 No drake bonded yet'}</div>`;
   tabContent.innerHTML = html;
   document.getElementById('eqW').onclick = () => unequip('weapon');
@@ -1384,9 +1537,11 @@ function regionName(x, y) {
   if (y < 20) return 'Beyond the Frostwall';
   if (x >= 33 && x <= 47 && y >= 29 && y <= 41) return 'Wolf Ridge';
   if (x >= 47 && x <= 67 && y >= 87 && y <= 105) return 'The Capitol';
+  if (x >= 46 && x <= 60 && y >= 134 && y <= 142) return 'Sunspear';
+  if (x <= 112 && y >= chanY(x) + 3 && tileAt(x, y) !== T.WATER) return 'Dorne';
   if (x >= 110 && y >= 56 && tileAt(x, y) !== T.WATER) return 'The Ember Keep';
   if (x >= 110 && tileAt(x, y) !== T.WATER) return 'Dragonmont';
-  if (tileAt(x, y) === T.WATER && x > 100) return 'The Narrow Sea';
+  if (tileAt(x, y) === T.WATER && (x > 100 || y >= chanY(x) - 2)) return 'The Narrow Sea';
   if (y < 34) return 'The North';
   if (y > 100) return 'The Southern Reach';
   return 'The Riverlands';
@@ -1450,7 +1605,7 @@ function buildMinimap() {
   }
   for (const k in nodes) {
     const n = nodes[k];
-    if (['bank','anvil','range','roost','throne'].includes(n.kind)) {
+    if (['bank','anvil','range','roost','throne','shop','ferry'].includes(n.kind)) {
       c.fillStyle = '#f4e3a1'; c.fillRect(n.x - 1, n.y - 1, 3, 3);
     }
     if (n.kind === 'tower') { c.fillStyle = '#ff5e2a'; c.fillRect(n.x - 1, n.y - 1, 3, 3); }
@@ -1496,7 +1651,7 @@ function draw(time, dt) {
     ctx.fillStyle = col;
     ctx.fillRect(sx, sy, TILE, TILE);
     // texture
-    if (t === T.GRASS || t === T.SNOW || t === T.VOLC) {
+    if (t === T.GRASS || t === T.SNOW || t === T.VOLC || t === T.SAND) {
       ctx.fillStyle = 'rgba(0,0,0,' + (0.04 + h * 0.07) + ')';
       if (h > 0.5) ctx.fillRect(sx + h * 20, sy + ((h * 977) % 1) * 20, 6, 6);
     }
@@ -1677,6 +1832,29 @@ function drawNode(n, sx, sy, time) {
       ctx.fill();
       break;
     }
+    case 'shop': {
+      ctx.fillStyle = '#6b4a2a'; ctx.fillRect(sx + 4, sy + 14, TILE - 8, TILE - 18); // counter
+      ctx.fillStyle = '#8c2f2a'; // awning
+      ctx.beginPath();
+      ctx.moveTo(sx + 2, sy + 12); ctx.lineTo(cx, sy + 2); ctx.lineTo(sx + TILE - 2, sy + 12);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#e8d8b0';
+      for (let i = 0; i < 3; i++) ctx.fillRect(sx + 5 + i * 9, sy + 9, 4, 3);
+      ctx.fillStyle = '#f4e3a1'; ctx.fillRect(cx - 2, sy + 17, 4, 4); // wares glint
+      break;
+    }
+    case 'ferry': {
+      ctx.fillStyle = '#6b4a2a'; ctx.fillRect(sx + 2, cy - 2, TILE - 4, 6); // dock planks
+      const bob = Math.sin(time * 2 + n.x) * 2;
+      ctx.fillStyle = '#4a3620'; // the moored ferry, bobbing on the tide
+      ctx.beginPath();
+      ctx.moveTo(cx - 10, cy + 8 + bob); ctx.quadraticCurveTo(cx, cy + 15 + bob, cx + 10, cy + 8 + bob);
+      ctx.lineTo(cx + 7, cy + 5 + bob); ctx.lineTo(cx - 7, cy + 5 + bob);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#d8cba0'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(cx, cy + 5 + bob); ctx.lineTo(cx, cy - 9 + bob); ctx.stroke();
+      break;
+    }
     case 'tower': {
       if (n.dead) {
         ctx.fillStyle = '#3a3632';
@@ -1775,6 +1953,45 @@ function drawMob(m, sx, sy, time) {
       ctx.fillStyle = d.glow; // burning eyes + trim
       ctx.fillRect(cx - 4, cy - 13, 3, 3); ctx.fillRect(cx + 2, cy - 13, 3, 3);
       ctx.fillRect(cx - 8, cy + 1, 16, 3);
+      // each Guardian wields the max-tier arm of its class
+      if (m.type === 'gilded_sentinel') {
+        // the Sunforged Bow, arrow nocked and burning
+        ctx.strokeStyle = d.glow; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(cx + 13, cy - 3, 10, -Math.PI / 2.6, Math.PI / 2.6); ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(cx + 16, cy - 12); ctx.lineTo(cx + 16, cy + 6); ctx.stroke();
+        ctx.strokeStyle = '#fff2a0'; ctx.lineWidth = 2;
+        const dr = Math.sin(time * 3 + m.x) * 2;
+        ctx.beginPath(); ctx.moveTo(cx + 6, cy - 3); ctx.lineTo(cx + 24 + dr, cy - 3); ctx.stroke();
+      } else if (m.type === 'venom_sentinel') {
+        // the Serpent Staff, crowned with a pulsing venom orb
+        ctx.strokeStyle = '#2c3c22'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(cx + 12, cy + 12); ctx.lineTo(cx + 14, cy - 12); ctx.stroke();
+        ctx.fillStyle = d.glow;
+        ctx.globalAlpha = 0.6 + Math.sin(time * 5 + m.x) * 0.3;
+        ctx.beginPath(); ctx.arc(cx + 14, cy - 15, 4, 0, 7); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = d.glow; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(cx + 14, cy - 15, 6, 0.6, 4.2); ctx.stroke();
+      } else if (m.type === 'flame_sentinel') {
+        // the Flamebrand Katana, sheathed in fire
+        ctx.strokeStyle = d.glow; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(cx + 8, cy + 8); ctx.quadraticCurveTo(cx + 20, cy - 4, cx + 24, cy - 16); ctx.stroke();
+        ctx.strokeStyle = '#ffd66b'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(cx + 9, cy + 6); ctx.quadraticCurveTo(cx + 19, cy - 5, cx + 22, cy - 14); ctx.stroke();
+      } else if (m.type === 'frost_sentinel') {
+        // twin Frostfang blades, one in each fist
+        ctx.strokeStyle = d.glow; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx - 9, cy + 6); ctx.lineTo(cx - 19, cy - 12);
+        ctx.moveTo(cx + 9, cy + 6); ctx.lineTo(cx + 19, cy - 12);
+        ctx.stroke();
+        ctx.strokeStyle = '#e8f8ff'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx - 9, cy + 6); ctx.lineTo(cx - 18, cy - 10);
+        ctx.moveTo(cx + 9, cy + 6); ctx.lineTo(cx + 18, cy - 10);
+        ctx.stroke();
+      }
     }
     ctx.font = 'bold 11px Verdana'; ctx.textAlign = 'center';
     ctx.fillStyle = d.glow;
@@ -1874,7 +2091,7 @@ function drawPlayer(sx, sy, time) {
     ctx.fillStyle = '#c9a558'; ctx.fillRect(cx - 5, cy + dy - 17, 8, 2);
   } else {
     const tier = player.equip.armor ? player.equip.armor.split('_')[0] : null;
-    const tunic = {bronze:'#8a5a2a', iron:'#8a8a92', steel:'#a8b0bc', obsidian:'#3a3a44', valyrian:'#7a4a4a'}[tier] || '#4a5a3a';
+    const tunic = {bronze:'#8a5a2a', iron:'#8a8a92', steel:'#a8b0bc', obsidian:'#3a3a44', valyrian:'#7a4a4a', frostscale:'#3a6ab0'}[tier] || '#4a5a3a';
     drawHumanoid(sx, sy, tunic, '#c9a558');
     if (player.equip.weapon) {
       ctx.strokeStyle = '#d8d8e0'; ctx.lineWidth = 3;
@@ -1928,7 +2145,9 @@ canvas.addEventListener('mousemove', e => {
   } else if (npc) tip = '💬 Talk to ' + npc.name;
   else if (node && node.kind !== 'gate') {
     const nd = NODE_DEFS[node.kind];
-    tip = node.dead ? nd.name + ' (depleted)' : nd.verb + ' ' + nd.name + (nd.lvl ? ' (lvl ' + nd.lvl + ' ' + nd.skill + ')' : '');
+    if (node.kind === 'shop') tip = '🪙 Trade at ' + SHOPS[node.shop].name;
+    else if (node.kind === 'ferry') tip = '⛵ Board the ferry (' + FERRY_FARE + ' gold)';
+    else tip = node.dead ? nd.name + ' (depleted)' : nd.verb + ' ' + nd.name + (nd.lvl ? ' (lvl ' + nd.lvl + ' ' + nd.skill + ')' : '');
   }
   hoverTip.style.display = tip ? 'block' : 'none';
   hoverTip.textContent = tip;
