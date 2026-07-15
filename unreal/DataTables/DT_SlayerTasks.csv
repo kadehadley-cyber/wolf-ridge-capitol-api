@@ -1,0 +1,6 @@
+Name,MobID,MinCombatLevel,MinCount,MaxCount,BonusXPPerLevel,GoldPerLevel
+task_bandit,bandit,3,8,14,1,2
+task_direwolf,direwolf,8,8,14,1,2
+task_wight,wight,15,9,15,1,2
+task_sellsword,sellsword,25,10,16,1,2
+task_drake,drake,40,8,13,1,2

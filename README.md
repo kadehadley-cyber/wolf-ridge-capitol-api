@@ -230,7 +230,7 @@ small deployments, not thousands of users.
 ## Bonus: KANDARIN — Realm of Kings 👑
 
 This repo also hosts [`public/game/`](public/game/README.md) — **Kandarin: Realm of Kings**, a
-self-contained browser RPG: RuneScape-style skilling (13 skills, levels 1–99) in
+self-contained browser RPG: RuneScape-style skilling (15 skills, levels 1–99) in
 a Game of Thrones-inspired realm, with dragon riding, dragonfire castle raids,
 stores, and five elemental bosses, rendered in real 3D by a hand-written WebGL2
 engine (sun-lit elevated terrain, animated water, atmospheric fog, and a

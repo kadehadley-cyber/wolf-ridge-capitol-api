@@ -1,0 +1,11 @@
+Name,DisplayName,Level,HP,Attack,Defence,MaxHit,bBoss,bAggro,Color,GlowColor,RespawnTicks,SlayerXP
+bandit,Kingsroad Bandit,5,18,5,4,2,false,false,#8a6d3b,,25,14
+direwolf,Direwolf,10,26,10,8,3,false,false,#8d949c,,25,21
+wight,Wight,22,42,20,15,5,false,true,#a9c8d8,,25,34
+sellsword,Sellsword,28,55,26,24,6,false,false,#9c3a34,,25,44
+drake,Wild Drake,45,90,40,34,9,false,true,#b03326,,25,72
+gilded_sentinel,The Gilded Sentinel,60,150,52,45,11,true,true,#8a6a1a,#ffe95c,300,120
+venom_sentinel,The Venom Sentinel,65,170,58,50,12,true,true,#4a3060,#8cf03c,300,136
+flame_sentinel,The Flame Sentinel,70,190,64,56,14,true,true,#8a2015,#ff7b2a,300,152
+frost_sentinel,The Frost Sentinel,75,220,70,62,15,true,true,#26437a,#5ac8f0,300,176
+chained_wraith,The Chained Wraith,90,300,85,75,18,true,true,#161c12,#aef05c,300,240

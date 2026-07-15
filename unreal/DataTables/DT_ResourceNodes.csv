@@ -1,0 +1,20 @@
+Name,DisplayName,Verb,Skill,ReqLevel,XP,LootItemID,RespawnTicks,HP
+pine,Sentinel Pine,Chop,woodcutting,1,25,logs,22,0
+ironwood,Ironwood Tree,Chop,woodcutting,20,60,ironwood_logs,45,0
+weirwood,Weirwood Tree,Chop,woodcutting,45,120,weirwood_logs,80,0
+copper,Copper Rock,Mine,mining,1,17,copper_ore,25,0
+iron,Iron Rock,Mine,mining,15,35,iron_ore,45,0
+glassrock,Dragonglass Vein,Mine,mining,30,65,dragonglass,60,0
+valrock,Valyrian Vein,Mine,mining,55,140,valyrian_ore,120,0
+fish_trout,River Fishing Spot,Fish,fishing,1,30,raw_trout,0,0
+fish_salmon,Salmon Run,Fish,fishing,20,70,raw_salmon,0,0
+fish_black,Deepwater Spot,Fish,fishing,40,120,raw_blackfish,0,0
+bank,Bank Chest,Open,,0,0,,0,0
+anvil,Forge & Anvil,Smith at,,0,0,,0,0
+range,Cooking Fire,Cook at,,0,0,,0,0
+roost,Dragon Roost,Approach,,0,0,,0,0
+throne,The Ember Throne,Approach,,0,0,,0,0
+tower,Ember Keep Tower,Inspect,,0,0,,0,40
+gate,Frostwall Gate,Pass,,0,0,,0,0
+shop,Store,Trade at,,0,0,,0,0
+ferry,Ferry,Board,,0,0,,0,0

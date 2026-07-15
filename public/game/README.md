@@ -1,7 +1,7 @@
 # KANDARIN: Realm of Kings 👑
 
 A browser RPG that plays like classic RuneScape — point-and-click, 600 ms game
-ticks, 13 skills with the real exponential 1–99 XP curve — set in a Game of
+ticks, 15 skills with the real exponential 1–99 XP curve — set in a Game of
 Thrones-inspired realm, with **Dragonriding** as a first-class skill.
 
 **Rendered in real 3D.** A hand-written WebGL2 engine draws a sun-lit landscape
@@ -42,7 +42,10 @@ cd public/game && python3 -m http.server 8080
 Combat: **Attack · Strength · Defence · Hitpoints · Archery · Sorcery · Faith**
 Gathering: **Woodcutting · Mining · Fishing**
 Artisan: **Smithing · Cooking**
-And the thirteenth: **Dragonriding**
+Support: **Slayer** 💀 (contracts from Slayer Master Kessa — kill N of a monster
+for XP and bounties) · **Gods' Hand** ⚡ (prayer-style toggleable boosts — extra
+damage, stone skin, life-steal — that drain favor while active; press B)
+And the crown of them all: **Dragonriding**
 
 Every combat class has its own RuneScape-style gear ladder, and a weapon only
 lends power to its own class:

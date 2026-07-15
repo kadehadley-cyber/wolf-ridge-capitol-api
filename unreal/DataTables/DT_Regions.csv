@@ -1,0 +1,10 @@
+Name,DisplayName,Bounds,SuggestedFabPack
+wolf_ridge,Wolf Ridge,tiles 33-47 x 29-41,Infinity Blade: Ice Lands (snowy keep)
+riverlands,The Riverlands,central grasslands,Infinity Blade: Grass Lands / Megascans meadows
+capitol,The Capitol,tiles 47-67 x 87-105,Infinity Blade: Castle
+north_frostwall,The North & Frostwall,"y < 34, wall at y=20",Ice Lands + Megascans snow
+beyond_wall,Beyond the Frostwall,y < 20,"Ice Lands, blizzard post-process"
+dragonmont,Dragonmont & Ember Keep,x >= 110,Infinity Blade: Fire Lands / volcanic Megascans
+narrow_sea,The Narrow Sea,"strait, southern water",UE Water plugin ocean
+dorne,Dorne & Sunspear,south of the strait,desert Megascans + Ancient Game props
+drowned_bastion,The Drowned Bastion,islet 118-130 x 114-126,"sea-stack rocks, ruins"

@@ -41,6 +41,36 @@ const SKILLS = [
   {id:'smithing',     name:'Smithing',     icon:'🔨'},
   {id:'cooking',      name:'Cooking',      icon:'🍖'},
   {id:'dragonriding', name:'Dragonriding', icon:'🐉'},
+  {id:'slayer',       name:'Slayer',       icon:'💀'},
+  {id:'godshand',     name:"Gods' Hand",   icon:'⚡'},
+];
+
+/* ---------------- Gods' Hand boosts (prayer-style toggles) ----------------
+   Toggling a boost drains favor each tick; favor recharges slowly while all
+   boosts are off, from burying bones, or instantly at Grand Maester Pyros.
+   Gods' Hand XP accrues from favor spent. */
+const BOOSTS = [
+  {id:'fury',      name:"Warrior's Fury",    icon:'⚔️', lvl:1,  drain:0.30, desc:'+15% melee damage'},
+  {id:'hawkeye',   name:"Hawk's Eye",        icon:'🏹', lvl:10, drain:0.30, desc:'+15% archery damage'},
+  {id:'wrath',     name:"Mage's Wrath",      icon:'🔮', lvl:20, drain:0.30, desc:'+15% sorcery damage'},
+  {id:'stoneskin', name:'Stone Skin',        icon:'🛡️', lvl:30, drain:0.40, desc:'-20% damage taken'},
+  {id:'bloodpact', name:'Blood Pact',        icon:'🩸', lvl:45, drain:0.50, desc:'heal 1 HP per 4 damage you deal'},
+  {id:'sevenfold', name:'Wrath of the Seven',icon:'⚡', lvl:60, drain:0.80, desc:'+25% ALL damage (even dragonfire)'},
+];
+const maxFavor = () => 20 + lvlOf('godshand');
+function boostActive(id) {
+  return !!player.boosts[id] && lvlOf('godshand') >= BOOSTS.find(b => b.id === id).lvl;
+}
+
+/* ---------------- Slayer tasks ----------------
+   Slayer Master Kessa (the Capitol) assigns a contract: kill N of a monster.
+   Each task kill grants Slayer XP; finishing pays a bonus and gold. */
+const SLAYER_POOL = [
+  {type:'bandit',    cmb:3,  min:8,  max:14},
+  {type:'direwolf',  cmb:8,  min:8,  max:14},
+  {type:'wight',     cmb:15, min:9,  max:15},
+  {type:'sellsword', cmb:25, min:10, max:16},
+  {type:'drake',     cmb:40, min:8,  max:13},
 ];
 
 /* ---------------- Items ----------------
@@ -391,6 +421,7 @@ function genWorld() {
     {id:'maera',  name:'Lady Maera Wolfhart', x:40, y:31, color:'#c8ccd8'},
     {id:'pyros',  name:'Grand Maester Pyros', x:53, y:99, color:'#c9a558'},
     {id:'rhaella',name:'Dragonkeeper Rhaella', x:125, y:48, color:'#c46a5a'},
+    {id:'kessa',  name:'Slayer Master Kessa', x:61, y:96, color:'#7a4a6a'},
   ];
 
   // --- Mob spawns ---
@@ -478,6 +509,8 @@ const player = {
   quests:{q1:0, q2:0, q3:0, q4:0, q5:0, q3burned:0, throne:false, slain:{}},
   dragonAspect:'ruby',
   dead:false,
+  boosts:{}, favor:20, favorXpAcc:0,
+  slayer:{type:null, left:0, total:0, done:0},
 };
 
 function initSkills() {
@@ -488,7 +521,7 @@ function initSkills() {
 const lvlOf = id => toLevel(player.skills[id]);
 const maxHp = () => lvlOf('hitpoints');
 function combatLevel() {
-  const base = 0.25 * (lvlOf('defence') + lvlOf('hitpoints') + Math.floor(lvlOf('faith') / 2));
+  const base = 0.25 * (lvlOf('defence') + lvlOf('hitpoints') + Math.floor((lvlOf('faith') + lvlOf('godshand')) / 2));
   const off = 0.325 * Math.max(lvlOf('attack') + lvlOf('strength'), 1.5 * lvlOf('archery'), 1.5 * lvlOf('sorcery'));
   return Math.max(3, Math.floor(base + off));
 }
@@ -660,10 +693,20 @@ function classPower(cls) {
 function armorValue()  { return player.equip.armor ? ITEMS[player.equip.armor].armor : 0; }
 
 function styleReach() { return player.style === 'melee' ? 1 : player.style === 'archery' ? 6 : 7; }
+function boostDamageMult() { // Gods' Hand: class boost + Wrath of the Seven stack
+  let m = 1;
+  if (player.style === 'melee' && boostActive('fury')) m *= 1.15;
+  if (player.style === 'archery' && boostActive('hawkeye')) m *= 1.15;
+  if (player.style === 'sorcery' && boostActive('wrath')) m *= 1.15;
+  if (boostActive('sevenfold')) m *= 1.25;
+  return m;
+}
 function playerMaxHit() {
-  if (player.style === 'melee')   return Math.max(1, Math.floor(1 + lvlOf('strength') * 0.12 + classPower('melee') * 0.6));
-  if (player.style === 'archery') return Math.max(1, Math.floor(1 + lvlOf('archery') * 0.12 + classPower('archery') * 0.6));
-  return Math.max(1, Math.floor(1 + lvlOf('sorcery') * 0.11 + classPower('sorcery') * 0.6));
+  let base;
+  if (player.style === 'melee')        base = 1 + lvlOf('strength') * 0.12 + classPower('melee') * 0.6;
+  else if (player.style === 'archery') base = 1 + lvlOf('archery') * 0.12 + classPower('archery') * 0.6;
+  else                                 base = 1 + lvlOf('sorcery') * 0.11 + classPower('sorcery') * 0.6;
+  return Math.max(1, Math.floor(base * boostDamageMult()));
 }
 function playerAccStat() {
   if (player.style === 'melee')   return lvlOf('attack') + classPower('melee');
@@ -692,6 +735,10 @@ function playerAttack(mob) {
     else addXp('sorcery', dmg * 4);
     addXp('defence', dmg * 1);
     addXp('hitpoints', dmg * 1.33);
+    if (boostActive('bloodpact') && player.hp < maxHp()) {
+      player.hp = Math.min(maxHp(), player.hp + Math.max(1, Math.ceil(dmg / 4)));
+      renderHud();
+    }
   }
   if (player.style !== 'melee') {
     particles.push({x:player.x+0.5, y:player.y+0.5,
@@ -723,6 +770,20 @@ function killMob(mob) {
   } else {
     log(`<span class="good">You have defeated ${mobTitle(d)}.</span>`);
   }
+  // Slayer: credit the contract
+  if (player.slayer.type === mob.type && player.slayer.left > 0) {
+    player.slayer.left--;
+    addXp('slayer', Math.round(d.hp * 0.8));
+    if (player.slayer.left === 0) {
+      player.slayer.done++;
+      const bonus = player.slayer.total * d.lvl, gold = player.slayer.total * d.lvl * 2;
+      addXp('slayer', bonus); addItem('coins', gold, true);
+      log(`<span class="lvl">💀 Slayer task complete! ${player.slayer.total} × ${d.name} (+${bonus} bonus Slayer XP, ${gold} gold). Kessa in the Capitol has another contract.</span>`);
+    } else {
+      log(`<span class="sys">💀 Slayer task: ${player.slayer.left} × ${d.name} remain.</span>`);
+    }
+    renderQuests();
+  }
   for (const [item, lo, hi, prob] of d.drops)
     if (Math.random() < prob) addItem(item, lo + Math.floor(Math.random() * (hi - lo + 1)), true);
   if (player.combat && player.combat.mob === mob) { player.combat = null; player.goal = null; }
@@ -737,6 +798,7 @@ function mobAttack(mob) {
   hurtPlayer(dmg, d.name);
 }
 function hurtPlayer(dmg, source) {
+  if (boostActive('stoneskin')) dmg = Math.floor(dmg * 0.8);
   dmg = Math.min(dmg, player.hp);
   player.hp -= dmg;
   floaters.push({x:player.x, y:player.y, text:String(dmg), color:dmg ? '#ff5e4a' : '#7a8bc8', life:1.1});
@@ -762,6 +824,7 @@ function dragonBreath(target) { // target: mob or tower node
   fireLine(player.x, player.y, tx, ty);
   burst(tx, ty, '#ff7b2a', 12);
   let dmg = 2 + Math.floor(Math.random() * (3 + drl * 0.3));
+  if (boostActive('sevenfold')) dmg = Math.floor(dmg * 1.25);
   if (isTower) {
     target.hp -= dmg;
     floaters.push({x:tx, y:ty, text:String(dmg), color:'#ffb14a', life:1.1});
@@ -921,11 +984,40 @@ function talkTo(npc) {
     }
   }
   if (npc.id === 'pyros') {
-    player.hp = maxHp(); renderHud();
+    player.hp = maxHp(); player.favor = maxFavor(); renderHud();
     openModal(npc.name, `
       <p>"Ah, a smallfolk with ambitions. The Ember Throne has sat empty since the last king burned.
       Prove yourself in the North, bond a dragon, break the Ember Keep — and the realm may yet kneel."</p>
-      <p style="margin-top:8px">"There. I've tended your wounds — <b>your health is restored</b>. The Capitol bank and forge are at your disposal."</p>`);
+      <p style="margin-top:8px">"There. I've tended your wounds and spoken the old rites — <b>your health and
+      your gods' favor are restored</b>. The Capitol bank and forge are at your disposal."</p>`);
+  }
+  if (npc.id === 'kessa') {
+    const s = player.slayer;
+    if (s.type && s.left > 0) {
+      const d = MOB_DEFS[s.type];
+      openModal(npc.name, `
+        <p>"Your contract stands, slayer: <b>${s.left} × ${d.name}</b> still draw breath.
+        Come back when the steel is wet."</p>
+        <p class="sub" style="color:var(--dim); margin-top:8px">Tasks completed: ${s.done}</p>`);
+    } else {
+      // deal a task suited to the slayer's combat level
+      const cmb = combatLevel();
+      const pool = SLAYER_POOL.filter(t => cmb >= t.cmb);
+      const t = pool[Math.floor(Math.random() * pool.length)] || SLAYER_POOL[0];
+      const n = t.min + Math.floor(Math.random() * (t.max - t.min + 1));
+      const d = MOB_DEFS[t.type];
+      openModal(npc.name, `
+        <p>"So you're the one the guards whisper about. I broker death, plain and simple — the crown pays
+        for pests removed. Your contract: slay <b>${n} × ${d.name}</b> (level ${d.lvl}).
+        Each kill on contract earns Slayer XP; finish it and I'll pay a bounty."</p>
+        ${s.done ? `<p class="sub" style="color:var(--dim); margin-top:8px">Tasks completed: ${s.done}</p>` : ''}
+        <button class="mbtn" id="qbtn">Take the contract</button>`);
+      document.getElementById('qbtn').onclick = () => {
+        player.slayer = {type: t.type, left: n, total: n, done: s.done};
+        log(`<span class="lvl">💀 New Slayer task: ${n} × ${d.name}. Hunt well.</span>`);
+        renderQuests(); closeModal();
+      };
+    }
   }
   if (npc.id === 'rhaella') {
     if (!player.quests.q1) {
@@ -962,6 +1054,44 @@ function talkTo(npc) {
       openModal(npc.name, '<p>"Dragonlord. The keep\'s towers rebuild themselves by foul sorcery every so often — burn them again whenever you wish. She enjoys it, honestly. Best Dragonriding training in the realm."</p>');
     }
   }
+}
+
+/* ---------------- Gods' Hand panel ---------------- */
+function updateBoostBtn() {
+  const btn = document.getElementById('boostBtn');
+  if (btn) btn.classList.toggle('active', Object.keys(player.boosts).some(boostActive));
+}
+function openGodsHand() {
+  const gl2 = lvlOf('godshand');
+  const favPct = Math.round(player.favor / maxFavor() * 100);
+  const rows = BOOSTS.map(b => {
+    const unlocked = gl2 >= b.lvl, on = boostActive(b.id);
+    return `<div class="mrow${unlocked ? '' : ' off'}" data-boost="${unlocked ? b.id : ''}">
+      <span class="ico">${b.icon}</span>
+      <span>${b.name}<div class="sub">${b.desc} · drains ${b.drain}/tick</div></span>
+      <span class="right">${unlocked ? (on ? 'ON ✅' : 'off') : "Gods' Hand " + b.lvl}</span>
+    </div>`;
+  }).join('');
+  openModal("⚡ Gods' Hand — divine boosts", `
+    <p>Call on the gods for strength. Active boosts <b>drain favor</b> each tick and grant
+    Gods' Hand XP; favor returns while the gods rest, from burying bones (+4), or in full
+    from Grand Maester Pyros.</p>
+    <div style="margin:10px 0 4px; font-size:12px; color:var(--dim)">Favor — ${Math.floor(player.favor)}/${maxFavor()}</div>
+    <div style="height:10px; background:#151310; border:1px solid #3a3227; border-radius:5px; overflow:hidden">
+      <div style="height:100%; width:${favPct}%; background:linear-gradient(90deg,#c9a558,#f4e3a1)"></div>
+    </div>
+    <div style="margin-top:12px">${rows}</div>`);
+  document.querySelectorAll('#modalBody .mrow[data-boost]').forEach(el => {
+    const id = el.getAttribute('data-boost'); if (!id) return;
+    el.onclick = () => {
+      if (player.boosts[id]) delete player.boosts[id];
+      else {
+        if (player.favor < 1) { log('<span class="bad">⚡ The gods do not answer — your favor is spent.</span>'); return; }
+        player.boosts[id] = true;
+      }
+      updateBoostBtn(); openGodsHand();
+    };
+  });
 }
 
 function openRoost() {
@@ -1152,9 +1282,13 @@ function openHelp() {
     Flamebrand Katana and the Frost Sentinel's Frostscale Armor. And sailors whisper of a fifth: <b>The Chained Wraith</b>
     (lvl 90), bound to the Drowned Bastion islet in the southern sea, where only a dragon can carry you.
     It guards the black-and-viridian <b>Wraith aspect</b> and a Runed Chain-Glaive, the finest weapon in the realm.</p>
+    <p style="margin-top:8px"><b>Slayer 💀:</b> Slayer Master Kessa by the Capitol bank sells contracts — slay
+    N of a monster for Slayer XP and a completion bounty. <b>Gods' Hand ⚡:</b> press B (or the ⚡ button) to
+    toggle divine boosts — extra damage, stone skin, life-steal — which drain favor while active. Refill favor
+    by burying bones or visiting Grand Maester Pyros.</p>
     <p style="margin-top:8px"><b>The realm is rendered in 3D</b> — a sun-lit landscape with real elevation,
-    water and atmospheric haze. <b>Keys:</b> M mount/dismount · V switch camera (close third-person chase ↔ overhead) ·
-    ← → orbit the camera around you · ↑ ↓ or scroll wheel zoom · Esc close windows.
+    water and atmospheric haze. <b>Keys:</b> M mount/dismount · B Gods' Hand · V switch camera (close third-person
+    chase ↔ overhead) · ← → orbit the camera around you · ↑ ↓ or scroll wheel zoom · Esc close windows.
     In chase view the camera swings behind you as you travel.</p>
     <p style="margin-top:8px"><b>Map 🗺️:</b> click the minimap to unroll a chart of the whole realm.</p>`);
 }
@@ -1177,6 +1311,8 @@ function openSkillGuide(id) {
     smithing:'Smelt bars and forge weapons, armor and arrows at any anvil. Valyrian steel needs level 55+.',
     cooking:'Cook at any fire. Trout lvl 1 · Salmon lvl 15 · Blackfish lvl 40. Higher levels stop burning.',
     dragonriding:'The skill of dragonlords. Fly (M) for XP; dragonfire kills give triple XP; razing Ember Keep towers gives 150xp each.\n\nUnlocks — lvl 1: flight & dragonfire · lvl 20: swifter wings (speed +1) · lvl 40: swifter still · lvl 60: your drake\'s flame burns ever hotter · lvl 99: legend of the skies.',
+    slayer:'The contract killer\'s craft. Slayer Master Kessa (by the Capitol bank) assigns a task: slay N of a chosen monster. Each on-task kill grants Slayer XP (~80% of the beast\'s hitpoints); completing the contract pays a bonus and gold. Tougher contracts unlock as your combat level rises.',
+    godshand:'Call on the gods for battle boosts (⚡ button or B). Active boosts drain favor each tick and grant Gods\' Hand XP; favor returns while the gods rest, from burying bones (+4), or in full from Grand Maester Pyros.\n\nBoosts — lvl 1: Warrior\'s Fury (+15% melee) · 10: Hawk\'s Eye (+15% archery) · 20: Mage\'s Wrath (+15% sorcery) · 30: Stone Skin (-20% damage taken) · 45: Blood Pact (heal 1 per 4 dealt) · 60: Wrath of the Seven (+25% ALL damage).',
   };
   openModal(`${s.icon} ${s.name} — level ${lvl}`, `
     <p style="white-space:pre-line">${guides[id]}</p>
@@ -1208,6 +1344,21 @@ function tick() {
   if (player.cookCd > 0) player.cookCd--;
   if (player.atkCd > 0) player.atkCd--;
   if (player.breathCd > 0) player.breathCd--;
+
+  // Gods' Hand: active boosts drain favor (and pay XP); idle favor trickles back
+  const drain = BOOSTS.reduce((a, b) => a + (boostActive(b.id) ? b.drain : 0), 0);
+  if (drain > 0) {
+    player.favor = Math.max(0, player.favor - drain);
+    player.favorXpAcc += drain * 3;
+    if (player.favorXpAcc >= 1) { const g = Math.floor(player.favorXpAcc); player.favorXpAcc -= g; addXp('godshand', g); }
+    if (player.favor <= 0) {
+      player.boosts = {};
+      log('<span class="bad">⚡ Your favor is spent — the gods fall silent. Bury bones or seek Grand Maester Pyros.</span>');
+      updateBoostBtn();
+    }
+  } else if (player.favor < maxFavor()) {
+    player.favor = Math.min(maxFavor(), player.favor + 0.1);
+  }
 
   // movement
   const speed = player.mounted ? 3 + Math.min(3, Math.floor(lvlOf('dragonriding') / 20)) : 2;
@@ -1367,6 +1518,7 @@ function saveGame() {
     equip:player.equip, style:player.style, x:player.x, y:player.y,
     dragonTamed:player.dragonTamed, dragonAspect:player.dragonAspect,
     quests:player.quests, t:tickCount,
+    slayer:player.slayer, favor:player.favor, boosts:player.boosts,
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* private mode */ }
 }
@@ -1384,6 +1536,9 @@ function loadGame() {
     player.dragonAspect = d.dragonAspect || 'ruby';
     Object.assign(player.quests, d.quests);
     if (!player.quests.slain) player.quests.slain = {};
+    player.slayer = d.slayer || {type:null, left:0, total:0, done:0};
+    player.favor = d.favor != null ? d.favor : maxFavor();
+    player.boosts = d.boosts || {};
     tickCount = d.t || 0;
     return true;
   } catch (e) { return false; }
@@ -1437,7 +1592,8 @@ function useItem(i) {
   } else if (def.faith) {
     removeItem(s.id, 1);
     addXp('faith', def.faith);
-    log('<span class="sys">You bury the bones beneath the cold earth. The Old Gods take notice.</span>');
+    player.favor = Math.min(maxFavor(), player.favor + 4);
+    log('<span class="sys">You bury the bones beneath the cold earth. The Old Gods take notice. (+4 favor)</span>');
   } else if (def.aspect) {
     if (!player.dragonTamed) { log('<span class="sys">A strange scale thrums with power... but you have no dragon to attune it to yet.</span>'); return; }
     removeItem(s.id, 1);
@@ -1524,6 +1680,17 @@ function renderQuests() {
   }
   if (player.quests.throne)
     html += '<div class="quest done"><h4>👑 Monarch of the Realm</h4><p>You sat the Ember Throne. All hail.</p></div>';
+  // Slayer contract
+  html += '<h3 class="pane" style="margin-top:12px">💀 Slayer contract</h3>';
+  if (player.slayer.type && player.slayer.left > 0) {
+    const d = MOB_DEFS[player.slayer.type];
+    html += `<div class="quest"><h4>💀 ${d.name} × ${player.slayer.total}</h4>
+      <p>Kessa's contract — each kill on task earns Slayer XP.</p>
+      <div class="prog">${player.slayer.total - player.slayer.left}/${player.slayer.total} slain · ${player.slayer.done} tasks completed</div></div>`;
+  } else {
+    html += `<div class="quest"><h4>No contract</h4><p>Slayer Master Kessa waits by the Capitol bank
+      with work for capable killers.</p><div class="prog">${player.slayer.done} tasks completed</div></div>`;
+  }
   tabContent.innerHTML = html;
 }
 
@@ -2746,11 +2913,13 @@ window.addEventListener('keydown', e => {
   if (!gameStarted) return;
   if (e.key === 'm' || e.key === 'M') toggleMount();
   if (e.key === 'v' || e.key === 'V') toggleView();
+  if (e.key === 'b' || e.key === 'B') openGodsHand();
   if (e.key.startsWith('Arrow')) { keysHeld[e.key] = true; e.preventDefault(); }
 });
 window.addEventListener('keyup', e => { delete keysHeld[e.key]; });
 window.addEventListener('blur', () => { for (const k in keysHeld) delete keysHeld[k]; });
 document.getElementById('mountBtn').onclick = toggleMount;
+document.getElementById('boostBtn').onclick = openGodsHand;
 document.getElementById('viewBtn').onclick = toggleView;
 document.getElementById('viewBtn').textContent = camMode === 'chase' ? '📷 Chase' : '📷 Overhead';
 document.getElementById('helpBtn').onclick = openHelp;
@@ -3277,7 +3446,7 @@ function startGame(fresh) {
   document.getElementById('title').style.display = 'none';
   gameStarted = true;
   player.hp = Math.min(player.hp, maxHp());
-  renderTab(); renderHud(); updateMountBtn(); updateCoinHud();
+  renderTab(); renderHud(); updateMountBtn(); updateCoinHud(); updateBoostBtn();
   if (fresh) {
     log('<span class="lvl">⚔ Welcome to KANDARIN. You wake outside the gates of Wolf Ridge with a rusty sword and three fish.</span>');
     log('<span class="sys">Click to move. Lady Maera awaits inside the town — she has work for you. Press ❓ Help any time.</span>');
