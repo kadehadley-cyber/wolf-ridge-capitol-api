@@ -23,6 +23,27 @@ memory, reminders — plus the newer powers:
 | "turn off the lab lights" / "open the mask" | Home Assistant control, when configured on the Worker. |
 | "open mask" (named device) | Fires the matching device webhook (`JARVIS_DEVICES`), for DIY hardware. |
 
+### Run your PC by voice (local, instant, offline)
+
+These are handled on-device — no round-trip to the brain — so they're
+immediate, and they work even offline:
+
+| You say | What happens |
+| --- | --- |
+| "open Chrome" / "open Notepad" / "open Spotify" / "open weather.com" | Launches the app or site. |
+| "search the web for the F1 standings" | Opens the search in your browser. |
+| "take a screenshot" | Saves a PNG to your Pictures folder. |
+| "volume up / down", "mute", "pause", "next track" | Media & volume keys. |
+| "lock the computer" | Locks Windows. |
+
+Anything not in that short list still goes to the brain, so "open the mask"
+reaches Home Assistant while "open Notepad" opens Notepad.
+
+**Conversation window.** After Jarvis answers, it keeps listening for a few
+seconds so you can follow up **without** saying "Hey Jarvis" again — ask a
+question, then just say "and tomorrow?". Tune with `JARVIS_FOLLOWUP` (seconds;
+`0` disables).
+
 ## Setup
 
 1. Install **Python 3.9+** ([python.org](https://python.org); on Windows tick *Add to PATH*).
@@ -67,6 +88,7 @@ voices by default; set an `…Neural` name to use the neural engine there too.
 | `WHISPER_MODEL` | `base.en` | `tiny.en` faster / `small.en` more accurate. |
 | `JARVIS_HUD_PORT` | `8090` | Local port for the HUD + `/state`. |
 | `JARVIS_WAKE_THRESHOLD` | `0.5` | Lower = more sensitive wake word. |
+| `JARVIS_FOLLOWUP` | `6` | Seconds to keep listening after a reply for a wake-word-free follow-up; `0` disables. |
 | `JARVIS_INPUT_DEVICE` | system default | Microphone, by index or name substring (e.g. `MacBook`). |
 | `JARVIS_WAKE_DEBUG` | off | `1` prints a once-a-second wake score + mic level readout. |
 
@@ -104,7 +126,15 @@ aliases" → switch off `python.exe` and `python3.exe`*. To see any launcher
 error directly, open **Command Prompt**, `cd` into the `desktop` folder, and
 run `Jarvis.bat` from there — the window won't close.
 
-## Smart home & the suit
+## Talking to it
+
+After every reply Jarvis keeps listening for about six seconds, so you can
+answer back **without saying "Hey Jarvis" again** — a real back-and-forth.
+Tune or disable with `JARVIS_FOLLOWUP` (seconds; `0` = off).
+
+## PC voice commands (instant, offline)
+
+These are handled on the machine itself — no round-trip, immediate:
 
 Device control lives on the **Worker** (so every surface shares it):
 
