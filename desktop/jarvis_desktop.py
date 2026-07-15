@@ -323,6 +323,67 @@ class WorkerBrain:
 DEFAULT_EDGE_VOICE = "en-GB-RyanNeural"
 EDGE_VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Za-z]{2,}-\w+Neural$")
 
+# The wearer's own J.A.R.V.I.S. voice: put a clean speech sample at
+# voices/jarvis_voice.wav (or point JARVIS_VOICE_SAMPLE at one) and Jarvis
+# clones it locally with XTTS for every reply. The cloning stack is an
+# optional install (requirements-voice.txt — it pulls PyTorch); without it,
+# the closest stock voice steps in so nothing ever goes silent.
+VOICES_DIR = pathlib.Path(__file__).resolve().parent / "voices"
+DEFAULT_VOICE_SAMPLE = VOICES_DIR / "jarvis_voice.wav"
+# The bundled sample is an Australian male, so the stock stand-in is too.
+SAMPLE_FALLBACK_EDGE_VOICE = "en-AU-WilliamNeural"
+
+_CLONE = {"tts": None, "dead": False}
+
+
+def _voice_sample_path():
+    override = os.environ.get("JARVIS_VOICE_SAMPLE", "").strip()
+    if override:
+        p = pathlib.Path(override)
+        return p if p.is_file() else None
+    return DEFAULT_VOICE_SAMPLE if DEFAULT_VOICE_SAMPLE.is_file() else None
+
+
+def _default_edge_voice():
+    return SAMPLE_FALLBACK_EDGE_VOICE if _voice_sample_path() is not None else DEFAULT_EDGE_VOICE
+
+
+def _speak_clone(text: str) -> bool:
+    """Speak in the cloned voice (local XTTS). Returns False on any failure —
+    package not installed, model trouble, playback — so callers fall back."""
+    sample = _voice_sample_path()
+    if sample is None or _CLONE["dead"]:
+        return False
+    try:
+        if _CLONE["tts"] is None:
+            from TTS.api import TTS  # coqui-tts — the optional cloning stack
+
+            log("Loading the cloned Jarvis voice (first use downloads the model)…")
+            _CLONE["tts"] = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
+            log("Cloned voice ready.")
+        wav = os.path.join(tempfile.gettempdir(), "jarvis_clone.wav")
+        _CLONE["tts"].tts_to_file(
+            text=text, speaker_wav=str(sample), language="en", file_path=wav
+        )
+        ok = _play_mp3(wav)  # av decodes wav just as happily
+        try:
+            os.remove(wav)
+        except OSError:
+            pass
+        return ok
+    except ImportError:
+        log(
+            "Custom voice sample found, but the cloning stack isn't installed. "
+            "Enable it with: .venv\\Scripts\\pip install -r requirements-voice.txt "
+            "— using the closest stock voice meanwhile."
+        )
+        _CLONE["dead"] = True  # log once, don't retry every reply
+        return False
+    except Exception as err:  # noqa: BLE001
+        log(f"Cloned voice unavailable ({err}); using the stock voice.")
+        _CLONE["dead"] = True
+        return False
+
 
 def _wants_edge(voice: str) -> bool:
     """Neural voices are the default wherever the platform voice is worse
@@ -341,6 +402,10 @@ def speak(text: str, voice: str) -> None:
     # keeps it an argument without changing the speech.
     guarded = f" {text}" if text.startswith("-") else text
     try:
+        # The wearer's own cloned voice comes first on every platform when a
+        # sample is present (and the classic engine isn't forced).
+        if _wants_edge(voice) and _speak_clone(text):
+            return
         if sys.platform == "darwin":
             # macOS `say` voices are already natural; neural only on request.
             if voice and EDGE_VOICE_RE.match(voice) and _speak_edge(text, voice):
@@ -349,8 +414,8 @@ def speak(text: str, voice: str) -> None:
             if subprocess.run(cmd + [guarded], check=False).returncode != 0 and voice:
                 subprocess.run(["say", guarded], check=False)
         elif sys.platform.startswith("win"):
-            # Neural first; classic System.Speech only as the offline fallback.
-            if _wants_edge(voice) and _speak_edge(text, voice or DEFAULT_EDGE_VOICE):
+            # Neural next; classic System.Speech only as the offline fallback.
+            if _wants_edge(voice) and _speak_edge(text, voice or _default_edge_voice()):
                 return
             _speak_windows(text, voice if not EDGE_VOICE_RE.match(voice or "") else "")
         else:
@@ -364,7 +429,7 @@ def speak(text: str, voice: str) -> None:
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
                 subprocess.run(["aplay", "-q", wav], check=False)
-            elif _wants_edge(voice) and _speak_edge(text, voice or DEFAULT_EDGE_VOICE):
+            elif _wants_edge(voice) and _speak_edge(text, voice or _default_edge_voice()):
                 return
             else:
                 subprocess.run(["espeak-ng", "-v", "en-gb", guarded], check=False)

@@ -85,6 +85,23 @@ voice automatically. List every neural voice with
 `.venv\Scripts\edge-tts --list-voices` (or pick another British one:
 `en-GB-ThomasNeural`, `en-GB-SoniaNeural`). macOS keeps its natural `say`
 voices by default; set an `…Neural` name to use the neural engine there too.
+
+### Your own J.A.R.V.I.S. voice (cloning)
+
+A custom voice sample lives at **`voices/jarvis_voice.wav`** (override with
+`JARVIS_VOICE_SAMPLE=<path>`). When the local cloning stack is installed,
+**every reply is synthesized in that voice, on-device**:
+
+```bat
+.venv\Scripts\pip install -r requirements-voice.txt
+```
+
+Fair warning: it installs PyTorch (~2 GB), the first reply downloads the
+~2 GB XTTS model, and each sentence takes a few seconds to synthesize on a
+CPU. Without the install (or if anything fails), Jarvis automatically speaks
+with the closest stock voice instead — for the bundled Australian sample
+that's `en-AU-WilliamNeural` — so it never goes silent. An explicit
+`JARVIS_VOICE` still overrides everything.
 | `WHISPER_MODEL` | `base.en` | `tiny.en` faster / `small.en` more accurate. |
 | `JARVIS_HUD_PORT` | `8090` | Local port for the HUD + `/state`. |
 | `JARVIS_WAKE_THRESHOLD` | `0.5` | Lower = more sensitive wake word. |
