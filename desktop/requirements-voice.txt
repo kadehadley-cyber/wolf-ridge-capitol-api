@@ -1,0 +1,12 @@
+# Optional: the cloned J.A.R.V.I.S. voice.
+#
+# Installs the local voice-cloning stack (Coqui XTTS v2) that speaks every
+# reply in the voice from voices/jarvis_voice.wav. Heavy: this pulls PyTorch
+# (roughly two gigabytes) and the first reply downloads the ~2 GB voice model.
+# Without this install, Jarvis automatically uses the closest stock neural
+# voice instead — nothing breaks.
+#
+#   Windows:  .venv\Scripts\pip install -r requirements-voice.txt
+#   mac/linux: ./.venv/bin/pip install -r requirements-voice.txt
+
+coqui-tts

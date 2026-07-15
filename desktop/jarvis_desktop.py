@@ -94,6 +94,11 @@ class Config:
         self.wake_threshold = float(
             os.environ.get("JARVIS_WAKE_THRESHOLD", saved.get("wake_threshold", 0.5))
         )
+        # After a reply, keep listening this many seconds for a follow-up (no
+        # wake word needed). 0 turns the conversation window off.
+        self.followup_secs = float(
+            os.environ.get("JARVIS_FOLLOWUP", saved.get("followup_secs", 6))
+        )
 
         # First run: ask once, save, and never ask again. This needs an interactive
         # console — when there's no usable stdin (double-clicked via pythonw, a GUI
@@ -182,20 +187,24 @@ def start_hud_server(port: int, state: AppState) -> bool:
 
 def open_hud_window(port: int) -> None:
     """Show the HUD. pywebview gives a real app window (and must own the main
-    thread); otherwise fall back to the default browser."""
+    thread); otherwise fall back to the default browser. The broad except
+    matters: on Windows a missing WebView2 runtime makes webview.start() throw,
+    and that must not take the whole app down with it."""
     url = f"http://127.0.0.1:{port}/"
     try:
         import webview  # pywebview
 
         webview.create_window("J.A.R.V.I.S.", url, width=1100, height=680, background_color="#02060b")
         webview.start()  # blocks until the window closes
-    except ImportError:
-        import webbrowser
+        return
+    except Exception as err:  # noqa: BLE001 — ImportError, missing WebView2, GUI trouble
+        log(f"HUD window unavailable ({err}); opening in your browser instead.")
+    import webbrowser
 
-        webbrowser.open(url)
-        # No window to block on — keep the process alive for the voice loop.
-        while True:
-            time.sleep(3600)
+    webbrowser.open(url)
+    # No window to block on — keep the process alive for the voice loop.
+    while True:
+        time.sleep(3600)
 
 
 # --------------------------------------------------------------------------- #
@@ -314,6 +323,67 @@ class WorkerBrain:
 DEFAULT_EDGE_VOICE = "en-GB-RyanNeural"
 EDGE_VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Za-z]{2,}-\w+Neural$")
 
+# The wearer's own J.A.R.V.I.S. voice: put a clean speech sample at
+# voices/jarvis_voice.wav (or point JARVIS_VOICE_SAMPLE at one) and Jarvis
+# clones it locally with XTTS for every reply. The cloning stack is an
+# optional install (requirements-voice.txt — it pulls PyTorch); without it,
+# the closest stock voice steps in so nothing ever goes silent.
+VOICES_DIR = pathlib.Path(__file__).resolve().parent / "voices"
+DEFAULT_VOICE_SAMPLE = VOICES_DIR / "jarvis_voice.wav"
+# The bundled sample is an Australian male, so the stock stand-in is too.
+SAMPLE_FALLBACK_EDGE_VOICE = "en-AU-WilliamNeural"
+
+_CLONE = {"tts": None, "dead": False}
+
+
+def _voice_sample_path():
+    override = os.environ.get("JARVIS_VOICE_SAMPLE", "").strip()
+    if override:
+        p = pathlib.Path(override)
+        return p if p.is_file() else None
+    return DEFAULT_VOICE_SAMPLE if DEFAULT_VOICE_SAMPLE.is_file() else None
+
+
+def _default_edge_voice():
+    return SAMPLE_FALLBACK_EDGE_VOICE if _voice_sample_path() is not None else DEFAULT_EDGE_VOICE
+
+
+def _speak_clone(text: str) -> bool:
+    """Speak in the cloned voice (local XTTS). Returns False on any failure —
+    package not installed, model trouble, playback — so callers fall back."""
+    sample = _voice_sample_path()
+    if sample is None or _CLONE["dead"]:
+        return False
+    try:
+        if _CLONE["tts"] is None:
+            from TTS.api import TTS  # coqui-tts — the optional cloning stack
+
+            log("Loading the cloned Jarvis voice (first use downloads the model)…")
+            _CLONE["tts"] = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
+            log("Cloned voice ready.")
+        wav = os.path.join(tempfile.gettempdir(), "jarvis_clone.wav")
+        _CLONE["tts"].tts_to_file(
+            text=text, speaker_wav=str(sample), language="en", file_path=wav
+        )
+        ok = _play_mp3(wav)  # av decodes wav just as happily
+        try:
+            os.remove(wav)
+        except OSError:
+            pass
+        return ok
+    except ImportError:
+        log(
+            "Custom voice sample found, but the cloning stack isn't installed. "
+            "Enable it with: .venv\\Scripts\\pip install -r requirements-voice.txt "
+            "— using the closest stock voice meanwhile."
+        )
+        _CLONE["dead"] = True  # log once, don't retry every reply
+        return False
+    except Exception as err:  # noqa: BLE001
+        log(f"Cloned voice unavailable ({err}); using the stock voice.")
+        _CLONE["dead"] = True
+        return False
+
 
 def _wants_edge(voice: str) -> bool:
     """Neural voices are the default wherever the platform voice is worse
@@ -332,6 +402,10 @@ def speak(text: str, voice: str) -> None:
     # keeps it an argument without changing the speech.
     guarded = f" {text}" if text.startswith("-") else text
     try:
+        # The wearer's own cloned voice comes first on every platform when a
+        # sample is present (and the classic engine isn't forced).
+        if _wants_edge(voice) and _speak_clone(text):
+            return
         if sys.platform == "darwin":
             # macOS `say` voices are already natural; neural only on request.
             if voice and EDGE_VOICE_RE.match(voice) and _speak_edge(text, voice):
@@ -340,8 +414,8 @@ def speak(text: str, voice: str) -> None:
             if subprocess.run(cmd + [guarded], check=False).returncode != 0 and voice:
                 subprocess.run(["say", guarded], check=False)
         elif sys.platform.startswith("win"):
-            # Neural first; classic System.Speech only as the offline fallback.
-            if _wants_edge(voice) and _speak_edge(text, voice or DEFAULT_EDGE_VOICE):
+            # Neural next; classic System.Speech only as the offline fallback.
+            if _wants_edge(voice) and _speak_edge(text, voice or _default_edge_voice()):
                 return
             _speak_windows(text, voice if not EDGE_VOICE_RE.match(voice or "") else "")
         else:
@@ -355,7 +429,7 @@ def speak(text: str, voice: str) -> None:
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
                 subprocess.run(["aplay", "-q", wav], check=False)
-            elif _wants_edge(voice) and _speak_edge(text, voice or DEFAULT_EDGE_VOICE):
+            elif _wants_edge(voice) and _speak_edge(text, voice or _default_edge_voice()):
                 return
             else:
                 subprocess.run(["espeak-ng", "-v", "en-gb", guarded], check=False)
@@ -453,14 +527,30 @@ class Transcriber:
     def __init__(self, model_name: str):
         self.model_name = model_name
         self._model = None
+        self._lock = threading.Lock()
+
+    def _ensure_model(self):
+        # Lock so the background warmup and the first real transcription can't
+        # both build the model.
+        with self._lock:
+            if self._model is None:
+                from faster_whisper import WhisperModel
+
+                log(f"Loading speech model '{self.model_name}' (first run downloads it)…")
+                self._model = WhisperModel(self.model_name, device="cpu", compute_type="int8")
+            return self._model
+
+    def warmup(self) -> None:
+        """Load the model in the background at startup, so the FIRST command
+        doesn't sit in silence while Whisper downloads and initialises."""
+        try:
+            self._ensure_model()
+            log("Speech model ready.")
+        except Exception as err:  # noqa: BLE001 — retried on first real use
+            log(f"Speech model preload failed ({err}); will retry when needed.")
 
     def transcribe(self, audio) -> str:
-        if self._model is None:
-            from faster_whisper import WhisperModel
-
-            log(f"Loading speech model '{self.model_name}' (first run downloads it)…")
-            self._model = WhisperModel(self.model_name, device="cpu", compute_type="int8")
-        segments, _ = self._model.transcribe(audio, language="en", vad_filter=True)
+        segments, _ = self._ensure_model().transcribe(audio, language="en", vad_filter=True)
         return " ".join(seg.text for seg in segments).strip()
 
 
@@ -628,8 +718,14 @@ class Listener:
             rec["on"] = False
         return np.concatenate(frames).flatten() if frames else np.zeros(0, dtype=np.float32)
 
+    def capture_followup(self, window_secs: float):
+        """A short listening window right after a reply, so the wearer can
+        answer back without saying the wake word again. Returns empty audio if
+        nobody speaks within the window."""
+        return self._record_until_silence(wait_for_speech=True, give_up_secs=window_secs)
+
     def _record_until_silence(self, silence_secs=1.1, threshold=0.012, max_secs=20,
-                              wait_for_speech=False):
+                              wait_for_speech=False, give_up_secs=None):
         np, sd = self.np, self.sd
         log("Listening…")
         self.state.set(state="listening", level=0.0)
@@ -654,9 +750,149 @@ class Listener:
                     silent += 0.1
                     if silent >= silence_secs:
                         break
+                elif give_up_secs is not None and time.time() - start > give_up_secs:
+                    break  # nobody spoke inside the follow-up window
                 if time.time() - start > max_secs and (started or not wait_for_speech):
                     break
         return np.concatenate(frames).flatten() if frames else np.zeros(0, dtype=np.float32)
+
+
+# --------------------------------------------------------------------------- #
+# Local PC commands — instant, offline, no brain round-trip
+# --------------------------------------------------------------------------- #
+
+# Apps and sites Jarvis opens by voice. Only names in this map are handled
+# locally — anything else ("open the mask", "open the garage") still goes to
+# the brain, which may reach Home Assistant or the device webhooks.
+OPEN_TARGETS = {
+    "notepad": "notepad",
+    "calculator": "calc",
+    "paint": "mspaint",
+    "file explorer": "explorer",
+    "explorer": "explorer",
+    "task manager": "taskmgr",
+    "settings": "ms-settings:",
+    "control panel": "control",
+    "terminal": "wt",
+    "command prompt": "cmd",
+    "chrome": "chrome",
+    "edge": "msedge",
+    "firefox": "firefox",
+    "word": "winword",
+    "excel": "excel",
+    "powerpoint": "powerpnt",
+    "outlook": "outlook",
+    "spotify": "spotify:",
+    "youtube": "https://www.youtube.com",
+    "gmail": "https://mail.google.com",
+    "github": "https://github.com",
+    "google": "https://www.google.com",
+}
+
+# Windows virtual-key codes SendKeys understands for volume/media control.
+MEDIA_KEYS = {"mute": 173, "volume down": 174, "volume up": 175,
+              "next": 176, "previous": 177, "play/pause": 179}
+
+
+def _send_media_key(code: int) -> bool:
+    if not sys.platform.startswith("win"):
+        return False
+    script = f"(New-Object -ComObject WScript.Shell).SendKeys([char]{code})"
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            check=False, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        return True
+    except OSError:
+        return False
+
+
+def _open_target(name: str):
+    """Open a known app/site. Returns spoken confirmation, or None when the
+    name isn't ours to handle (so the brain gets a chance at it)."""
+    target = OPEN_TARGETS.get(name)
+    if target is None and re.match(r"^[\w-]+(\.[a-z]{2,})+$", name):
+        target = f"https://{name}"  # "open weather.com"
+    if target is None:
+        return None
+    try:
+        if target.startswith("http"):
+            import webbrowser
+
+            webbrowser.open(target)
+        elif sys.platform.startswith("win"):
+            # ShellExecute handles exe names, protocol URIs (ms-settings:,
+            # spotify:), and paths — from a curated map, never raw user text.
+            os.startfile(target)  # noqa: S606
+        else:
+            # The app targets are Windows executables; don't fake success on
+            # macOS/Linux — let the brain field "open <app>" there.
+            return None
+        return f"Opening {name}."
+    except OSError:
+        return f"I couldn't find {name} on this machine."
+
+
+def _screenshot_to_pictures():
+    try:
+        import mss
+
+        folder = pathlib.Path.home() / "Pictures"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"jarvis-screenshot-{time.strftime('%Y%m%d-%H%M%S')}.png"
+        with mss.mss() as sct:
+            sct.shot(mon=1, output=str(path))
+        return str(path)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def local_intent(text: str):
+    """Handle a small set of PC commands locally — instantly and offline.
+    Returns the spoken confirmation, or None to send the utterance to the
+    brain as usual. Matching is deliberately conservative: full-utterance
+    patterns only, so questions and smart-home commands pass through."""
+    t = re.sub(r"[^\w\s./:-]", " ", text.lower())
+    t = re.sub(r"^\s*(hey\s+)?jarvis[,\s]+", "", t).strip()
+    t = re.sub(r"\s+", " ", t)
+
+    m = re.match(r"^(?:search the web for|web search for|google) (.+)$", t)
+    if m:
+        import webbrowser
+        from urllib.parse import quote
+
+        webbrowser.open(f"https://www.google.com/search?q={quote(m.group(1))}")
+        return f"Searching the web for {m.group(1)}."
+
+    m = re.match(r"^open(?: up)? (?:the )?(.+?)\.?$", t)
+    if m:
+        return _open_target(m.group(1).strip())
+
+    if re.match(r"^lock (?:the )?(?:computer|pc|screen|workstation)$", t):
+        if sys.platform.startswith("win"):
+            subprocess.run(["rundll32.exe", "user32.dll,LockWorkStation"], check=False)
+            return "Locking up. I'll be here."
+        return None
+
+    if re.match(r"^(?:take a )?screen ?shot$", t):
+        path = _screenshot_to_pictures()
+        return "Screenshot saved to your Pictures folder." if path else "I couldn't take a screenshot."
+
+    if t in ("volume up", "turn it up", "louder"):
+        return "Louder." if _send_media_key(MEDIA_KEYS["volume up"]) else None
+    if t in ("volume down", "turn it down", "quieter"):
+        return "Quieter." if _send_media_key(MEDIA_KEYS["volume down"]) else None
+    if t in ("mute", "mute the volume", "unmute"):
+        return "Done." if _send_media_key(MEDIA_KEYS["mute"]) else None
+    if t in ("pause", "pause the music", "play", "play the music", "resume the music"):
+        return "Done." if _send_media_key(MEDIA_KEYS["play/pause"]) else None
+    if t in ("next track", "next song", "skip this song", "skip"):
+        return "Skipping." if _send_media_key(MEDIA_KEYS["next"]) else None
+    if t in ("previous track", "previous song", "go back a song"):
+        return "Going back." if _send_media_key(MEDIA_KEYS["previous"]) else None
+
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -785,10 +1021,31 @@ def _is_audio_device_error(err: Exception) -> bool:
     )
 
 
+def run_turn(you: str, brain: WorkerBrain, state: AppState, cfg: Config) -> str:
+    """One utterance → one spoken reply. Local PC commands answer instantly;
+    everything else goes to the brain (tools, memory, vision)."""
+    log(f"You: {you}")
+    state.set(you=you)
+    reply = local_intent(you)
+    if reply is None:
+        state.set(state="thinking")
+        image = image_for_utterance(you)
+        reply = brain.ask(you, image)
+    log(f"Jarvis: {reply}")
+    state.set(state="speaking", reply=reply)
+    speak(reply, cfg.voice)
+    state.set(state="idle")
+    return reply
+
+
 def voice_loop(cfg: Config, state: AppState, mode: str):
     brain = WorkerBrain(cfg)
     transcriber = Transcriber(cfg.whisper_model)
     listener = Listener(cfg, state, mode)
+
+    # Load Whisper now, not on the first command — the first "Hey Jarvis"
+    # should answer promptly instead of stalling on a model download.
+    threading.Thread(target=transcriber.warmup, daemon=True).start()
 
     log(f"Jarvis Desktop online (brain: {cfg.url}).")
     state.set(state="idle")
@@ -811,14 +1068,21 @@ def voice_loop(cfg: Config, state: AppState, mode: str):
             if not you:
                 state.set(state="idle")
                 continue
-            log(f"You: {you}")
-            state.set(you=you)
-            image = image_for_utterance(you)
-            reply = brain.ask(you, image)
-            log(f"Jarvis: {reply}")
-            state.set(state="speaking", reply=reply)
-            speak(reply, cfg.voice)
-            state.set(state="idle")
+            run_turn(you, brain, state, cfg)
+
+            # Conversation window: for a few seconds after each reply, a
+            # follow-up needs no wake word — just answer back.
+            while mode == "wake" and cfg.followup_secs > 0:
+                audio = listener.capture_followup(cfg.followup_secs)
+                if audio is None or audio.size == 0:
+                    state.set(state="idle")
+                    break
+                state.set(state="thinking")
+                you = transcriber.transcribe(audio)
+                if not you:
+                    state.set(state="idle")
+                    break
+                run_turn(you, brain, state, cfg)
         except KeyboardInterrupt:
             log("Shutting down.")
             os._exit(0)
@@ -864,10 +1128,7 @@ def main():
     state = AppState()
 
     if args.text:
-        image = image_for_utterance(args.text)
-        reply = WorkerBrain(cfg).ask(args.text, image)
-        print(f"\nJarvis: {reply}\n")
-        speak(reply, cfg.voice)
+        run_turn(args.text, WorkerBrain(cfg), state, cfg)
         return
 
     mode = "push" if args.push else "auto" if args.auto else "wake"
