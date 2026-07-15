@@ -1152,8 +1152,9 @@ function openHelp() {
     Flamebrand Katana and the Frost Sentinel's Frostscale Armor. And sailors whisper of a fifth: <b>The Chained Wraith</b>
     (lvl 90), bound to the Drowned Bastion islet in the southern sea, where only a dragon can carry you.
     It guards the black-and-viridian <b>Wraith aspect</b> and a Runed Chain-Glaive, the finest weapon in the realm.</p>
-    <p style="margin-top:8px"><b>Keys:</b> M mount/dismount · V switch camera (close third-person chase ↔ overhead) ·
-    ← → swing the camera around you · ↑ ↓ or scroll wheel zoom · Esc close windows.
+    <p style="margin-top:8px"><b>The realm is rendered in 3D</b> — a sun-lit landscape with real elevation,
+    water and atmospheric haze. <b>Keys:</b> M mount/dismount · V switch camera (close third-person chase ↔ overhead) ·
+    ← → orbit the camera around you · ↑ ↓ or scroll wheel zoom · Esc close windows.
     In chase view the camera swings behind you as you travel.</p>
     <p style="margin-top:8px"><b>Map 🗺️:</b> click the minimap to unroll a chart of the whole realm.</p>`);
 }
@@ -1579,11 +1580,32 @@ function toggleMount() {
 }
 
 /* ---------------- Canvas & rendering ---------------- */
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+// `canvas`/`ctx` are the 2D surface. When the WebGL renderer takes over (the
+// default), the visible canvas becomes a GL canvas and `ctx` is repointed at an
+// offscreen 2D context used only to bake sprite billboards. Hence `let`.
+let canvas = document.getElementById('game');
+let ctx = canvas.getContext('2d');
 const mmCanvas = document.getElementById('minimap');
 const mmCtx = mmCanvas.getContext('2d');
 let mmBase = null;
+
+/* Bake a sprite (drawn by the existing 2D helpers) into a standalone canvas so
+   the 3D renderer can use it as a billboard texture. `fn` draws into the shared
+   `ctx` with the TILE box's top-left at (ox, oy); we size the canvas generously
+   and centre the TILE box so overspill (weapons, spikes, canopies) fits. */
+function bakeSprite(w, h, fn, opts) {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const prev = ctx;
+  ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  // anchor the TILE box's feet near the bottom (opts.foot px of margin) so
+  // ground-standing sprites sit on the terrain; otherwise centre it.
+  const ox = (w - TILE) / 2;
+  const oy = opts && opts.foot != null ? h - TILE - opts.foot : (h - TILE) / 2;
+  try { fn(ox, oy); } finally { ctx = prev; }
+  return cv;
+}
 
 /* camera: two views. 'chase' is a close third-person view — the camera hangs
    behind the hero, swings to follow the direction of travel (Dark Souls
@@ -1614,6 +1636,7 @@ function screenToWorldPx(sx, sy) {
   return [(M.d * dx - M.c * dy) / det, (-M.b * dx + M.a * dy) / det];
 }
 function screenToTile(sx, sy) {
+  if (GL.ok) return GL.pick(sx, sy);
   const [wx, wy] = screenToWorldPx(sx, sy);
   return [Math.floor(wx / TILE), Math.floor(wy / TILE)];
 }
@@ -1640,6 +1663,7 @@ function resize() {
   viewW = vp.clientWidth; viewH = vp.clientHeight;
   canvas.width = Math.max(1, Math.round(viewW * DPR));
   canvas.height = Math.max(1, Math.round(viewH * DPR));
+  if (GL.ok) GL.resize();
   mmCanvas.width = Math.round(150 * DPR); mmCanvas.height = Math.round(150 * DPR);
   // soft vignette, rebuilt at half resolution per size
   vignette = document.createElement('canvas');
@@ -1893,7 +1917,10 @@ function frame(now) {
     if (player.x !== lastHX || player.y !== lastHY) {
       if (camMode === 'chase') {
         const hdx = player.x - lastHX, hdy = player.y - lastHY;
-        camAngleT = nearestAngle(camAngle, -Math.atan2(hdx, -hdy));
+        // 3D yaw puts the camera behind the direction of travel; the 2D
+        // fallback rotates the map, which needs the older formula.
+        camAngleT = nearestAngle(camAngle,
+          GL.ok ? Math.atan2(-hdx, -hdy) : -Math.atan2(hdx, -hdy));
       }
       lastHX = player.x; lastHY = player.y;
     }
@@ -1906,6 +1933,7 @@ function frame(now) {
 }
 
 function draw(time, dt) {
+  if (GL.ok) { GL.frame(time, dt); drawMinimap(viewW, viewH); return; }
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const cw = viewW, ch = viewH;
   const chase = camMode === 'chase';
@@ -2050,6 +2078,7 @@ function draw(time, dt) {
 }
 
 function label(text, x, y) { // text at a world point, kept upright under camera rotation
+  if (GL._baking) return; // never bake HUD text into a billboard; 3D draws names on the overlay
   ctx.save(); ctx.translate(x, y); ctx.rotate(-labelAngle); ctx.fillText(text, 0, 0); ctx.restore();
 }
 
@@ -2680,19 +2709,20 @@ function drawMinimap(cw, ch) {
 
 /* ---------------- Input ---------------- */
 const hoverTip = document.getElementById('hoverTip');
-canvas.addEventListener('click', e => {
-  const r = canvas.getBoundingClientRect();
+const inputEl = document.getElementById('viewport');
+inputEl.addEventListener('click', e => {
+  const r = inputEl.getBoundingClientRect();
   const [tx, ty] = screenToTile(e.clientX - r.left, e.clientY - r.top);
   if (inB(tx, ty)) clickWorld(tx, ty);
 });
-canvas.addEventListener('wheel', e => {
+inputEl.addEventListener('wheel', e => {
   if (!gameStarted) return;
   e.preventDefault();
   camZoomT = Math.max(zoomMin(), Math.min(zoomMax(), camZoomT * Math.exp(-e.deltaY * 0.0012)));
 }, {passive: false});
-canvas.addEventListener('mousemove', e => {
+inputEl.addEventListener('mousemove', e => {
   if (!gameStarted) return;
-  const r = canvas.getBoundingClientRect();
+  const r = inputEl.getBoundingClientRect();
   const [tx, ty] = screenToTile(e.clientX - r.left, e.clientY - r.top);
   let tip = '';
   const mob = mobs.find(m => !m.dead && m.x === tx && m.y === ty);
@@ -2726,6 +2756,509 @@ document.getElementById('viewBtn').textContent = camMode === 'chase' ? '📷 Cha
 document.getElementById('helpBtn').onclick = openHelp;
 window.addEventListener('beforeunload', saveGame);
 
+/* =====================================================================
+   WebGL 3D renderer. A real perspective world: an elevated, sun-lit
+   terrain mesh with normals, ambient occlusion and atmospheric fog; an
+   animated water surface; a sky; and the detailed 2D character art
+   composited as lit, shadow-cast billboards standing in the 3D space
+   (a "2.5D" pipeline). If anything here fails, GL.ok stays false and the
+   game silently uses the 2D renderer above.
+   ===================================================================== */
+const WATER_Y = -0.6;
+// mat4 (column-major) + vec3 helpers
+function m4mul(a, b) { const o = new Float32Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0;
+    for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; }
+function m4persp(fovy, asp, n, f) { const t = 1 / Math.tan(fovy / 2), o = new Float32Array(16);
+  o[0] = t / asp; o[5] = t; o[10] = (f + n) / (n - f); o[11] = -1; o[14] = 2 * f * n / (n - f); return o; }
+function v3sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+function v3cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+function v3dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+function v3norm(a) { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
+function m4look(eye, ctr, up) {
+  const z = v3norm(v3sub(eye, ctr)), x = v3norm(v3cross(up, z)), y = v3cross(z, x), o = new Float32Array(16);
+  o[0] = x[0]; o[1] = y[0]; o[2] = z[0]; o[3] = 0;
+  o[4] = x[1]; o[5] = y[1]; o[6] = z[1]; o[7] = 0;
+  o[8] = x[2]; o[9] = y[2]; o[10] = z[2]; o[11] = 0;
+  o[12] = -v3dot(x, eye); o[13] = -v3dot(y, eye); o[14] = -v3dot(z, eye); o[15] = 1; return o;
+}
+function m4inv(m) {
+  const a = m, o = new Float32Array(16);
+  const b00 = a[0]*a[5]-a[1]*a[4], b01 = a[0]*a[6]-a[2]*a[4], b02 = a[0]*a[7]-a[3]*a[4];
+  const b03 = a[1]*a[6]-a[2]*a[5], b04 = a[1]*a[7]-a[3]*a[5], b05 = a[2]*a[7]-a[3]*a[6];
+  const b06 = a[8]*a[13]-a[9]*a[12], b07 = a[8]*a[14]-a[10]*a[12], b08 = a[8]*a[15]-a[11]*a[12];
+  const b09 = a[9]*a[14]-a[10]*a[13], b10 = a[9]*a[15]-a[11]*a[13], b11 = a[10]*a[15]-a[11]*a[14];
+  let det = b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06; if (!det) return null; det = 1 / det;
+  o[0]=(a[5]*b11-a[6]*b10+a[7]*b09)*det; o[1]=(a[2]*b10-a[1]*b11-a[3]*b09)*det;
+  o[2]=(a[13]*b05-a[14]*b04+a[15]*b03)*det; o[3]=(a[10]*b04-a[9]*b05-a[11]*b03)*det;
+  o[4]=(a[6]*b08-a[4]*b11-a[7]*b07)*det; o[5]=(a[0]*b11-a[2]*b08+a[3]*b07)*det;
+  o[6]=(a[14]*b02-a[12]*b05-a[15]*b01)*det; o[7]=(a[8]*b05-a[10]*b02+a[11]*b01)*det;
+  o[8]=(a[4]*b10-a[5]*b08+a[7]*b06)*det; o[9]=(a[1]*b08-a[0]*b10-a[3]*b06)*det;
+  o[10]=(a[12]*b04-a[13]*b02+a[15]*b00)*det; o[11]=(a[9]*b02-a[8]*b04-a[11]*b00)*det;
+  o[12]=(a[5]*b07-a[4]*b09-a[6]*b06)*det; o[13]=(a[0]*b09-a[1]*b07+a[2]*b06)*det;
+  o[14]=(a[13]*b01-a[12]*b03-a[14]*b00)*det; o[15]=(a[8]*b03-a[9]*b01+a[10]*b00)*det;
+  return o;
+}
+function hexRGB(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }
+
+const GL = { ok: false, _baking: false };
+
+GL.tileHeight = function (x, y) {
+  const t = map[idx(x, y)];
+  const roll = 0.32 * Math.sin(x * 0.11) * Math.cos(y * 0.13) + 0.14 * Math.sin((x + y) * 0.068);
+  switch (t) {
+    case T.WATER: return -1.7 + roll * 0.2;
+    case T.LAVA: return -0.15 + roll * 0.1;
+    case T.MTN: return 2.3 + hash2(x, y) * 1.5 + roll;
+    case T.WALL: return 1.0 + roll * 0.3;
+    case T.SNOW: return 0.18 + roll;
+    case T.VOLC: return 0.12 + roll + hash2(x, y) * 0.35;
+    case T.STONE: case T.FLOOR: return 0.03 + roll * 0.4;
+    case T.SAND: return -0.05 + roll * 0.6;
+    default: return roll;
+  }
+};
+GL.vertH = function (i, j) { // grid vertex height = mean of surrounding tiles
+  let s = 0, n = 0;
+  for (const [dx, dy] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
+    const x = i + dx, y = j + dy;
+    if (x >= 0 && x < W && y >= 0 && y < H) { s += GL.tileHeight(x, y); n++; }
+  }
+  return n ? s / n : 0;
+};
+GL.surfaceH = function (x, y) { // for picking: water shows its plane, land its ground
+  if (x < 0 || x >= W || y < 0 || y >= H) return 0;
+  return map[idx(x, y)] === T.WATER ? WATER_Y : GL.tileHeight(x, y);
+};
+
+GL._compile = function (gl, type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) + '\n' + src);
+  return s;
+};
+GL._prog = function (gl, vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, GL._compile(gl, gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, GL._compile(gl, gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+};
+
+GL.init = function () {
+  try {
+    const vp = document.getElementById('viewport');
+    const glc = document.createElement('canvas');
+    glc.id = 'game3d';
+    glc.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
+    vp.insertBefore(glc, document.getElementById('hud'));
+    const gl = glc.getContext('webgl2', { antialias: true, alpha: false });
+    if (!gl) { glc.remove(); return; }
+    // overlay 2D canvas for depth-cued shadows, name plates, floaters, particles
+    const ol = document.createElement('canvas');
+    ol.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;';
+    vp.insertBefore(ol, document.getElementById('hud'));
+    this.gl = gl; this.glc = glc; this.ol = ol; this.olc = ol.getContext('2d');
+    this._buildPrograms();
+    this._tex = new Map();
+    this._bbBuf = gl.createBuffer(); this._bbVAO = gl.createVertexArray();
+    document.getElementById('game').style.display = 'none';
+    canvas = glc;                        // input rects + resize target
+    ctx = document.createElement('canvas').getContext('2d'); // bake surface only
+    this.ok = true;
+  } catch (e) { console.error('WebGL init failed, using 2D renderer:', e); this.ok = false; }
+};
+
+GL._buildPrograms = function () {
+  const gl = this.gl, H0 = '#version 300 es\nprecision highp float;\n';
+  // ---- sky ----
+  this.pSky = this._prog(gl,
+    H0 + 'layout(location=0) in vec2 aPos; out vec2 vUV; void main(){ vUV=aPos*0.5+0.5; gl_Position=vec4(aPos,1.0,1.0); }',
+    H0 + 'in vec2 vUV; uniform vec3 uTop,uHaze; out vec4 o; void main(){ float t=pow(clamp(vUV.y,0.0,1.0),0.8); vec3 c=mix(uHaze,uTop,t); o=vec4(c,1.0); }');
+  // ---- terrain ----
+  this.pTer = this._prog(gl,
+    H0 + `layout(location=0) in vec3 aPos; layout(location=1) in vec3 aN; layout(location=2) in vec3 aCol; layout(location=3) in float aEmis;
+    uniform mat4 uVP; out vec3 vN,vCol,vW; out float vEmis;
+    void main(){ vN=aN; vCol=aCol; vEmis=aEmis; vW=aPos; gl_Position=uVP*vec4(aPos,1.0); }`,
+    H0 + `in vec3 vN,vCol,vW; in float vEmis; uniform vec3 uSunDir,uSun,uAmb,uFog,uEye; uniform float uFogD,uTime;
+    out vec4 o;
+    float hash(vec2 p){ p=fract(p*vec2(123.34,345.45)); p+=dot(p,p+34.345); return fract(p.x*p.y); }
+    float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+      float a=hash(i),b=hash(i+vec2(1,0)),c=hash(i+vec2(0,1)),d=hash(i+vec2(1,1));
+      return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
+    void main(){
+      vec3 N=normalize(vN); float d=max(dot(N,uSunDir),0.0); float wrap=d*0.78+0.22;
+      // multi-octave ground detail breaks up flat vertex colour into a surface
+      float det=vnoise(vW.xz*2.3)*0.5+vnoise(vW.xz*7.0)*0.3+vnoise(vW.xz*18.0)*0.2;
+      float macro=0.88+0.24*vnoise(vW.xz*0.32);
+      vec3 col=vCol*macro*(0.80+0.40*det)*(uAmb+uSun*wrap);
+      col*=0.70+0.30*clamp(N.y,0.0,1.0);          // crease AO
+      vec3 lava=(vCol*vec3(1.7,0.6,0.25)+vec3(0.8,0.28,0.0))*(0.7+0.5*vnoise(vW.xz*3.0+uTime));
+      col=mix(col,lava,vEmis);
+      float dist=length(vW-uEye); float fog=1.0-exp(-uFogD*max(0.0,dist-7.0));
+      o=vec4(mix(col,uFog,clamp(fog,0.0,1.0)),1.0); }`);
+  // ---- water ----
+  this.pWat = this._prog(gl,
+    H0 + 'layout(location=0) in vec3 aPos; uniform mat4 uVP; out vec3 vW; void main(){ vW=aPos; gl_Position=uVP*vec4(aPos,1.0); }',
+    H0 + `in vec3 vW; uniform vec3 uEye,uSunDir,uSun,uFog,uTop; uniform float uTime,uFogD; out vec4 o;
+    void main(){
+      float w=sin(vW.x*0.9+uTime*1.3)*0.03+cos(vW.z*1.1+uTime*1.1)*0.03;
+      vec3 N=normalize(vec3(sin(vW.x*0.8+uTime)*0.12, 1.0, cos(vW.z*0.7+uTime*0.9)*0.12));
+      vec3 V=normalize(uEye-vW); float fres=pow(1.0-max(dot(N,V),0.0),3.0);
+      vec3 deep=vec3(0.05,0.16,0.26), shallow=vec3(0.11,0.34,0.42);
+      vec3 col=mix(deep,shallow,0.4+w*4.0);
+      vec3 Rd=reflect(-uSunDir,N); float spec=pow(max(dot(Rd,V),0.0),60.0);
+      col=mix(col,uTop,fres*0.5)+uSun*spec*0.8;
+      float dist=length(vW-uEye); float fog=1.0-exp(-uFogD*max(0.0,dist-7.0));
+      o=vec4(mix(col,uFog,clamp(fog,0.0,1.0)),0.92); }`);
+  // ---- billboard (textured, cylindrical) ----
+  this.pBB = this._prog(gl,
+    H0 + `layout(location=0) in vec3 aAnchor; layout(location=1) in vec2 aCorner; layout(location=2) in vec2 aUV; layout(location=3) in vec2 aSize; layout(location=4) in float aSway;
+    uniform mat4 uVP; uniform vec3 uRight; uniform float uTime; out vec2 vUV; out vec3 vW;
+    void main(){ float sway=sin(uTime*1.6+aAnchor.x*1.3+aAnchor.z*0.7)*aSway*aCorner.y;
+      vec3 w=aAnchor+uRight*(aCorner.x*aSize.x+sway)+vec3(0.0,1.0,0.0)*(aCorner.y*aSize.y);
+      vW=w; vUV=aUV; gl_Position=uVP*vec4(w,1.0); }`,
+    H0 + `in vec2 vUV; in vec3 vW; uniform sampler2D uTex; uniform vec3 uSun,uAmb,uFog,uEye; uniform float uFogD;
+    out vec4 o;
+    void main(){ vec4 c=texture(uTex,vUV); if(c.a<0.32) discard;
+      vec3 lit=c.rgb*clamp(uAmb+uSun*0.6,0.66,1.16);
+      float dist=length(vW-uEye); float fog=1.0-exp(-uFogD*max(0.0,dist-7.0));
+      o=vec4(mix(lit,uFog,clamp(fog,0.0,1.0)*0.85),c.a); }`);
+  // ---- ground shadow (flat radial) ----
+  this.pSh = this._prog(gl,
+    H0 + 'layout(location=0) in vec3 aPos; layout(location=1) in vec2 aUV; uniform mat4 uVP; out vec2 vUV; void main(){ vUV=aUV; gl_Position=uVP*vec4(aPos,1.0); }',
+    H0 + 'in vec2 vUV; out vec4 o; void main(){ float d=length(vUV); o=vec4(0.0,0.0,0.0,smoothstep(1.0,0.2,d)*0.3); }');
+
+  const loc = (p, ns) => { const m = {}; for (const n of ns) m[n] = gl.getUniformLocation(p, n); return m; };
+  this.uSky = loc(this.pSky, ['uTop', 'uHaze']);
+  this.uTer = loc(this.pTer, ['uVP', 'uSunDir', 'uSun', 'uAmb', 'uFog', 'uEye', 'uFogD', 'uTime']);
+  this.uWat = loc(this.pWat, ['uVP', 'uEye', 'uSunDir', 'uSun', 'uFog', 'uTop', 'uTime', 'uFogD']);
+  this.uBB = loc(this.pBB, ['uVP', 'uRight', 'uTime', 'uTex', 'uSun', 'uAmb', 'uFog', 'uEye', 'uFogD']);
+  this.uSh = loc(this.pSh, ['uVP']);
+
+  // fullscreen sky quad
+  this.skyVAO = gl.createVertexArray(); gl.bindVertexArray(this.skyVAO);
+  const sb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, sb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+};
+
+// palette (warm hazy sun, cool shadow — the atmospheric Dragon-Age register)
+GL.SUN_DIR = v3norm([-0.55, 0.74, -0.38]);
+GL.SUN = [1.05, 0.96, 0.80]; GL.AMB = [0.34, 0.4, 0.54];
+GL.FOG = [0.60, 0.66, 0.76]; GL.SKY_TOP = [0.13, 0.21, 0.4]; GL.FOG_D = 0.011;
+
+GL.buildWorld = function () {
+  const gl = this.gl;
+  // ---- terrain grid mesh ----
+  const gw = W + 1, gh = H + 1, nv = gw * gh;
+  const pos = new Float32Array(nv * 3), col = new Float32Array(nv * 3), emis = new Float32Array(nv), hgt = new Float32Array(nv);
+  const submerged = hexRGB('#38434f');
+  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+    const vi = j * gw + i, h = this.vertH(i, j); hgt[vi] = h;
+    pos[vi * 3] = i; pos[vi * 3 + 1] = h; pos[vi * 3 + 2] = j;
+    // vertex colour: mean of surrounding land tiles; lava flagged emissive
+    let r = 0, g = 0, b = 0, n = 0, em = 0;
+    for (const [dx, dy] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
+      const x = i + dx, y = j + dy; if (x < 0 || x >= W || y < 0 || y >= H) continue;
+      const t = map[idx(x, y)];
+      if (t === T.LAVA) em = 1;
+      const c = hexRGB(t === T.WATER ? '#38434f' : TILE_COLORS[t]); r += c[0]; g += c[1]; b += c[2]; n++;
+    }
+    if (n) { col[vi * 3] = r / n; col[vi * 3 + 1] = g / n; col[vi * 3 + 2] = b / n; }
+    else { col[vi * 3] = submerged[0]; col[vi * 3 + 1] = submerged[1]; col[vi * 3 + 2] = submerged[2]; }
+    emis[vi] = em;
+  }
+  // normals from the height field (central differences)
+  const nrm = new Float32Array(nv * 3);
+  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+    const vi = j * gw + i;
+    const hl = hgt[j * gw + Math.max(0, i - 1)], hr = hgt[j * gw + Math.min(gw - 1, i + 1)];
+    const hd = hgt[Math.max(0, j - 1) * gw + i], hu = hgt[Math.min(gh - 1, j + 1) * gw + i];
+    const nx = hl - hr, nz = hd - hu, ny = 2.0, l = Math.hypot(nx, ny, nz) || 1;
+    nrm[vi * 3] = nx / l; nrm[vi * 3 + 1] = ny / l; nrm[vi * 3 + 2] = nz / l;
+  }
+  const idxs = new Uint32Array(W * H * 6); let o = 0;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const a = j * gw + i, b = a + 1, c = a + gw, d = c + 1;
+    idxs[o++] = a; idxs[o++] = c; idxs[o++] = b; idxs[o++] = b; idxs[o++] = c; idxs[o++] = d;
+  }
+  this.terVAO = gl.createVertexArray(); gl.bindVertexArray(this.terVAO);
+  const mkAttr = (locn, data, size) => { const bf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); gl.enableVertexAttribArray(locn); gl.vertexAttribPointer(locn, size, gl.FLOAT, false, 0, 0); };
+  mkAttr(0, pos, 3); mkAttr(1, nrm, 3); mkAttr(2, col, 3); mkAttr(3, emis, 1);
+  const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxs, gl.STATIC_DRAW);
+  this.terCount = idxs.length; gl.bindVertexArray(null);
+  // ---- water plane over the whole map ----
+  this.watVAO = gl.createVertexArray(); gl.bindVertexArray(this.watVAO);
+  const wb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, wb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    0, WATER_Y, 0, W, WATER_Y, 0, W, WATER_Y, H, 0, WATER_Y, 0, W, WATER_Y, H, 0, WATER_Y, H]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+  this.resize();
+};
+
+GL.resize = function () {
+  if (!this.ok) return; const gl = this.gl;
+  const w = Math.max(1, Math.round(viewW * DPR)), h = Math.max(1, Math.round(viewH * DPR));
+  this.glc.width = w; this.glc.height = h; gl.viewport(0, 0, w, h);
+  this.ol.width = w; this.ol.height = h;
+  // cinematic vignette, drawn over the frame each render (cached at CSS size)
+  this._vig = document.createElement('canvas'); this._vig.width = viewW; this._vig.height = viewH;
+  const vc = this._vig.getContext('2d');
+  const g = vc.createRadialGradient(viewW / 2, viewH * 0.46, Math.min(viewW, viewH) * 0.34,
+    viewW / 2, viewH * 0.5, Math.max(viewW, viewH) * 0.72);
+  g.addColorStop(0, 'rgba(10,8,14,0)'); g.addColorStop(0.7, 'rgba(10,8,14,0.12)'); g.addColorStop(1, 'rgba(6,5,10,0.5)');
+  vc.fillStyle = g; vc.fillRect(0, 0, viewW, viewH);
+};
+
+// ---- billboard texture cache: bake the existing 2D sprites into GL textures ----
+GL._mkTex = function (cv) {
+  const gl = this.gl, t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  return t;
+};
+GL._sprite = function (key, w, h, foot, drawFn) {
+  let e = this._tex.get(key); if (e) return e;
+  this._baking = true;
+  let cv; try { cv = bakeSprite(w, h, (ox, oy) => drawFn(ox, oy), { foot }); } finally { this._baking = false; }
+  e = { tex: this._mkTex(cv), w, h, foot }; this._tex.set(key, e); return e;
+};
+GL.entTex = function (kind, ent) {
+  switch (kind) {
+    case 'player': {
+      if (player.mounted) return this._sprite('pl_mount_' + player.dragonAspect, 132, 132, 34,
+        (ox, oy) => drawPlayer(ox, oy, 0.6));
+      const lk = playerLook();
+      return this._sprite('pl_' + (player.equip.armor || 'n') + '_' + (player.equip.weapon || 'n'), 76, 108, 8,
+        (ox, oy) => { const l = playerLook(); l.phase = 1.7; drawKnight(ox, oy, l, 0.6); });
+    }
+    case 'mob': {
+      const d = MOB_DEFS[ent.type], big = d.boss || ent.type === 'chained_wraith';
+      const w = big ? 150 : ent.type === 'direwolf' || ent.type === 'drake' ? 76 : 66;
+      const hh = big ? 168 : 92, ft = big ? 12 : 8;
+      return this._sprite('mob_' + ent.type, w, hh, ft, (ox, oy) =>
+        drawMob({ type: ent.type, x: 0, y: 0, px: 0, py: 0, hp: 99, maxhp: 99, hurtAt: -999, dead: false }, ox, oy, 0.6));
+    }
+    case 'npc': return this._sprite('npc_' + ent.color, 64, 92, 8, (ox, oy) => drawHumanoid(ox, oy, ent.color, '#3a3227'));
+    case 'fake': return this._sprite('fk_' + ent.color, 64, 92, 8, (ox, oy) => drawHumanoid(ox, oy, ent.color, '#2a2a2a'));
+    case 'node': {
+      const tall = ['pine', 'ironwood', 'weirwood'].includes(ent.kind);
+      const w = 80, hh = tall ? 108 : 96, ft = 10;
+      return this._sprite('nd_' + ent.kind + (ent.dead ? '_d' : ''), w, hh, ft, (ox, oy) =>
+        drawNode({ kind: ent.kind, x: 0, y: 0, dead: ent.dead, hp: (NODE_DEFS[ent.kind] || {}).hp || 1 }, ox, oy, 0.6));
+    }
+  }
+};
+
+GL._camera = function () {
+  const chase = camMode === 'chase';
+  const pgx = player.px + 0.5, pgz = player.py + 0.5;
+  const gyp = (map[idx(player.x, player.y)] === T.WATER ? WATER_Y : this.tileHeight(player.x, player.y));
+  const target = [pgx, gyp + 0.9, pgz];
+  const pitch = chase ? 0.62 : 1.28;
+  const dist = (chase ? 11.0 : 17.0) / Math.max(0.5, camZoom * (chase ? 0.55 : 1.0));
+  const eye = [
+    target[0] + dist * Math.cos(pitch) * Math.sin(camAngle),
+    target[1] + dist * Math.sin(pitch),
+    target[2] + dist * Math.cos(pitch) * Math.cos(camAngle),
+  ];
+  const view = m4look(eye, target, [0, 1, 0]);
+  const proj = m4persp(0.9, Math.max(0.2, viewW / viewH), 0.3, 320);
+  this._vp = m4mul(proj, view); this._invVP = m4inv(this._vp); this._eye = eye;
+  this._right = [view[0], view[4], view[8]]; // camera right (horizontal, roll-free)
+};
+
+GL._project = function (wx, wy, wz) {
+  const m = this._vp;
+  const x = m[0]*wx+m[4]*wy+m[8]*wz+m[12], y = m[1]*wx+m[5]*wy+m[9]*wz+m[13];
+  const w = m[3]*wx+m[7]*wy+m[11]*wz+m[15];
+  if (w <= 0) return null;
+  return [(x / w * 0.5 + 0.5) * viewW, (1 - (y / w * 0.5 + 0.5)) * viewH, w];
+};
+
+GL.frame = function (time, dt) {
+  const gl = this.gl; this._camera();
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  gl.clearColor(this.FOG[0], this.FOG[1], this.FOG[2], 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  // sky
+  gl.disable(gl.DEPTH_TEST); gl.useProgram(this.pSky); gl.bindVertexArray(this.skyVAO);
+  gl.uniform3fv(this.uSky.uTop, this.SKY_TOP); gl.uniform3fv(this.uSky.uHaze, this.FOG);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.enable(gl.DEPTH_TEST);
+  // terrain
+  gl.useProgram(this.pTer); gl.bindVertexArray(this.terVAO);
+  gl.uniformMatrix4fv(this.uTer.uVP, false, this._vp);
+  gl.uniform3fv(this.uTer.uSunDir, this.SUN_DIR); gl.uniform3fv(this.uTer.uSun, this.SUN);
+  gl.uniform3fv(this.uTer.uAmb, this.AMB); gl.uniform3fv(this.uTer.uFog, this.FOG);
+  gl.uniform3fv(this.uTer.uEye, this._eye); gl.uniform1f(this.uTer.uFogD, this.FOG_D);
+  gl.uniform1f(this.uTer.uTime, time);
+  gl.drawElements(gl.TRIANGLES, this.terCount, gl.UNSIGNED_INT, 0);
+  // water
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(this.pWat); gl.bindVertexArray(this.watVAO);
+  gl.uniformMatrix4fv(this.uWat.uVP, false, this._vp); gl.uniform3fv(this.uWat.uEye, this._eye);
+  gl.uniform3fv(this.uWat.uSunDir, this.SUN_DIR); gl.uniform3fv(this.uWat.uSun, this.SUN);
+  gl.uniform3fv(this.uWat.uFog, this.FOG); gl.uniform3fv(this.uWat.uTop, this.SKY_TOP);
+  gl.uniform1f(this.uWat.uTime, time); gl.uniform1f(this.uWat.uFogD, this.FOG_D);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  // gather visible entities
+  this._gather(time);
+  this._drawShadows();
+  this._drawBills(time);
+  gl.disable(gl.BLEND); gl.bindVertexArray(null);
+  this._overlay(dt);
+};
+
+GL._gather = function (time) {
+  const bills = this._bills = [], shad = this._shad = [];
+  const R = 46, pcx = player.px, pcy = player.py; // cull radius in tiles
+  const push = (tex, wx, wy, wz, sway) => {
+    if (!tex) return;
+    bills.push({ tex, wx, wy, wz, sway });
+    shad.push({ wx, wz, r: Math.min(1.1, tex.w / 32 * 0.24) });
+  };
+  for (const k in nodes) {
+    const n = nodes[k]; if (n.kind === 'gate' || n.kind.startsWith('fish_')) continue;
+    if (Math.abs(n.x - pcx) > R || Math.abs(n.y - pcy) > R) continue;
+    const e = this.entTex('node', n); if (!e) continue;
+    push(e, n.x + 0.5, this.tileHeight(n.x, n.y) - e.foot / 32, n.y + 0.5, n.kind === 'pine' || n.kind === 'ironwood' || n.kind === 'weirwood' ? 0.05 : 0);
+  }
+  for (const n of npcs) { if (Math.abs(n.x - pcx) > R || Math.abs(n.y - pcy) > R) continue;
+    const e = this.entTex('npc', n); push(e, n.x + 0.5, this.tileHeight(n.x, n.y) - e.foot / 32, n.y + 0.5, 0.02); }
+  for (const f of fakePlayers) { if (Math.abs(f.px - pcx) > R || Math.abs(f.py - pcy) > R) continue;
+    const e = this.entTex('fake', f); push(e, f.px + 0.5, this.tileHeight(f.x, f.y) - e.foot / 32, f.py + 0.5, 0.03); }
+  for (const m of mobs) { if (m.dead || Math.abs(m.px - pcx) > R || Math.abs(m.py - pcy) > R) continue;
+    const e = this.entTex('mob', m); push(e, m.px + 0.5, this.tileHeight(m.x, m.y) - e.foot / 32, m.py + 0.5, 0.02); }
+  // player
+  const pe = this.entTex('player', player);
+  const pgy = (player.mounted ? 0.9 : 0) + this.tileHeight(player.x, player.y) - pe.foot / 32;
+  push(pe, player.px + 0.5, pgy, player.py + 0.5, 0.02);
+};
+
+GL._drawShadows = function () {
+  const gl = this.gl, sh = this._shad; if (!sh.length) return;
+  const arr = new Float32Array(sh.length * 6 * 5); let o = 0;
+  const C = [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]];
+  for (const s of sh) {
+    const y = this.surfaceH(Math.floor(s.wx), Math.floor(s.wz)) + 0.04;
+    for (const [cx, cz] of C) {
+      arr[o++] = s.wx + cx * s.r; arr[o++] = y; arr[o++] = s.wz + cz * s.r; arr[o++] = cx; arr[o++] = cz;
+    }
+  }
+  gl.depthMask(false);
+  gl.useProgram(this.pSh); gl.bindVertexArray(this._bbVAO);
+  gl.bindBuffer(gl.ARRAY_BUFFER, this._bbBuf); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
+  gl.disableVertexAttribArray(2); gl.disableVertexAttribArray(3); gl.disableVertexAttribArray(4);
+  gl.uniformMatrix4fv(this.uSh.uVP, false, this._vp);
+  gl.drawArrays(gl.TRIANGLES, 0, sh.length * 6);
+  gl.depthMask(true);
+};
+
+GL._drawBills = function (time) {
+  const gl = this.gl, bills = this._bills; if (!bills.length) return;
+  // group by texture (one draw per texture)
+  const groups = new Map();
+  for (const b of bills) { let g = groups.get(b.tex.tex); if (!g) { g = []; groups.set(b.tex.tex, g); } g.push(b); }
+  gl.useProgram(this.pBB); gl.bindVertexArray(this._bbVAO);
+  gl.uniformMatrix4fv(this.uBB.uVP, false, this._vp);
+  gl.uniform3fv(this.uBB.uRight, this._right); gl.uniform1f(this.uBB.uTime, time);
+  gl.uniform3fv(this.uBB.uSun, this.SUN); gl.uniform3fv(this.uBB.uAmb, this.AMB);
+  gl.uniform3fv(this.uBB.uFog, this.FOG); gl.uniform3fv(this.uBB.uEye, this._eye); gl.uniform1f(this.uBB.uFogD, this.FOG_D);
+  gl.uniform1i(this.uBB.uTex, 0); gl.activeTexture(gl.TEXTURE0);
+  const C = [[-0.5, 0], [0.5, 0], [0.5, 1], [-0.5, 0], [0.5, 1], [-0.5, 1]];
+  gl.bindBuffer(gl.ARRAY_BUFFER, this._bbBuf);
+  for (const [tex, arrB] of groups) {
+    const arr = new Float32Array(arrB.length * 6 * 10); let o = 0;
+    for (const b of arrB) { const sx = b.tex.w / 32, sy = b.tex.h / 32;
+      for (const [cx, cy] of C) {
+        arr[o++] = b.wx; arr[o++] = b.wy; arr[o++] = b.wz; arr[o++] = cx; arr[o++] = cy;
+        arr[o++] = cx + 0.5; arr[o++] = 1 - cy; arr[o++] = sx; arr[o++] = sy; arr[o++] = b.sway;
+      }
+    }
+    gl.bufferData(gl.ARRAY_BUFFER, arr, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 40, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 40, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 40, 20);
+    gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 40, 28);
+    gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 1, gl.FLOAT, false, 40, 36);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.drawArrays(gl.TRIANGLES, 0, arrB.length * 6);
+  }
+};
+
+GL._overlay = function (dt) {
+  const c = this.olc, W2 = this.ol.width, H2 = this.ol.height; c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, W2, H2); c.save(); c.scale(DPR, DPR); c.textAlign = 'center';
+  if (this._vig) c.drawImage(this._vig, 0, 0); // vignette under the labels
+  // particles (project world → screen)
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]; p.life -= dt; if (p.life <= 0) { particles.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    const s = this._project(p.x + 0.5, this.surfaceH(Math.floor(p.x), Math.floor(p.y)) + 0.5, p.y + 0.5); if (!s) continue;
+    c.globalAlpha = Math.max(0, Math.min(1, p.life * 2)); c.fillStyle = p.color;
+    const sz = Math.max(1.5, p.size * 8 / s[2]); c.fillRect(s[0] - sz / 2, s[1] - sz / 2, sz, sz);
+  }
+  c.globalAlpha = 1;
+  // name plates
+  const plate = (name, wx, wy, wz, color, font) => { const s = this._project(wx, wy, wz); if (!s) return;
+    c.font = font; c.fillStyle = 'rgba(0,0,0,0.85)'; c.fillText(name, s[0] + 1, s[1] + 1); c.fillStyle = color; c.fillText(name, s[0], s[1]); };
+  for (const n of npcs) if (Math.abs(n.x - player.px) < 30 && Math.abs(n.y - player.py) < 30)
+    plate(n.name, n.x + 0.5, this.tileHeight(n.x, n.y) + 2.3, n.y + 0.5, '#f4e3a1', 'bold 12px Verdana');
+  for (const f of fakePlayers) if (Math.abs(f.px - player.px) < 30 && Math.abs(f.py - player.py) < 30)
+    plate(f.name, f.px + 0.5, this.tileHeight(f.x, f.y) + 2.3, f.py + 0.5, '#8fd48f', '11px Verdana');
+  for (const m of mobs) { if (m.dead) continue; const d = MOB_DEFS[m.type];
+    if (d.boss && Math.abs(m.px - player.px) < 40 && Math.abs(m.py - player.py) < 40)
+      plate('⭐ ' + d.name, m.px + 0.5, this.tileHeight(m.x, m.y) + 4.0, m.py + 0.5, d.glow, 'bold 12px Verdana');
+    // hp bar for recently hurt mobs
+    if (tickCount - m.hurtAt < 12) { const s = this._project(m.px + 0.5, this.tileHeight(m.x, m.y) + 2.2, m.py + 0.5); if (s) {
+      const bw = 34; c.fillStyle = '#8c1f1a'; c.fillRect(s[0] - bw / 2, s[1], bw, 4);
+      c.fillStyle = '#5ad45a'; c.fillRect(s[0] - bw / 2, s[1], bw * m.hp / m.maxhp, 4); } }
+  }
+  plate('You', player.px + 0.5, this.tileHeight(player.x, player.y) + (player.mounted ? 3.4 : 2.4), player.py + 0.5, '#fff', 'bold 12px Verdana');
+  // floaters (damage / xp)
+  c.font = 'bold 13px Verdana';
+  for (let i = floaters.length - 1; i >= 0; i--) { const f = floaters[i]; f.life -= dt; if (f.life <= 0) { floaters.splice(i, 1); continue; }
+    f.y -= dt * 0.8; const s = this._project(f.x + 0.5, this.tileHeight(Math.floor(f.x), Math.floor(f.y)) + 1.6 + (1 - f.life), f.y + 0.5); if (!s) continue;
+    c.globalAlpha = Math.min(1, f.life); c.fillStyle = '#000'; c.fillText(f.text, s[0] + 1, s[1] + 1); c.fillStyle = f.color; c.fillText(f.text, s[0], s[1]); }
+  c.globalAlpha = 1; c.restore();
+};
+
+GL.pick = function (sx, sy) {
+  if (!this._invVP) return [-999, -999];
+  const un = (nx, ny, nz) => { const m = this._invVP;
+    const x = m[0]*nx+m[4]*ny+m[8]*nz+m[12], y = m[1]*nx+m[5]*ny+m[9]*nz+m[13],
+      z = m[2]*nx+m[6]*ny+m[10]*nz+m[14], w = m[3]*nx+m[7]*ny+m[11]*nz+m[15];
+    return [x / w, y / w, z / w]; };
+  const nx = sx / viewW * 2 - 1, ny = 1 - sy / viewH * 2;
+  const a = un(nx, ny, -1), b = un(nx, ny, 1);
+  const dir = v3norm(v3sub(b, a));
+  let p = this._eye.slice(); let prev = p[1] - this.surfaceH(Math.floor(p[0]), Math.floor(p[2]));
+  for (let s = 0; s < 400; s++) {
+    p = [p[0] + dir[0] * 0.35, p[1] + dir[1] * 0.35, p[2] + dir[2] * 0.35];
+    const tx = Math.floor(p[0]), ty = Math.floor(p[2]);
+    if (p[1] < -6) break;
+    const diff = p[1] - this.surfaceH(tx, ty);
+    if (diff <= 0 && prev > 0 && tx >= 0 && tx < W && ty >= 0 && ty < H) return [tx, ty];
+    prev = diff;
+  }
+  return [-999, -999];
+};
+
 /* ---------------- Boot ---------------- */
 function newGame() {
   initSkills();
@@ -2756,8 +3289,10 @@ function startGame(fresh) {
 
 genWorld();
 initSkills();
-buildTerrain();
+GL.init();          // sets GL.ok on success; game falls back to 2D if it fails
+if (!GL.ok) buildTerrain();
 buildMinimap();
+if (GL.ok) GL.buildWorld();
 resize();
 
 const hasSave = !!(localStorage.getItem(SAVE_KEY) || localStorage.getItem(LEGACY_SAVE_KEY));

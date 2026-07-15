@@ -4,6 +4,15 @@ A browser RPG that plays like classic RuneScape — point-and-click, 600 ms game
 ticks, 13 skills with the real exponential 1–99 XP curve — set in a Game of
 Thrones-inspired realm, with **Dragonriding** as a first-class skill.
 
+**Rendered in real 3D.** A hand-written WebGL2 engine draws a sun-lit landscape
+with true elevation (rolling hills, raised walls, mountains, sunken water),
+per-pixel lighting with ambient occlusion, an animated water surface, sky and
+atmospheric fog, and a cinematic vignette. The detailed hand-drawn characters
+are composited as lit, shadow-cast billboards standing in the 3D world (a
+"2.5D" pipeline). A close third-person **chase camera** follows you Dark
+Souls-style; press **V** for a top-down view. If a browser can't do WebGL2 the
+game automatically falls back to the 2D renderer.
+
 **No build, no server, no dependencies.** Open `index.html` in any browser and
 play. Progress autosaves to `localStorage`. On the deployed Worker it's served
 as static assets at **`/game/`**.
