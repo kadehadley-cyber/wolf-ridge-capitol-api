@@ -439,20 +439,27 @@ def speak(text: str, voice: str) -> None:
         log(f"(no text-to-speech available) Jarvis: {text}")
 
 
-def _speak_edge(text: str, voice: str) -> bool:
-    """Speak with a Microsoft neural voice (keyless, needs network). Returns
-    False on ANY failure — offline, package missing, playback trouble — so the
-    caller falls back to the platform engine instead of going silent."""
-    mp3 = os.path.join(tempfile.gettempdir(), "jarvis_tts.mp3")
+def _synth_edge_mp3(text: str, voice: str, out_path: str) -> bool:
+    """Synthesize text to an mp3 with a Microsoft neural voice (keyless,
+    needs network). Returns False on any failure."""
     try:
         import asyncio
 
         import edge_tts
 
-        asyncio.run(edge_tts.Communicate(text, voice).save(mp3))
-        return _play_mp3(mp3)
-    except Exception:  # noqa: BLE001 — silence here must never mean silence out loud
+        asyncio.run(edge_tts.Communicate(text, voice).save(out_path))
+        return os.path.getsize(out_path) > 0
+    except Exception:  # noqa: BLE001
         return False
+
+
+def _speak_edge(text: str, voice: str) -> bool:
+    """Speak with a Microsoft neural voice. Returns False on ANY failure —
+    offline, package missing, playback trouble — so the caller falls back to
+    the platform engine instead of going silent."""
+    mp3 = os.path.join(tempfile.gettempdir(), "jarvis_tts.mp3")
+    try:
+        return _synth_edge_mp3(text, voice, mp3) and _play_mp3(mp3)
     finally:
         try:
             os.remove(mp3)
@@ -758,6 +765,126 @@ class Listener:
 
 
 # --------------------------------------------------------------------------- #
+# Google Home / Nest speakers (Cast protocol, LAN — no keys, no cloud)
+# --------------------------------------------------------------------------- #
+
+_CAST = {"casts": None, "browser": None}
+
+
+def _discover_speakers(refresh: bool = False):
+    """Find Cast devices (Google Home/Nest speakers, displays, Chromecasts) on
+    the LAN. Cached after the first sweep; returns [] when none or the
+    pychromecast package is missing."""
+    try:
+        import pychromecast
+
+        if _CAST["casts"] is None or refresh:
+            casts, browser = pychromecast.get_chromecasts(timeout=6)
+            _CAST["casts"], _CAST["browser"] = casts, browser
+            names = ", ".join(c.name for c in casts) or "none"
+            log(f"Speakers on the network: {names}")
+        return _CAST["casts"] or []
+    except Exception as err:  # noqa: BLE001
+        log(f"Speaker discovery unavailable ({err}).")
+        return []
+
+
+def _speaker_by_name(name: str):
+    want = name.lower().strip()
+    for cast in _discover_speakers():
+        if want in cast.name.lower():
+            return cast
+    return None
+
+
+def _lan_ip_towards(host: str) -> str:
+    """The local address the speaker can reach us on — found by routing."""
+    import socket
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect((host, 8009))
+        return s.getsockname()[0]
+    finally:
+        s.close()
+
+
+def _serve_file_once(path: str, bind_ip: str):
+    """Serve one file on an ephemeral LAN port so a speaker can fetch it.
+    Returns (url, shutdown_fn)."""
+    import functools
+    from http.server import HTTPServer
+
+    class OneFile(SimpleHTTPRequestHandler):
+        def log_message(self, *a):  # noqa: D102
+            pass
+
+        def do_GET(self):  # noqa: N802
+            try:
+                with open(path, "rb") as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header("content-type", "audio/mpeg")
+                self.send_header("content-length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except OSError:
+                self.send_error(404)
+
+    server = HTTPServer((bind_ip, 0), OneFile)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://{bind_ip}:{server.server_port}/announce.mp3"
+    return url, functools.partial(server.shutdown)
+
+
+def announce_on_speakers(message: str, speaker_name: str | None = None) -> str:
+    """Say something through Google Home speakers: synthesize the message in
+    Jarvis's voice, hand it to the speaker(s) over the LAN, play it."""
+    targets = ([_speaker_by_name(speaker_name)] if speaker_name
+               else _discover_speakers())
+    targets = [t for t in targets if t is not None]
+    if not targets:
+        if speaker_name:
+            found = ", ".join(c.name for c in _discover_speakers()) or "none"
+            return f"I don't see a speaker called {speaker_name}. I can see: {found}."
+        return ("I can't find any Google Home speakers on this network. "
+                "Make sure the PC is on the same Wi-Fi, and that pychromecast installed.")
+
+    mp3 = os.path.join(tempfile.gettempdir(), "jarvis_announce.mp3")
+    if not _synth_edge_mp3(message, _default_edge_voice(), mp3):
+        return "I couldn't prepare the announcement audio — check the connection."
+
+    spoken_on = []
+    for cast in targets:
+        try:
+            cast.wait(timeout=6)
+            url, shutdown = _serve_file_once(mp3, _lan_ip_towards(cast.cast_info.host))
+            mc = cast.media_controller
+            mc.play_media(url, "audio/mpeg")
+            mc.block_until_active(timeout=8)
+            # Wait for playback to start and then finish, then fold the server.
+            played = False
+            for _ in range(120):
+                state = mc.status.player_state
+                if state == "PLAYING":
+                    played = True
+                elif played and state in ("IDLE", "UNKNOWN"):
+                    break
+                time.sleep(0.5)
+            shutdown()
+            spoken_on.append(cast.name)
+        except Exception as err:  # noqa: BLE001
+            log(f"Couldn't reach {getattr(cast, 'name', 'speaker')} ({err}).")
+    try:
+        os.remove(mp3)
+    except OSError:
+        pass
+    if not spoken_on:
+        return "The speakers didn't answer — they may be on a different network."
+    return f"Announced on {', '.join(spoken_on)}."
+
+
+# --------------------------------------------------------------------------- #
 # Local PC commands — instant, offline, no brain round-trip
 # --------------------------------------------------------------------------- #
 
@@ -856,6 +983,24 @@ def local_intent(text: str):
     t = re.sub(r"[^\w\s./:-]", " ", text.lower())
     t = re.sub(r"^\s*(hey\s+)?jarvis[,\s]+", "", t).strip()
     t = re.sub(r"\s+", " ", t)
+
+    # Google Home speakers. Matched against the raw text (minus the wake
+    # prefix) so the announcement keeps its punctuation and casing.
+    orig = re.sub(r"^\s*(hey\s+)?jarvis[,\s]+", "", text, flags=re.I).strip().rstrip(".")
+    m = re.match(r"^(?:announce|broadcast)(?: that)?\s+(.+)$", orig, re.I)
+    if m:
+        payload, target = m.group(1), None
+        mm = re.match(r"^(.+?)\s+(?:on|to)\s+the\s+([\w ]+?)(?:\s+speaker|\s+display)?$",
+                      payload, re.I)
+        if mm and _speaker_by_name(mm.group(2)) is not None:
+            payload, target = mm.group(1), mm.group(2)
+        return announce_on_speakers(payload, target)
+
+    if re.match(r"^(?:list|show)(?: the| my)? speakers$"
+                r"|^what speakers (?:do you see|are there|can you see)$", t):
+        names = ", ".join(c.name for c in _discover_speakers(refresh=True))
+        return f"I can see: {names}." if names else \
+            "I can't find any Google Home speakers on this network."
 
     m = re.match(r"^(?:search the web for|web search for|google) (.+)$", t)
     if m:
