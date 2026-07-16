@@ -146,6 +146,23 @@ struct FKandarinBoostRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) float EffectValue = 0.f;
 };
 
+/** Construction (estate) build projects. Materials is "itemid:qty;itemid:qty".
+    EffectKind House/Pond upgrades that amenity to EffectValue (a tier number);
+    EffectKind Tree plants the named unique tree (EffectValue is its id). */
+USTRUCT(BlueprintType)
+struct FKandarinBuildRow : public FTableRowBase
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString DisplayName;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString Icon;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 ReqLevel = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 XP = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString Prerequisite;  // build row that must be done first
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString Materials;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString EffectKind;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString EffectValue;
+};
+
 /** Placed things: NPCs, bosses, banks, anvils, shops, ferries, towers, throne.
     TileX/TileY are 144x144 world-grid coordinates; multiply by your tile size
     (suggested 400 uu) for world placement. */

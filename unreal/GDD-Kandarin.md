@@ -10,7 +10,7 @@ Everything advances on a **600 ms game tick**. Movement, combat swings,
 gathering attempts, favor drain, respawns and regen all happen on tick
 boundaries; rendering interpolates between them.
 
-## 2. Skills & XP (15 skills — `DT_Skills`, `DT_XPTable`)
+## 2. Skills & XP (16 skills — `DT_Skills`, `DT_XPTable`)
 
 - Levels 1–99 on the classic RuneScape curve (`DT_XPTable` is authoritative):
   `points += floor(L + 300 · 2^(L/7))` per level, `XP(L) = floor(points/4)`.
@@ -122,7 +122,26 @@ plus a **Dragon Aspect** mount reskin (100% first kill). **The Chained Wraith**
 (90) on the fly-only Drowned Bastion drops the Wraith aspect and the Runed
 Chain-Glaive. Boss respawn: 300 ticks.
 
-## 11. Persistence
+## 11. Construction 🏠 (`DT_Construction`, estate markers in `DT_WorldMarkers`)
+
+A deeded estate plot in the Riverlands (tiles 47-57 × 46-54, cleared at world
+gen; deed-post/house at 52,50). Interacting opens the build menu, which lists
+**exactly which materials each project needs** (have/need per item).
+
+- Building: requires Construction level, the prerequisite project, and all
+  materials in inventory; consumes them, grants the project's XP.
+- **House tiers**: Wooden Cabin (1) → Timber Hall (15) → Stone Manor (35) →
+  Great Keep (60). The house mesh grows/upgrades per tier; tiers gate amenities.
+- **Fishing pools**: Fishing Pool (Construction 10) — a personal fishing node
+  at 49,52 (trout-tier, 40 Fishing XP/catch); Stocked Pool (40) upgrades it
+  (salmon-tier, needs Fishing 30, 85 XP/catch).
+- **Unique trees**, plantable only here: Goldleaf (Construction 20; chop WC 30,
+  90 XP, Goldleaf Logs), Silverbark (45; WC 50, 150 XP), Heartwood (70; WC 65,
+  210 XP). They respawn like wild trees; their logs are premium trade goods.
+- Estate state (house tier, pool tier, planted trees) persists in the save and
+  is re-synced into world nodes on load.
+
+## 12. Persistence
 
 Save on every meaningful action + on quit: skills, HP, inventory, bank,
 equipment, style, position, dragon state + aspect, quest flags, slayer

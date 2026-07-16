@@ -28,3 +28,8 @@ tower_1,tower,tower,134,62
 tower_2,tower,tower,120,69
 tower_3,tower,tower,134,69
 tower_4,tower,tower,127,72
+estate_house,estate,Your Estate (house plot),52,50
+estate_pond,estate,Estate fishing pool site,49,52
+estate_tree_goldleaf,estate,goldleaf tree site,55,47
+estate_tree_silverbark,estate,silverbark tree site,55,52
+estate_tree_heartwood,estate,heartwood tree site,49,47

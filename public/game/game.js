@@ -43,6 +43,48 @@ const SKILLS = [
   {id:'dragonriding', name:'Dragonriding', icon:'🐉'},
   {id:'slayer',       name:'Slayer',       icon:'💀'},
   {id:'godshand',     name:"Gods' Hand",   icon:'⚡'},
+  {id:'construction', name:'Construction', icon:'🏠'},
+];
+
+/* ---------------- Construction: your estate ----------------
+   A deeded plot in the Riverlands, east of the kingsroad. Every project lists
+   the exact materials to gather; building consumes them and pays Construction
+   XP. House tiers gate the fancier amenities: personal fishing pools (Fishing
+   XP at home) and unique trees only your estate can grow. */
+const ESTATE = {
+  x0:47, y0:46, x1:57, y1:54,                    // the cleared plot
+  house:{x:52, y:50}, pond:{x:49, y:52},
+  trees:{goldleaf:{x:55, y:47}, silverbark:{x:55, y:52}, heartwood:{x:49, y:47}},
+};
+const HOUSE_TIERS = ['Empty Plot', 'Wooden Cabin', 'Timber Hall', 'Stone Manor', 'Great Keep'];
+const BUILDS = [
+  {id:'house1', name:'Wooden Cabin',  icon:'🛖', lvl:1,  xp:300,
+   mats:{logs:20, bronze_bar:2, coins:500}, effect:{house:1},
+   desc:'Raise your first roof on the deeded plot.'},
+  {id:'house2', name:'Timber Hall',   icon:'🏠', lvl:15, xp:800, req:'house1',
+   mats:{logs:30, ironwood_logs:15, iron_bar:4, coins:1200}, effect:{house:2},
+   desc:'Double the floorplan — a proper hall with room for amenities.'},
+  {id:'house3', name:'Stone Manor',   icon:'🏰', lvl:35, xp:2000, req:'house2',
+   mats:{ironwood_logs:30, steel_bar:8, coins:3000}, effect:{house:3},
+   desc:'Stone walls, glazed windows, a name in the county.'},
+  {id:'house4', name:'Great Keep',    icon:'🏯', lvl:60, xp:5000, req:'house3',
+   mats:{weirwood_logs:25, obsidian_bar:6, valyrian_bar:2, coins:8000}, effect:{house:4},
+   desc:'A seat worthy of a monarch — banners, battlements, the works.'},
+  {id:'pond1',  name:'Fishing Pool',  icon:'⛲', lvl:10, xp:500, req:'house1',
+   mats:{logs:15, iron_bar:2, coins:600}, effect:{pond:1},
+   desc:'A stone-rimmed pool stocked with river trout. Fish at home for Fishing XP.'},
+  {id:'pond2',  name:'Stocked Pool',  icon:'⛲', lvl:40, xp:1500, req:'pond1',
+   mats:{ironwood_logs:20, steel_bar:4, coins:2000}, effect:{pond:2},
+   desc:'Restock with salmon — richer catches, better Fishing XP.'},
+  {id:'tree_goldleaf',   name:'Plant a Goldleaf Tree',   icon:'🌳', lvl:20, xp:400,  req:'house1',
+   mats:{logs:10, coins:400}, effect:{tree:'goldleaf'},
+   desc:'A tree of beaten gold that grows nowhere wild. Chop it (WC 30) for Goldleaf Logs.'},
+  {id:'tree_silverbark', name:'Plant a Silverbark Tree', icon:'🌳', lvl:45, xp:1200, req:'house2',
+   mats:{ironwood_logs:15, coins:1200}, effect:{tree:'silverbark'},
+   desc:'Moon-pale bark, wood that sings. Chop it (WC 50) for Silverbark Logs.'},
+  {id:'tree_heartwood',  name:'Plant a Heartwood Tree',  icon:'🌳', lvl:70, xp:3000, req:'house3',
+   mats:{weirwood_logs:15, coins:3000}, effect:{tree:'heartwood'},
+   desc:'The rarest timber in the realm, blood-red to the core. Chop it (WC 65) for Heartwood Logs.'},
 ];
 
 /* ---------------- Gods' Hand boosts (prayer-style toggles) ----------------
@@ -82,6 +124,9 @@ const ITEMS = {
   logs:           {name:'Pine Logs', icon:'🪵', stack:true, value:4},
   ironwood_logs:  {name:'Ironwood Logs', icon:'🪵', stack:true, value:16},
   weirwood_logs:  {name:'Weirwood Logs', icon:'🪵', stack:true, value:45},
+  goldleaf_logs:  {name:'Goldleaf Logs', icon:'🌟', stack:true, value:70},
+  silverbark_logs:{name:'Silverbark Logs', icon:'🌙', stack:true, value:130},
+  heartwood_logs: {name:'Heartwood Logs', icon:'❤️‍🔥', stack:true, value:220},
   raw_trout:      {name:'Raw River Trout', icon:'🐟', stack:true, value:3},
   trout:          {name:'River Trout', icon:'🍥', stack:true, heal:4, value:8},
   raw_salmon:     {name:'Raw Salmon', icon:'🐟', stack:true, value:10},
@@ -189,6 +234,12 @@ const NODE_DEFS = {
   gate:       {name:'Frostwall Gate', verb:'Pass'},
   shop:       {name:'Store', verb:'Trade at'},
   ferry:      {name:'Ferry', verb:'Board'},
+  estate:     {name:'Your Estate', verb:'Enter'},
+  estate_pond: {name:'Estate Fishing Pool', verb:'Fish', skill:'fishing', lvl:1,  xp:40, item:'raw_trout',  respawn:0},
+  estate_pond2:{name:'Stocked Estate Pool', verb:'Fish', skill:'fishing', lvl:30, xp:85, item:'raw_salmon', respawn:0},
+  goldleaf:   {name:'Goldleaf Tree',   verb:'Chop', skill:'woodcutting', lvl:30, xp:90,  item:'goldleaf_logs',   respawn:30},
+  silverbark: {name:'Silverbark Tree', verb:'Chop', skill:'woodcutting', lvl:50, xp:150, item:'silverbark_logs', respawn:45},
+  heartwood:  {name:'Heartwood Tree',  verb:'Chop', skill:'woodcutting', lvl:65, xp:210, item:'heartwood_logs',  respawn:60},
 };
 
 /* ---------------- Stores ---------------- */
@@ -417,6 +468,13 @@ function genWorld() {
   fishSpots('fish_black', 6, (x, y) => x >= 105 || (x >= 24 && x <= 38 && y >= 62) || y >= 122);
 
   // --- NPCs ---
+  // --- Your estate: a deeded clearing east of the kingsroad ---
+  for (let y = ESTATE.y0; y <= ESTATE.y1; y++) for (let x = ESTATE.x0; x <= ESTATE.x1; x++) {
+    map[idx(x, y)] = T.GRASS;
+    delete nodes[key(x, y)];
+  }
+  nodes[key(ESTATE.house.x, ESTATE.house.y)] = {kind:'estate', x:ESTATE.house.x, y:ESTATE.house.y, tier:0};
+
   npcs = [
     {id:'maera',  name:'Lady Maera Wolfhart', x:40, y:31, color:'#c8ccd8'},
     {id:'pyros',  name:'Grand Maester Pyros', x:53, y:99, color:'#c9a558'},
@@ -511,6 +569,7 @@ const player = {
   dead:false,
   boosts:{}, favor:20, favorXpAcc:0,
   slayer:{type:null, left:0, total:0, done:0},
+  estate:{house:0, pond:0, trees:{}},
 };
 
 function initSkills() {
@@ -877,6 +936,7 @@ function performNodeAction(node) {
     case 'range':  startCooking(); break;
     case 'roost':  openRoost(); player.goal = null; break;
     case 'throne': sitThrone(); player.goal = null; break;
+    case 'estate': openEstate(); player.goal = null; break;
     case 'tower':
       log('<span class="sys">Sorcerous wards shimmer across the stone. Only dragonfire can bring it down.</span>');
       player.goal = null; break;
@@ -1054,6 +1114,74 @@ function talkTo(npc) {
       openModal(npc.name, '<p>"Dragonlord. The keep\'s towers rebuild themselves by foul sorcery every so often — burn them again whenever you wish. She enjoys it, honestly. Best Dragonriding training in the realm."</p>');
     }
   }
+}
+
+/* ---------------- Construction: the estate panel ---------------- */
+function syncEstate() { // reflect player.estate into world nodes
+  const e = player.estate;
+  const hn = nodes[key(ESTATE.house.x, ESTATE.house.y)];
+  if (hn) hn.tier = e.house;
+  const pk = key(ESTATE.pond.x, ESTATE.pond.y);
+  if (e.pond) {
+    const kind = e.pond >= 2 ? 'estate_pond2' : 'estate_pond';
+    if (!nodes[pk] || nodes[pk].kind !== kind) nodes[pk] = {kind, x:ESTATE.pond.x, y:ESTATE.pond.y};
+  } else delete nodes[pk];
+  for (const [t, pos] of Object.entries(ESTATE.trees)) {
+    const k = key(pos.x, pos.y);
+    if (e.trees[t]) { if (!nodes[k]) nodes[k] = {kind:t, x:pos.x, y:pos.y}; }
+    else delete nodes[k];
+  }
+}
+function buildDone(b) { // has this project been built already?
+  const e = player.estate;
+  if (b.effect.house) return e.house >= b.effect.house;
+  if (b.effect.pond) return e.pond >= b.effect.pond;
+  return !!e.trees[b.effect.tree];
+}
+function openEstate() {
+  const e = player.estate, cl = lvlOf('construction');
+  const rows = BUILDS.map(b => {
+    if (buildDone(b)) return `<div class="mrow off"><span class="ico">${b.icon}</span>
+      <span>${b.name}<div class="sub">${b.desc}</div></span><span class="right">BUILT ✅</span></div>`;
+    const needLvl = cl < b.lvl;
+    const needReq = b.req && !buildDone(BUILDS.find(x => x.id === b.req));
+    // the material list — exactly what to gather, have/need, colored
+    const mats = Object.entries(b.mats).map(([id, n]) => {
+      const have = invCount(id), ok = have >= n;
+      return `<span style="color:${ok ? '#7fd47f' : '#d8574d'}; margin-right:10px; white-space:nowrap">
+        ${ITEMS[id].icon} ${ITEMS[id].name} ${fmtQty(Math.min(have, n))}/${fmtQty(n)}</span>`;
+    }).join('');
+    const canBuild = !needLvl && !needReq && Object.entries(b.mats).every(([id, n]) => invCount(id) >= n);
+    const right = needLvl ? `Construction ${b.lvl}` :
+      needReq ? `needs ${BUILDS.find(x => x.id === b.req).name}` :
+      canBuild ? `<button class="mbtn" style="margin:0; padding:4px 12px" data-build="${b.id}">Build (+${b.xp}xp)</button>` : 'gather materials';
+    return `<div class="mrow" style="cursor:default${needLvl || needReq ? ';opacity:.55' : ''}">
+      <span class="ico">${b.icon}</span>
+      <span>${b.name}<div class="sub">${b.desc}</div><div class="sub" style="margin-top:3px">${mats}</div></span>
+      <span class="right">${right}</span></div>`;
+  }).join('');
+  openModal(`🏠 ${HOUSE_TIERS[e.house]} — Construction level ${cl}`, `
+    <p>${e.house === 0
+      ? 'A weathered deed-post marks your plot. Gather the listed materials, then raise your first roof.'
+      : `Your ${HOUSE_TIERS[e.house].toLowerCase()} stands here${e.pond ? ', its fishing pool glittering' : ''}${Object.keys(e.trees).length ? ', rare trees rustling in the yard' : ''}. Each project below lists exactly what to gather.`}</p>
+    <div style="margin-top:10px">${rows}</div>`);
+  document.querySelectorAll('#modalBody [data-build]').forEach(btn => {
+    btn.onclick = () => {
+      const b = BUILDS.find(x => x.id === btn.getAttribute('data-build'));
+      if (!b || buildDone(b) || lvlOf('construction') < b.lvl) return;
+      if (!Object.entries(b.mats).every(([id, n]) => invCount(id) >= n)) return;
+      for (const [id, n] of Object.entries(b.mats)) removeItem(id, n);
+      if (b.effect.house) player.estate.house = b.effect.house;
+      if (b.effect.pond) player.estate.pond = b.effect.pond;
+      if (b.effect.tree) player.estate.trees[b.effect.tree] = 1;
+      syncEstate();
+      addXp('construction', b.xp);
+      burst(ESTATE.house.x, ESTATE.house.y, '#e8c86a', 22);
+      log(`<span class="lvl">🏠 Construction complete: ${b.name}! (+${b.xp} Construction XP)</span>`);
+      updateCoinHud(); saveGame();
+      openEstate();
+    };
+  });
 }
 
 /* ---------------- Gods' Hand panel ---------------- */
@@ -1286,6 +1414,10 @@ function openHelp() {
     N of a monster for Slayer XP and a completion bounty. <b>Gods' Hand ⚡:</b> press B (or the ⚡ button) to
     toggle divine boosts — extra damage, stone skin, life-steal — which drain favor while active. Refill favor
     by burying bones or visiting Grand Maester Pyros.</p>
+    <p style="margin-top:8px"><b>Construction 🏠:</b> a deed-post south-east of Wolf Ridge marks <b>your estate</b>.
+    Click it for the build menu — every project lists exactly which materials to gather. Upgrade the house from
+    cabin to Great Keep, dig a personal <b>fishing pool</b> (Fishing XP at home, upgradable), and plant
+    <b>unique trees</b> — Goldleaf, Silverbark, Heartwood — that grow nowhere else in the realm.</p>
     <p style="margin-top:8px"><b>The realm is rendered in 3D</b> — a sun-lit landscape with real elevation,
     water and atmospheric haze. <b>Keys:</b> M mount/dismount · B Gods' Hand · V switch camera (close third-person
     chase ↔ overhead) · ← → orbit the camera around you · ↑ ↓ or scroll wheel zoom · Esc close windows.
@@ -1313,6 +1445,7 @@ function openSkillGuide(id) {
     dragonriding:'The skill of dragonlords. Fly (M) for XP; dragonfire kills give triple XP; razing Ember Keep towers gives 150xp each.\n\nUnlocks — lvl 1: flight & dragonfire · lvl 20: swifter wings (speed +1) · lvl 40: swifter still · lvl 60: your drake\'s flame burns ever hotter · lvl 99: legend of the skies.',
     slayer:'The contract killer\'s craft. Slayer Master Kessa (by the Capitol bank) assigns a task: slay N of a chosen monster. Each on-task kill grants Slayer XP (~80% of the beast\'s hitpoints); completing the contract pays a bonus and gold. Tougher contracts unlock as your combat level rises.',
     godshand:'Call on the gods for battle boosts (⚡ button or B). Active boosts drain favor each tick and grant Gods\' Hand XP; favor returns while the gods rest, from burying bones (+4), or in full from Grand Maester Pyros.\n\nBoosts — lvl 1: Warrior\'s Fury (+15% melee) · 10: Hawk\'s Eye (+15% archery) · 20: Mage\'s Wrath (+15% sorcery) · 30: Stone Skin (-20% damage taken) · 45: Blood Pact (heal 1 per 4 dealt) · 60: Wrath of the Seven (+25% ALL damage).',
+    construction:'Build out your deeded estate — the cleared plot east of the kingsroad, south of Wolf Ridge. Every project lists exactly which materials to gather; building consumes them and pays Construction XP.\n\nHouse tiers — 1: Wooden Cabin · 15: Timber Hall · 35: Stone Manor · 60: Great Keep. Amenities — 10: Fishing Pool (fish at home for Fishing XP) · 40: Stocked Pool (salmon-tier) · 20/45/70: plant unique Goldleaf, Silverbark and Heartwood trees only your estate can grow (chop for rare logs).',
   };
   openModal(`${s.icon} ${s.name} — level ${lvl}`, `
     <p style="white-space:pre-line">${guides[id]}</p>
@@ -1519,6 +1652,7 @@ function saveGame() {
     dragonTamed:player.dragonTamed, dragonAspect:player.dragonAspect,
     quests:player.quests, t:tickCount,
     slayer:player.slayer, favor:player.favor, boosts:player.boosts,
+    estate:player.estate,
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* private mode */ }
 }
@@ -1539,6 +1673,8 @@ function loadGame() {
     player.slayer = d.slayer || {type:null, left:0, total:0, done:0};
     player.favor = d.favor != null ? d.favor : maxFavor();
     player.boosts = d.boosts || {};
+    player.estate = d.estate || {house:0, pond:0, trees:{}};
+    if (!player.estate.trees) player.estate.trees = {};
     tickCount = d.t || 0;
     return true;
   } catch (e) { return false; }
@@ -2052,7 +2188,7 @@ function buildMinimap() {
   }
   for (const k in nodes) {
     const n = nodes[k];
-    if (['bank','anvil','range','roost','throne','shop','ferry'].includes(n.kind)) {
+    if (['bank','anvil','range','roost','throne','shop','ferry','estate'].includes(n.kind)) {
       c.fillStyle = '#f4e3a1'; c.fillRect(n.x - 1, n.y - 1, 3, 3);
     }
     if (n.kind === 'tower') { c.fillStyle = '#ff5e2a'; c.fillRect(n.x - 1, n.y - 1, 3, 3); }
@@ -2251,16 +2387,17 @@ function label(text, x, y) { // text at a world point, kept upright under camera
 
 function drawNode(n, sx, sy, time) {
   const cx = sx + TILE / 2, cy = sy + TILE / 2;
-  if (n.dead && ['pine','ironwood','weirwood','copper','iron','glassrock','valrock'].includes(n.kind)) {
+  if (n.dead && ['pine','ironwood','weirwood','goldleaf','silverbark','heartwood','copper','iron','glassrock','valrock'].includes(n.kind)) {
     ctx.fillStyle = 'rgba(60,45,30,0.8)';
     ctx.beginPath(); ctx.ellipse(cx, cy + 6, 8, 4, 0, 0, 7); ctx.fill();
     return;
   }
   switch (n.kind) {
-    case 'pine': case 'ironwood': case 'weirwood': {
+    case 'pine': case 'ironwood': case 'weirwood': case 'goldleaf': case 'silverbark': case 'heartwood': {
       const sway = Math.sin(time * 1.1 + n.x * 1.7) * 1.5;
-      const trunk = n.kind === 'weirwood' ? '#e8e4dc' : '#5b4228';
-      const leaf = n.kind === 'pine' ? '#2c5d2a' : n.kind === 'ironwood' ? '#37474a' : '#b0342c';
+      const trunk = {weirwood:'#e8e4dc', silverbark:'#dfe6ea', goldleaf:'#8a6a30'}[n.kind] || '#5b4228';
+      const leaf = {pine:'#2c5d2a', ironwood:'#37474a', weirwood:'#b0342c',
+        goldleaf:'#d8b83c', silverbark:'#b8c8d8', heartwood:'#c04a58'}[n.kind];
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
       ctx.beginPath(); ctx.ellipse(cx + 3, sy + TILE - 4, 12, 4, 0, 0, 7); ctx.fill();
       ctx.fillStyle = trunk; ctx.fillRect(cx - 3, cy, 6, TILE / 2 - 4);
@@ -2414,6 +2551,73 @@ function drawNode(n, sx, sy, time) {
         ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#8c1f1a'; ctx.fillRect(sx + 4, sy - 18, TILE - 8, 4);
         ctx.fillStyle = '#ff5e2a'; ctx.fillRect(sx + 4, sy - 18, (TILE - 8) * n.hp / NODE_DEFS.tower.hp, 4);
+      }
+      break;
+    }
+    case 'estate': {
+      const tier = n.tier || 0;
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.beginPath(); ctx.ellipse(cx, sy + TILE - 3, 13 + tier * 2, 4, 0, 0, 7); ctx.fill();
+      if (tier === 0) { // the deed-post
+        ctx.fillStyle = '#6b4a2a'; ctx.fillRect(cx - 1.5, cy - 6, 3, TILE / 2 + 2);
+        ctx.fillStyle = '#d8cba0'; ctx.fillRect(cx - 8, cy - 12, 16, 9);
+        ctx.strokeStyle = 'rgba(20,15,10,0.7)'; ctx.lineWidth = 1; ctx.strokeRect(cx - 8, cy - 12, 16, 9);
+        ctx.fillStyle = '#6b4a2a'; ctx.fillRect(cx - 6, cy - 10, 12, 1.5); ctx.fillRect(cx - 6, cy - 7, 8, 1.5);
+        break;
+      }
+      const wall = tier >= 3 ? '#8d8a80' : '#7a5a34';
+      const roof = tier >= 3 ? '#4a4e58' : '#8c2f2a';
+      const w2 = 8 + tier * 3, hh = 10 + tier * 3;             // grows with each upgrade
+      ctx.fillStyle = wall;                                    // walls
+      ctx.fillRect(cx - w2, cy + 12 - hh, w2 * 2, hh);
+      ctx.strokeStyle = 'rgba(20,15,10,0.75)'; ctx.lineWidth = 1.2;
+      ctx.strokeRect(cx - w2, cy + 12 - hh, w2 * 2, hh);
+      if (tier >= 3) { // stone coursing
+        ctx.strokeStyle = 'rgba(40,40,44,0.4)';
+        ctx.beginPath(); ctx.moveTo(cx - w2, cy + 12 - hh / 2); ctx.lineTo(cx + w2, cy + 12 - hh / 2); ctx.stroke();
+      }
+      ctx.fillStyle = roof;                                    // roof
+      ctx.beginPath();
+      ctx.moveTo(cx - w2 - 3, cy + 12 - hh); ctx.lineTo(cx, cy + 2 - hh - tier * 2); ctx.lineTo(cx + w2 + 3, cy + 12 - hh);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(20,15,10,0.6)'; ctx.stroke();
+      ctx.fillStyle = '#2a2126';                               // door
+      ctx.fillRect(cx - 2.5, cy + 12 - 8, 5, 8);
+      ctx.fillStyle = '#ffd66b';                               // lit windows
+      for (let i = 0; i < tier; i++) ctx.fillRect(cx - w2 + 3 + i * 7, cy + 12 - hh + 4, 3, 4);
+      if (tier >= 4) { // keep tower + banner
+        ctx.fillStyle = wall; ctx.fillRect(cx + w2 - 5, cy - hh - 8, 9, hh + 12);
+        ctx.strokeStyle = 'rgba(20,15,10,0.75)'; ctx.strokeRect(cx + w2 - 5, cy - hh - 8, 9, hh + 12);
+        for (let i = 0; i < 3; i++) { ctx.fillStyle = wall; ctx.fillRect(cx + w2 - 5 + i * 3.5, cy - hh - 11, 2.5, 3); }
+        ctx.strokeStyle = '#d8cba0'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(cx + w2, cy - hh - 11); ctx.lineTo(cx + w2, cy - hh - 20); ctx.stroke();
+        ctx.fillStyle = '#8c1f1a';
+        const fl = Math.sin(time * 3 + n.x) * 1.5;
+        ctx.beginPath(); ctx.moveTo(cx + w2, cy - hh - 20); ctx.lineTo(cx + w2 + 8 + fl, cy - hh - 17.5); ctx.lineTo(cx + w2, cy - hh - 15); ctx.closePath(); ctx.fill();
+      }
+      break;
+    }
+    case 'estate_pond': case 'estate_pond2': {
+      // a stone-rimmed fishing pool; the stocked pool gains a little fountain
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.beginPath(); ctx.ellipse(cx, sy + TILE - 3, 13, 4, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#8d8a80';
+      ctx.beginPath(); ctx.ellipse(cx, cy + 4, 13, 8, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(20,18,14,0.6)'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = '#2a6a8a';
+      ctx.beginPath(); ctx.ellipse(cx, cy + 4, 10, 5.5, 0, 0, 7); ctx.fill();
+      const wv = Math.sin(time * 2.5 + n.x) * 0.5 + 0.5;
+      ctx.strokeStyle = 'rgba(200,235,255,' + (0.25 + wv * 0.3).toFixed(3) + ')'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(cx, cy + 4, 5 + wv * 3, 2.5 + wv * 1.5, 0, 0, 7); ctx.stroke();
+      if (n.kind === 'estate_pond2') { // fountain spout
+        ctx.strokeStyle = 'rgba(200,235,255,0.7)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(cx, cy + 3); ctx.quadraticCurveTo(cx + 1, cy - 6 - wv * 2, cx + 3, cy - 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, cy + 3); ctx.quadraticCurveTo(cx - 1, cy - 6 - wv * 2, cx - 3, cy - 3); ctx.stroke();
+      }
+      // a fish jumps now and then
+      if (Math.sin(time * 1.7 + n.y) > 0.93) {
+        ctx.fillStyle = '#d8cba0';
+        ctx.beginPath(); ctx.ellipse(cx + 4, cy + 1, 2.5, 1.2, -0.5, 0, 7); ctx.fill();
       }
       break;
     }
@@ -2833,7 +3037,7 @@ function openWorldMap() {
   };
   for (const k in nodes) {
     const n = nodes[k];
-    if (['bank', 'anvil', 'range', 'roost', 'throne', 'shop', 'ferry'].includes(n.kind)) dot(n.x, n.y, 3, '#f4e34a');
+    if (['bank', 'anvil', 'range', 'roost', 'throne', 'shop', 'ferry', 'estate'].includes(n.kind)) dot(n.x, n.y, 3, '#f4e34a');
     if (n.kind === 'tower') dot(n.x, n.y, 3, '#ff5e2a');
   }
   for (const m of mobs) {
@@ -3223,10 +3427,11 @@ GL.entTex = function (kind, ent) {
     case 'npc': return this._sprite('npc_' + ent.color, 64, 92, 8, (ox, oy) => drawHumanoid(ox, oy, ent.color, '#3a3227'));
     case 'fake': return this._sprite('fk_' + ent.color, 64, 92, 8, (ox, oy) => drawHumanoid(ox, oy, ent.color, '#2a2a2a'));
     case 'node': {
-      const tall = ['pine', 'ironwood', 'weirwood'].includes(ent.kind);
-      const w = 80, hh = tall ? 108 : 96, ft = 10;
-      return this._sprite('nd_' + ent.kind + (ent.dead ? '_d' : ''), w, hh, ft, (ox, oy) =>
-        drawNode({ kind: ent.kind, x: 0, y: 0, dead: ent.dead, hp: (NODE_DEFS[ent.kind] || {}).hp || 1 }, ox, oy, 0.6));
+      const tall = ['pine', 'ironwood', 'weirwood', 'goldleaf', 'silverbark', 'heartwood'].includes(ent.kind);
+      const estate = ent.kind === 'estate';
+      const w = estate ? 130 : 80, hh = estate ? 140 : tall ? 108 : 96, ft = estate ? 12 : 10;
+      return this._sprite('nd_' + ent.kind + (ent.tier || '') + (ent.dead ? '_d' : ''), w, hh, ft, (ox, oy) =>
+        drawNode({ kind: ent.kind, x: 0, y: 0, tier: ent.tier || 0, dead: ent.dead, hp: (NODE_DEFS[ent.kind] || {}).hp || 1 }, ox, oy, 0.6));
     }
   }
 };
@@ -3356,7 +3561,8 @@ GL._drawBills = function (time) {
     for (const b of arrB) { const sx = b.tex.w / 32, sy = b.tex.h / 32;
       for (const [cx, cy] of C) {
         arr[o++] = b.wx; arr[o++] = b.wy; arr[o++] = b.wz; arr[o++] = cx; arr[o++] = cy;
-        arr[o++] = cx + 0.5; arr[o++] = 1 - cy; arr[o++] = sx; arr[o++] = sy; arr[o++] = b.sway;
+        // FLIP_Y at upload puts the canvas bottom at v=0, so v follows cy directly
+        arr[o++] = cx + 0.5; arr[o++] = cy; arr[o++] = sx; arr[o++] = sy; arr[o++] = b.sway;
       }
     }
     gl.bufferData(gl.ARRAY_BUFFER, arr, gl.DYNAMIC_DRAW);
@@ -3435,6 +3641,9 @@ function newGame() {
   player.equip = {weapon:null, armor:null};
   player.quests = {q1:0, q2:0, q3:0, q4:0, q5:0, q3burned:0, throne:false, slain:{}};
   player.dragonTamed = false; player.mounted = false; player.dragonAspect = 'ruby';
+  player.estate = {house:0, pond:0, trees:{}};
+  player.slayer = {type:null, left:0, total:0, done:0};
+  player.boosts = {}; player.favor = 20;
   player.x = 40; player.y = 43; player.px = 40; player.py = 43;
   addItem('coins', 25, true);
   addItem('trout', 3, true);
@@ -3446,6 +3655,7 @@ function startGame(fresh) {
   document.getElementById('title').style.display = 'none';
   gameStarted = true;
   player.hp = Math.min(player.hp, maxHp());
+  syncEstate();
   renderTab(); renderHud(); updateMountBtn(); updateCoinHud(); updateBoostBtn();
   if (fresh) {
     log('<span class="lvl">⚔ Welcome to KANDARIN. You wake outside the gates of Wolf Ridge with a rusty sword and three fish.</span>');

@@ -7,8 +7,9 @@ kit brings the entire game design as data Unreal imports natively.
 
 ```
 unreal/
-├── DataTables/        12 CSVs — every design table (items, mobs, drops, shops,
-│                      quests, skills, XP curve, slayer tasks, boosts, markers)
+├── DataTables/        13 CSVs — every design table (items, mobs, drops, shops,
+│                      quests, skills, XP curve, slayer tasks, boosts,
+│                      construction projects, markers)
 ├── Source/
 │   └── KandarinTypes.h   FTableRowBase structs matching every CSV, documented
 ├── GDD-Kandarin.md    The full game design doc: every formula and system rule
@@ -40,6 +41,7 @@ CSV → *Import As: DataTable* → choose the matching row struct:
 | DT_Shops.csv | `KandarinShopRow` |
 | DT_Quests.csv | `KandarinQuestRow` |
 | DT_SlayerTasks.csv | `KandarinSlayerTaskRow` |
+| DT_Construction.csv | `KandarinBuildRow` |
 | DT_GodsHandBoosts.csv | `KandarinBoostRow` |
 | DT_WorldMarkers.csv | `KandarinMarkerRow` |
 | DT_Regions.csv | `KandarinRegionRow` |
@@ -92,7 +94,11 @@ runs them — implement in Blueprints against the DataTables. Suggested order:
    → track kills → pay bounty.
 5. **Gods' Hand** ⚡: favor pool `20 + level`, toggles from
    `DT_GodsHandBoosts`, drain per tick, effects in the damage pipeline.
-6. **Dragonriding**: mount toggle, flight movement mode, dragonfire projectile,
+6. **Construction** 🏠: the estate plot (markers in `DT_WorldMarkers`, kind
+   `estate`) — projects from `DT_Construction` with material checks, house-tier
+   meshes swapped per upgrade, a fishable estate pool, and unique plantable
+   trees (`goldleaf` / `silverbark` / `heartwood` rows in `DT_ResourceNodes`).
+7. **Dragonriding**: mount toggle, flight movement mode, dragonfire projectile,
    Ember Keep tower raid, boss aspects.
 
 ## 6. Licensing note

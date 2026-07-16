@@ -1,0 +1,10 @@
+Name,DisplayName,Icon,ReqLevel,XP,Prerequisite,Materials,EffectKind,EffectValue
+house1,Wooden Cabin,🛖,1,300,,logs:20;bronze_bar:2;coins:500,House,1
+house2,Timber Hall,🏠,15,800,house1,logs:30;ironwood_logs:15;iron_bar:4;coins:1200,House,2
+house3,Stone Manor,🏰,35,2000,house2,ironwood_logs:30;steel_bar:8;coins:3000,House,3
+house4,Great Keep,🏯,60,5000,house3,weirwood_logs:25;obsidian_bar:6;valyrian_bar:2;coins:8000,House,4
+pond1,Fishing Pool,⛲,10,500,house1,logs:15;iron_bar:2;coins:600,Pond,1
+pond2,Stocked Pool,⛲,40,1500,pond1,ironwood_logs:20;steel_bar:4;coins:2000,Pond,2
+tree_goldleaf,Plant a Goldleaf Tree,🌳,20,400,house1,logs:10;coins:400,Tree,goldleaf
+tree_silverbark,Plant a Silverbark Tree,🌳,45,1200,house2,ironwood_logs:15;coins:1200,Tree,silverbark
+tree_heartwood,Plant a Heartwood Tree,🌳,70,3000,house3,weirwood_logs:15;coins:3000,Tree,heartwood

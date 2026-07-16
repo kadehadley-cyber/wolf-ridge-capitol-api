@@ -18,3 +18,9 @@ tower,Ember Keep Tower,Inspect,,0,0,,0,40
 gate,Frostwall Gate,Pass,,0,0,,0,0
 shop,Store,Trade at,,0,0,,0,0
 ferry,Ferry,Board,,0,0,,0,0
+estate,Your Estate,Enter,,0,0,,0,0
+estate_pond,Estate Fishing Pool,Fish,fishing,1,40,raw_trout,0,0
+estate_pond2,Stocked Estate Pool,Fish,fishing,30,85,raw_salmon,0,0
+goldleaf,Goldleaf Tree,Chop,woodcutting,30,90,goldleaf_logs,30,0
+silverbark,Silverbark Tree,Chop,woodcutting,50,150,silverbark_logs,45,0
+heartwood,Heartwood Tree,Chop,woodcutting,65,210,heartwood_logs,60,0
