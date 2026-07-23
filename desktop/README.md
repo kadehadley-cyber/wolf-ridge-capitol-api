@@ -44,6 +44,29 @@ seconds so you can follow up **without** saying "Hey Jarvis" again — ask a
 question, then just say "and tomorrow?". Tune with `JARVIS_FOLLOWUP` (seconds;
 `0` disables).
 
+### Google Home / Nest speakers
+
+Jarvis can talk **through** your Google Home and Nest speakers — in his own
+voice — over your local network. No Google account, no keys; the PC just needs
+to be on the same Wi-Fi (`pychromecast` is installed with the app).
+
+| You say | What happens |
+| --- | --- |
+| "broadcast dinner is ready" / "announce the car is here" | Plays on **every** speaker, in Jarvis's voice. |
+| "announce ten minutes on the kitchen speaker" | Targets one speaker by name. |
+| "list speakers" | Names the Cast devices it can see. |
+
+**Controlling Google Home *devices* (lights, plugs, TVs).** Google has no
+simple personal API for these, so the clean route is the one Jarvis already
+speaks — **Home Assistant**. Point Home Assistant at the brands in your Google
+Home app (most integrate directly: Kasa, Hue, Govee, Tuya, …), set
+`HOME_ASSISTANT_URL` + `HOME_ASSISTANT_TOKEN` on the Worker, and Jarvis's
+`control_home` tool runs them from *every* surface — "turn off the bedroom
+lights", "open the blinds". For anything only Google can do (some routines /
+devices), Home Assistant's *Google Assistant SDK* integration relays a
+command to Google as if you'd said "Hey Google…", still through the same
+`control_home` pipe.
+
 ## Setup
 
 1. Install **Python 3.9+** ([python.org](https://python.org); on Windows tick *Add to PATH*).

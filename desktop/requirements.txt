@@ -5,6 +5,8 @@ numpy              # audio buffers + level detection
 faster-whisper     # on-device speech-to-text
 openwakeword       # "Hey Jarvis" wake word (falls back to push-to-talk without it)
 edge-tts           # natural neural voices (keyless; classic voices remain the offline fallback)
+pychromecast       # talk through Google Home / Nest speakers on the LAN (broadcast/announce)
+pychromecast       # Google Home / Nest speakers: "broadcast dinner is ready"
 mss                # screenshots for "what's on my screen?"
 pillow             # image downscale/encode before upload
 pywebview          # the HUD app window (falls back to your browser without it)
