@@ -73,6 +73,59 @@
   /* Boot fade-in */
   #stage { animation: boot 1.6s ease-out both; }
   @keyframes boot { from { opacity: 0; filter: brightness(2.2) blur(6px); } to { opacity: 1; filter: none; } }
+
+  /* ---- Dashboard panels (weather / stocks / Claude chat) ---- */
+  .panel {
+    position: absolute; pointer-events: none; display: none;
+    background: linear-gradient(180deg, rgba(12,44,64,0.42), rgba(4,18,30,0.30));
+    border: 1px solid rgba(56,208,255,0.28); border-radius: 12px;
+    padding: 14px 16px; backdrop-filter: blur(4px);
+    box-shadow: 0 0 26px rgba(56,208,255,0.10), inset 0 0 22px rgba(56,208,255,0.06);
+    text-shadow: 0 0 10px rgba(56,208,255,0.4);
+  }
+  .panel.show { display: block; }
+  .panel h3 { font-size: clamp(8px,0.95vw,12px); letter-spacing: 0.42em;
+              opacity: 0.72; margin-bottom: 10px; font-weight: 600; }
+
+  #weather { top: 15vh; left: 3.5vw; width: min(23vw, 250px); }
+  #wx-main { display: flex; align-items: center; gap: 12px; }
+  #wx-icon { font-size: clamp(30px, 4vw, 52px); line-height: 1; }
+  #wx-temp { font-size: clamp(28px, 4vw, 50px); font-weight: 600; color: var(--blue-bright); }
+  #wx-place { font-size: clamp(10px,1.1vw,14px); margin-top: 8px; opacity: 0.85; }
+  #wx-sub { font-size: clamp(9px,1vw,12px); opacity: 0.62; margin-top: 4px; letter-spacing: 0.2em; }
+
+  #stocks { top: 15vh; right: 3.5vw; width: min(23vw, 260px); }
+  .stk { display: flex; justify-content: space-between; align-items: baseline;
+         font-size: clamp(10px,1.15vw,15px); padding: 5px 0;
+         border-bottom: 1px solid rgba(56,208,255,0.10); }
+  .stk .sym { letter-spacing: 0.2em; opacity: 0.9; }
+  .stk .px { color: var(--blue-bright); }
+  .stk .chg { font-size: 0.82em; margin-left: 8px; }
+  .up { color: #4be08a; } .down { color: #ff6b7d; }
+
+  #chat { bottom: 4vh; left: 3.5vw; width: min(34vw, 430px); height: 44vh;
+          display: none; flex-direction: column; pointer-events: auto; cursor: auto; }
+  #chat.show { display: flex; }
+  #chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+              gap: 8px; padding-right: 6px; }
+  #chat-log::-webkit-scrollbar { width: 5px; }
+  #chat-log::-webkit-scrollbar-thumb { background: rgba(56,208,255,0.3); border-radius: 3px; }
+  .bubble { max-width: 88%; padding: 7px 11px; border-radius: 10px; line-height: 1.4;
+            font-size: clamp(11px,1.15vw,14px); letter-spacing: 0.04em; white-space: pre-wrap; }
+  .bubble.me { align-self: flex-end; background: rgba(56,208,255,0.16);
+               border: 1px solid rgba(56,208,255,0.3); }
+  .bubble.jarvis { align-self: flex-start; background: rgba(8,30,44,0.6);
+                   border: 1px solid rgba(56,208,255,0.16); color: var(--blue-bright); }
+  .bubble.think { opacity: 0.6; font-style: italic; }
+  #chat-form { display: flex; gap: 8px; margin-top: 10px; }
+  #chat-input { flex: 1; min-width: 0; background: rgba(2,12,20,0.7);
+                border: 1px solid rgba(56,208,255,0.3); border-radius: 8px;
+                color: var(--blue-bright); padding: 9px 12px; font-size: 14px;
+                font-family: inherit; letter-spacing: 0.05em; }
+  #chat-input:focus { outline: none; border-color: var(--blue); }
+  #chat-send { background: rgba(56,208,255,0.2); border: 1px solid rgba(56,208,255,0.4);
+               color: var(--blue-bright); border-radius: 8px; padding: 0 14px;
+               font-family: inherit; font-size: 16px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -106,6 +159,29 @@
     <div class="hud" id="captions">
       <div id="you"></div>
       <div id="reply"></div>
+    </div>
+
+    <!-- Dashboard panels: shown only when the local server feeds them (the
+         desktop app); on the Pi HUD they stay hidden and nothing changes. -->
+    <div class="panel" id="weather">
+      <h3>WEATHER</h3>
+      <div id="wx-main"><span id="wx-icon">•</span><span id="wx-temp">--°</span></div>
+      <div id="wx-place">—</div>
+      <div id="wx-sub"></div>
+    </div>
+
+    <div class="panel" id="stocks">
+      <h3>MARKETS</h3>
+      <div id="stk-list"></div>
+    </div>
+
+    <div class="panel" id="chat">
+      <h3>J.A.R.V.I.S. — DIRECT LINE</h3>
+      <div id="chat-log"></div>
+      <form id="chat-form" autocomplete="off">
+        <input id="chat-input" type="text" placeholder="Type to Jarvis…" />
+        <button id="chat-send" type="submit" aria-label="Send">➤</button>
+      </form>
     </div>
   </div>
 
@@ -360,8 +436,16 @@
         (typeof s.miclevel === "number" && (s.state || "idle") === "idle")
           ? `MIC ${Math.round(s.miclevel * 100)}%  ·  WAKE ${(s.wake ?? 0).toFixed(2)}`
           : "";
-      if ((s.you || "") !== lastYou) { lastYou = s.you || ""; document.getElementById("you").textContent = lastYou ? `“${lastYou}”` : ""; }
-      if ((s.reply || "") !== lastReply) { lastReply = s.reply || ""; typeReply(lastReply); }
+      if ((s.you || "") !== lastYou) {
+        lastYou = s.you || "";
+        document.getElementById("you").textContent = lastYou ? `“${lastYou}”` : "";
+        if (lastYou) addBubble("me", lastYou);   // voice turns join the Direct Line
+      }
+      if ((s.reply || "") !== lastReply) {
+        lastReply = s.reply || "";
+        typeReply(lastReply);
+        if (lastReply) addBubble("jarvis", lastReply);
+      }
     } catch (e) {
       // No fake conversations here: if the app is unreachable, say so. A few
       // consecutive misses are tolerated so a transient hiccup (busy server,
@@ -377,6 +461,92 @@
     }
   }
   setInterval(poll, 150);
+
+  // ---- Dashboard: weather + markets + a Claude chat line ----
+  // Each panel only appears once its local endpoint answers, so the Pi HUD
+  // (which serves neither) is unchanged.
+
+  async function refreshWeather() {
+    try {
+      const w = await (await fetch("/weather", { cache: "no-store" })).json();
+      if (w.configured === false || w.error || w.temp === undefined) {
+        if (w.configured === false) {
+          document.getElementById("weather").classList.add("show");
+          document.getElementById("wx-place").textContent = "Set JARVIS_WEATHER_LOCATION";
+          document.getElementById("wx-temp").textContent = "";
+          document.getElementById("wx-icon").textContent = "⚙";
+        }
+        return;
+      }
+      document.getElementById("wx-icon").textContent = w.icon;
+      document.getElementById("wx-temp").textContent = `${w.temp}°`;
+      document.getElementById("wx-place").textContent = w.place;
+      document.getElementById("wx-sub").textContent = `${w.phrase} · H ${w.hi}°  L ${w.lo}°`;
+      document.getElementById("weather").classList.add("show");
+      document.getElementById("tl").style.display = "none";  // panel takes this corner
+    } catch (e) { /* endpoint absent (Pi) → stay hidden */ }
+  }
+
+  async function refreshStocks() {
+    try {
+      const d = await (await fetch("/stocks", { cache: "no-store" })).json();
+      if (!d.quotes || !d.quotes.length) return;
+      document.getElementById("stk-list").innerHTML = d.quotes.map((q) => {
+        const cls = q.change >= 0 ? "up" : "down";
+        const sign = q.change >= 0 ? "+" : "";
+        return `<div class="stk"><span class="sym">${q.symbol}</span>` +
+          `<span><span class="px">${q.price.toLocaleString()}</span>` +
+          `<span class="chg ${cls}">${sign}${q.change}%</span></span></div>`;
+      }).join("");
+      document.getElementById("stocks").classList.add("show");
+    } catch (e) { /* endpoint absent (Pi) → stay hidden */ }
+  }
+
+  const chatLog = document.getElementById("chat-log");
+  function addBubble(who, text, cls) {
+    const b = document.createElement("div");
+    b.className = `bubble ${who}${cls ? " " + cls : ""}`;
+    b.textContent = text;
+    chatLog.appendChild(b);
+    chatLog.scrollTop = chatLog.scrollHeight;
+    return b;
+  }
+
+  async function initChat() {
+    // Only enable the chat line if the app exposes /chat (the desktop app).
+    try {
+      const probe = await fetch("/chat", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      if (!probe.ok) return;
+    } catch (e) { return; }
+    document.getElementById("chat").classList.add("show");
+    document.getElementById("bl").style.display = "none";  // panel takes this corner
+    const form = document.getElementById("chat-form");
+    const input = document.getElementById("chat-input");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      addBubble("me", text);
+      const thinking = addBubble("jarvis", "thinking…", "think");
+      try {
+        const r = await fetch("/chat", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const data = await r.json();
+        thinking.remove();
+        addBubble("jarvis", data.reply || "…");
+      } catch (err) {
+        thinking.remove();
+        addBubble("jarvis", "I couldn't reach my brain just now.");
+      }
+    });
+  }
+
+  refreshWeather(); setInterval(refreshWeather, 600000);
+  refreshStocks(); setInterval(refreshStocks, 60000);
+  initChat();
 })();
 </script>
 </body>
