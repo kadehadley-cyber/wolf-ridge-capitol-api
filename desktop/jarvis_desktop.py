@@ -99,6 +99,13 @@ class Config:
         self.followup_secs = float(
             os.environ.get("JARVIS_FOLLOWUP", saved.get("followup_secs", 6))
         )
+        # HUD dashboard panels.
+        self.weather_location = os.environ.get(
+            "JARVIS_WEATHER_LOCATION", saved.get("weather_location", "")
+        ).strip()
+        self.stocks = os.environ.get(
+            "JARVIS_STOCKS", saved.get("stocks", "AAPL,MSFT,NVDA,BTC-USD")
+        ).strip()
 
         # First run: ask once, save, and never ask again. This needs an interactive
         # console — when there's no usable stdin (double-clicked via pythonw, a GUI
@@ -117,14 +124,39 @@ class Config:
                 self.api_key = input("  JARVIS_API_KEY (blank if none): ").strip()
             if not self.url:
                 raise SystemExit("No Worker URL given; nothing to point Jarvis at.")
-            try:
-                STATE_DIR.mkdir(parents=True, exist_ok=True)
-                CONFIG_PATH.write_text(
-                    json.dumps({"url": self.url, "api_key": self.api_key}, indent=2)
-                )
-                print(f"  Saved to {CONFIG_PATH}\n")
-            except OSError:
-                pass
+            self._prompt_dashboard()
+            self._save(saved)
+        elif ("weather_location" not in saved and _stdin_is_interactive()
+              and not os.environ.get("JARVIS_WEATHER_LOCATION")):
+            # Upgraded from a version before the dashboard — ask once, then save.
+            print("New: the HUD now has weather + markets panels.")
+            self._prompt_dashboard()
+            self._save(saved)
+
+    def _prompt_dashboard(self) -> None:
+        """Ask once for the dashboard's city and tickers. Blank keeps the
+        default (no weather panel; the standard ticker set)."""
+        if not os.environ.get("JARVIS_WEATHER_LOCATION"):
+            city = input("  City for the weather panel (blank to skip): ").strip()
+            if city:
+                self.weather_location = city
+        if not os.environ.get("JARVIS_STOCKS"):
+            tickers = input(f"  Stock tickers [{self.stocks}]: ").strip()
+            if tickers:
+                self.stocks = tickers
+
+    def _save(self, saved: dict) -> None:
+        """Persist config, preserving any keys written by other versions."""
+        saved.update({
+            "url": self.url, "api_key": self.api_key,
+            "weather_location": self.weather_location, "stocks": self.stocks,
+        })
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            CONFIG_PATH.write_text(json.dumps(saved, indent=2))
+            print(f"  Saved to {CONFIG_PATH}\n")
+        except OSError:
+            pass
 
 
 # --------------------------------------------------------------------------- #
@@ -149,11 +181,121 @@ class AppState:
             return dict(self._d)
 
 
-def start_hud_server(port: int, state: AppState) -> bool:
+# --- Dashboard data: keyless weather + stock quotes, cached, fetched by the
+# local HUD server (so the browser page has no CORS trouble and no API key). ---
+
+_DASH = {"weather": (0.0, None), "stocks": (0.0, None)}
+_DASH_LOCK = threading.Lock()
+
+_WMO = {
+    0: ("Clear", "☀"), 1: ("Mainly clear", "🌤"), 2: ("Partly cloudy", "⛅"),
+    3: ("Overcast", "☁"), 45: ("Fog", "🌫"), 48: ("Fog", "🌫"),
+    51: ("Drizzle", "🌦"), 53: ("Drizzle", "🌦"), 55: ("Drizzle", "🌦"),
+    61: ("Light rain", "🌦"), 63: ("Rain", "🌧"), 65: ("Heavy rain", "🌧"),
+    71: ("Light snow", "🌨"), 73: ("Snow", "🌨"), 75: ("Heavy snow", "❄"),
+    77: ("Snow", "🌨"), 80: ("Showers", "🌦"), 81: ("Showers", "🌧"),
+    82: ("Violent showers", "⛈"), 85: ("Snow showers", "🌨"), 86: ("Snow showers", "🌨"),
+    95: ("Thunderstorm", "⛈"), 96: ("Thunderstorm", "⛈"), 99: ("Thunderstorm", "⛈"),
+}
+
+
+def _http_json(url: str, timeout: float = 6.0, browser_ua: bool = False):
+    headers = {"accept": "application/json", "user-agent": _USER_AGENT}
+    if browser_ua:  # Yahoo rejects non-browser agents
+        headers["user-agent"] = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                 "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                 "Chrome/124.0 Safari/537.36")
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.load(resp)
+
+
+def fetch_weather(location: str):
+    """Current conditions + today's hi/lo for a place name, via keyless
+    Open-Meteo. Cached for 10 minutes."""
+    if not location:
+        return {"configured": False}
+    now = time.time()
+    with _DASH_LOCK:
+        ts, cached = _DASH["weather"]
+        if cached is not None and now - ts < 600:
+            return cached
+    try:
+        from urllib.parse import quote
+
+        geo = _http_json(
+            f"https://geocoding-api.open-meteo.com/v1/search?name={quote(location)}"
+            "&count=1&language=en&format=json"
+        )
+        results = geo.get("results") or []
+        if not results:
+            out = {"error": f"Couldn't find {location}."}
+        else:
+            g = results[0]
+            fc = _http_json(
+                f"https://api.open-meteo.com/v1/forecast?latitude={g['latitude']}"
+                f"&longitude={g['longitude']}&current=temperature_2m,weather_code"
+                "&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit"
+                "&timezone=auto&forecast_days=1"
+            )
+            cur, daily = fc.get("current", {}), fc.get("daily", {})
+            code = int(cur.get("weather_code", 0))
+            phrase, icon = _WMO.get(code, ("—", "•"))
+            out = {
+                "place": ", ".join(x for x in [g.get("name"), g.get("admin1")] if x),
+                "temp": round(cur.get("temperature_2m", 0)),
+                "phrase": phrase, "icon": icon,
+                "hi": round((daily.get("temperature_2m_max") or [0])[0]),
+                "lo": round((daily.get("temperature_2m_min") or [0])[0]),
+                "unit": "F",
+            }
+    except Exception as err:  # noqa: BLE001
+        out = {"error": "Weather unavailable."}
+        log(f"Weather fetch failed: {err}")
+    with _DASH_LOCK:
+        _DASH["weather"] = (now, out)
+    return out
+
+
+def fetch_stocks(symbols: str):
+    """Last price + day change % for each ticker, via Yahoo's keyless chart
+    endpoint (plain symbols incl. crypto like BTC-USD). Cached for 60s."""
+    now = time.time()
+    with _DASH_LOCK:
+        ts, cached = _DASH["stocks"]
+        if cached is not None and now - ts < 60:
+            return cached
+    out = []
+    for sym in [s.strip().upper() for s in symbols.split(",") if s.strip()][:8]:
+        try:
+            data = _http_json(
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+                "?range=1d&interval=1d", browser_ua=True,
+            )
+            meta = ((data.get("chart", {}).get("result") or [{}])[0]).get("meta", {})
+            price = meta.get("regularMarketPrice")
+            prev = meta.get("chartPreviousClose") or meta.get("previousClose")
+            if price is None or not prev:
+                continue
+            out.append({
+                "symbol": sym.replace("-USD", ""),
+                "price": round(price, 2),
+                "change": round((price - prev) / prev * 100, 2),
+            })
+        except Exception as err:  # noqa: BLE001
+            log(f"Stock fetch failed for {sym}: {err}")
+    result = {"quotes": out}
+    with _DASH_LOCK:
+        _DASH["stocks"] = (now, result)
+    return result
+
+
+def start_hud_server(port: int, state: AppState, cfg: "Config") -> bool:
     if not HUD_DIR.is_dir():
         log(f"HUD assets not found at {HUD_DIR}; running without the display.")
         return False
     hud_dir = str(HUD_DIR)
+    brain = WorkerBrain(cfg)  # for the dashboard's Claude chat panel
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *a, **k):
@@ -162,19 +304,39 @@ def start_hud_server(port: int, state: AppState) -> bool:
         def log_message(self, *a):
             pass
 
+        def _json(self, obj, status=200):
+            # default=float: numpy scalars must never crash a poller.
+            body = json.dumps(obj, default=float).encode()
+            self.send_response(status)
+            self.send_header("content-type", "application/json")
+            self.send_header("cache-control", "no-store")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         def do_GET(self):  # noqa: N802
-            if self.path.split("?")[0] == "/state":
-                # default=float: numpy scalars (wake scores, levels) must never
-                # be able to crash the HUD poller.
-                body = json.dumps(state.snapshot(), default=float).encode()
-                self.send_response(200)
-                self.send_header("content-type", "application/json")
-                self.send_header("cache-control", "no-store")
-                self.send_header("content-length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-                return
+            route = self.path.split("?")[0]
+            if route == "/state":
+                return self._json(state.snapshot())
+            if route == "/weather":
+                return self._json(fetch_weather(cfg.weather_location))
+            if route == "/stocks":
+                return self._json(fetch_stocks(cfg.stocks))
             super().do_GET()
+
+        def do_POST(self):  # noqa: N802 — the Claude chat panel
+            if self.path.split("?")[0] != "/chat":
+                return self._json({"error": "not found"}, 404)
+            try:
+                length = int(self.headers.get("content-length", 0))
+                payload = json.loads(self.rfile.read(length) or b"{}")
+                text = str(payload.get("text", "")).strip()
+            except (ValueError, OSError):
+                return self._json({"error": "bad request"}, 400)
+            if not text:
+                return self._json({"reply": ""})
+            reply = brain.ask(text)  # same session as voice → shared memory
+            return self._json({"reply": reply})
 
     try:
         server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
@@ -194,7 +356,7 @@ def open_hud_window(port: int) -> None:
     try:
         import webview  # pywebview
 
-        webview.create_window("J.A.R.V.I.S.", url, width=1100, height=680, background_color="#02060b")
+        webview.create_window("J.A.R.V.I.S.", url, width=1280, height=800, background_color="#02060b")
         webview.start()  # blocks until the window closes
         return
     except Exception as err:  # noqa: BLE001 — ImportError, missing WebView2, GUI trouble
@@ -1278,7 +1440,7 @@ def main():
 
     mode = "push" if args.push else "auto" if args.auto else "wake"
 
-    hud_ok = False if args.no_hud else start_hud_server(cfg.hud_port, state)
+    hud_ok = False if args.no_hud else start_hud_server(cfg.hud_port, state, cfg)
 
     if hud_ok:
         # pywebview must own the main thread; the voice loop runs beside it.

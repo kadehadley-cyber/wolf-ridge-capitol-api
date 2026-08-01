@@ -67,6 +67,26 @@ devices), Home Assistant's *Google Assistant SDK* integration relays a
 command to Google as if you'd said "Hey Google…", still through the same
 `control_home` pipe.
 
+## The dashboard
+
+The pop-up window is a J.A.R.V.I.S. dashboard: the arc-reactor centrepiece
+(voice status, live mic/wake meter), plus three live panels —
+
+- **Weather** — current conditions and today's high/low for your city
+  (keyless [Open-Meteo](https://open-meteo.com/)). Set `JARVIS_WEATHER_LOCATION`.
+- **Markets** — last price and day change for your tickers, green/red
+  (keyless). Set `JARVIS_STOCKS` (e.g. `AAPL,MSFT,NVDA,BTC-USD`).
+- **Direct Line** — type to Jarvis and read the reply, sharing the **same
+  brain, memory, and tools** as the voice. Voice turns show up here too.
+
+**First run asks for your city and tickers** and saves them to
+`~/.jarvis/desktop.json` — nothing to set by hand. (Upgrading from an older
+build? It asks once, the next time you start from a terminal.) Leave the city
+blank to skip the weather panel; the environment variables below still
+override, and the panels are fed by the app's own local server, so the page
+holds no API key and there's no network setup. (The Raspberry Pi kiosk HUD
+doesn't serve these, so it looks exactly as before.)
+
 ## Setup
 
 1. Install **Python 3.9+** ([python.org](https://python.org); on Windows tick *Add to PATH*).
@@ -131,6 +151,8 @@ that's `en-AU-WilliamNeural` — so it never goes silent. An explicit
 | `JARVIS_FOLLOWUP` | `6` | Seconds to keep listening after a reply for a wake-word-free follow-up; `0` disables. |
 | `JARVIS_INPUT_DEVICE` | system default | Microphone, by index or name substring (e.g. `MacBook`). |
 | `JARVIS_WAKE_DEBUG` | off | `1` prints a once-a-second wake score + mic level readout. |
+| `JARVIS_WEATHER_LOCATION` | *(unset)* | City for the dashboard weather panel, e.g. `Denver`. |
+| `JARVIS_STOCKS` | `AAPL,MSFT,NVDA,BTC-USD` | Tickers for the dashboard markets panel. |
 
 ## Troubleshooting: "Hey Jarvis" doesn't trigger
 
