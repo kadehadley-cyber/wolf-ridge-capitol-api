@@ -8,9 +8,40 @@ import {
 	formatMilesSpoken,
 	formatNumber,
 	geocodeCandidates,
+	homeLocation,
 	parseDeviceMap,
 } from "./tools";
-import type { Reminder } from "./longterm";
+import type { Fact, Reminder } from "./longterm";
+
+describe("homeLocation", () => {
+	const fact = (key: string, value: string): Fact =>
+		({ key, value, category: "location", updatedAt: "" }) as Fact;
+	const env = (v?: string) => ({ JARVIS_HOME_LOCATION: v }) as Env;
+
+	it("falls back to the operator default when nothing is saved", () => {
+		expect(homeLocation([], env("St. George, Utah"))).toBe("St. George, Utah");
+	});
+
+	it("prefers what the wearer told Jarvis", () => {
+		expect(homeLocation([fact("home_location", "Provo")], env("St. George, Utah")))
+			.toBe("Provo");
+	});
+
+	it("is undefined when neither is set", () => {
+		expect(homeLocation([], env())).toBeUndefined();
+	});
+
+	it("treats blank values on either side as unset", () => {
+		expect(homeLocation([], env("   "))).toBeUndefined();
+		expect(homeLocation([fact("home_location", "  ")], env("St. George, Utah")))
+			.toBe("St. George, Utah");
+	});
+
+	it("trims stored and configured values", () => {
+		expect(homeLocation([], env(" St. George, Utah "))).toBe("St. George, Utah");
+		expect(homeLocation([fact("home_location", " Provo ")], env("X"))).toBe("Provo");
+	});
+});
 
 describe("evalMath", () => {
 	it("respects operator precedence and parentheses", () => {

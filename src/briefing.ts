@@ -21,7 +21,7 @@ import {
 	localYmd,
 	safeTimeZone,
 } from "./datetime";
-import { getWeather } from "./tools";
+import { getWeather, homeLocation } from "./tools";
 
 const DEFAULT_MODEL = "claude-opus-4-8";
 const DEFAULT_NAME = "Jarvis";
@@ -96,7 +96,7 @@ async function weatherLine(
 	env: Env,
 	facts: Awaited<ReturnType<typeof loadFacts>>,
 ): Promise<string> {
-	const home = getFactValue(facts, "home_location");
+	const home = homeLocation(facts, env);
 	if (!home) return "";
 	try {
 		const unitFact = (getFactValue(facts, "temp_unit") ?? "").toLowerCase();

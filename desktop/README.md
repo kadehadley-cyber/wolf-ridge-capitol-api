@@ -154,7 +154,7 @@ that's `en-AU-WilliamNeural` — so it never goes silent. An explicit
 | `JARVIS_FOLLOWUP` | `6` | Seconds to keep listening after a reply for a wake-word-free follow-up; `0` disables. |
 | `JARVIS_INPUT_DEVICE` | system default | Microphone, by index or name substring (e.g. `MacBook`). |
 | `JARVIS_WAKE_DEBUG` | off | `1` prints a once-a-second wake score + mic level readout. |
-| `JARVIS_WEATHER_LOCATION` | *(unset)* | City for the dashboard weather panel, e.g. `Denver`. |
+| `JARVIS_WEATHER_LOCATION` | `St. George, Utah` | City for the dashboard weather panel. Setup offers this default; answer `-` there for no weather panel. |
 | `JARVIS_STOCKS` | `AAPL,MSFT,NVDA,BTC-USD` | Tickers for the dashboard markets panel. |
 
 ## Troubleshooting: "Hey Jarvis" doesn't trigger

@@ -32,6 +32,12 @@ interface Env {
 	 * falls back to UTC.
 	 */
 	JARVIS_TIMEZONE?: string;
+	/**
+	 * Where the wearer lives, e.g. "St. George, Utah". Anchors weather with no
+	 * location and directions with no origin, so a fresh session already knows
+	 * home. A saved `home_location` fact overrides it.
+	 */
+	JARVIS_HOME_LOCATION?: string;
 
 	// --- Smart home & devices (all optional; tools appear only when configured) ---
 	/**
