@@ -14,8 +14,10 @@ so it knows you, your saved location, your reminders, and answers in character.
 
 When a display is attached it boots full-screen into the **JARVIS HUD** — a
 glowing arc-reactor interface whose rings spin and whose voice equalizer reacts
-as it listens, thinks, and speaks. The HUD is `hud/index.html`; you can open it
-in any browser to see it (it runs a self-demo when no device is connected).
+as it listens, thinks, and speaks. Its corner readouts are the appliance's real
+telemetry: CPU, memory, disk, network throughput, uptime, and the SoC
+temperature. The HUD is `hud/index.html`; you can open it in any browser to see
+it (readouts fall back to stylised placeholders with no device to ask).
 
 ## Hardware
 
