@@ -79,9 +79,13 @@ The pop-up window is a J.A.R.V.I.S. dashboard: the arc-reactor centrepiece
 - **Direct Line** — type to Jarvis and read the reply, sharing the **same
   brain, memory, and tools** as the voice. Voice turns show up here too.
 
-The panels are fed by the app's own local server, so the page holds no API
-key and there's no network setup. (The Raspberry Pi kiosk HUD doesn't serve
-these, so it looks exactly as before.)
+**First run asks for your city and tickers** and saves them to
+`~/.jarvis/desktop.json` — nothing to set by hand. (Upgrading from an older
+build? It asks once, the next time you start from a terminal.) Leave the city
+blank to skip the weather panel; the environment variables below still
+override, and the panels are fed by the app's own local server, so the page
+holds no API key and there's no network setup. (The Raspberry Pi kiosk HUD
+doesn't serve these, so it looks exactly as before.)
 
 ## Setup
 

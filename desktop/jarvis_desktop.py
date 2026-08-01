@@ -124,14 +124,39 @@ class Config:
                 self.api_key = input("  JARVIS_API_KEY (blank if none): ").strip()
             if not self.url:
                 raise SystemExit("No Worker URL given; nothing to point Jarvis at.")
-            try:
-                STATE_DIR.mkdir(parents=True, exist_ok=True)
-                CONFIG_PATH.write_text(
-                    json.dumps({"url": self.url, "api_key": self.api_key}, indent=2)
-                )
-                print(f"  Saved to {CONFIG_PATH}\n")
-            except OSError:
-                pass
+            self._prompt_dashboard()
+            self._save(saved)
+        elif ("weather_location" not in saved and _stdin_is_interactive()
+              and not os.environ.get("JARVIS_WEATHER_LOCATION")):
+            # Upgraded from a version before the dashboard — ask once, then save.
+            print("New: the HUD now has weather + markets panels.")
+            self._prompt_dashboard()
+            self._save(saved)
+
+    def _prompt_dashboard(self) -> None:
+        """Ask once for the dashboard's city and tickers. Blank keeps the
+        default (no weather panel; the standard ticker set)."""
+        if not os.environ.get("JARVIS_WEATHER_LOCATION"):
+            city = input("  City for the weather panel (blank to skip): ").strip()
+            if city:
+                self.weather_location = city
+        if not os.environ.get("JARVIS_STOCKS"):
+            tickers = input(f"  Stock tickers [{self.stocks}]: ").strip()
+            if tickers:
+                self.stocks = tickers
+
+    def _save(self, saved: dict) -> None:
+        """Persist config, preserving any keys written by other versions."""
+        saved.update({
+            "url": self.url, "api_key": self.api_key,
+            "weather_location": self.weather_location, "stocks": self.stocks,
+        })
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            CONFIG_PATH.write_text(json.dumps(saved, indent=2))
+            print(f"  Saved to {CONFIG_PATH}\n")
+        except OSError:
+            pass
 
 
 # --------------------------------------------------------------------------- #
