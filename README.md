@@ -170,6 +170,7 @@ briefing). If you've wired up the WhatsApp bridge, the cron trigger also
 | `JARVIS_NAME`              | no       | What the assistant calls itself. Defaults to `Jarvis`.       |
 | `JARVIS_USER_TITLE`        | no       | How it addresses you. Defaults to `sir`; set `""` for none.  |
 | `JARVIS_TIMEZONE`          | no       | Default IANA timezone for time/reminders before a wearer saves their own. Falls back to UTC. |
+| `JARVIS_HOME_LOCATION`     | no       | Default home for weather with no location and directions with no origin, e.g. `St. George, Utah`. A saved `home_location` fact overrides it. |
 | `HOME_ASSISTANT_URL`       | no       | Home Assistant base URL (https — Nabu Casa or a tunnel). Enables `control_home`. |
 | `HOME_ASSISTANT_TOKEN`     | no       | Home Assistant long-lived token (secret). |
 | `JARVIS_DEVICES`           | no       | JSON map of named commands → https webhooks, e.g. `{"open mask":"https://…/open"}`. Enables `trigger_device`. |

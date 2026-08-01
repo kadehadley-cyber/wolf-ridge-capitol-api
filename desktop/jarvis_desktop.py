@@ -44,6 +44,9 @@ SAMPLE_RATE = 16_000
 STATE_DIR = pathlib.Path.home() / ".jarvis"
 CONFIG_PATH = STATE_DIR / "desktop.json"
 HUD_DIR = pathlib.Path(__file__).resolve().parent.parent / "pi" / "hud"
+# Where this Jarvis lives, offered as the default for the weather panel. The
+# Worker carries the same default (JARVIS_HOME_LOCATION) for every surface.
+DEFAULT_HOME_CITY = "St. George, Utah"
 
 _USER_AGENT = "Jarvis-Desktop/1.0 (+https://github.com/kadehadley-cyber/wolf-ridge-capitol-api)"
 
@@ -101,7 +104,7 @@ class Config:
         )
         # HUD dashboard panels.
         self.weather_location = os.environ.get(
-            "JARVIS_WEATHER_LOCATION", saved.get("weather_location", "")
+            "JARVIS_WEATHER_LOCATION", saved.get("weather_location", DEFAULT_HOME_CITY)
         ).strip()
         self.stocks = os.environ.get(
             "JARVIS_STOCKS", saved.get("stocks", "AAPL,MSFT,NVDA,BTC-USD")
@@ -135,10 +138,12 @@ class Config:
 
     def _prompt_dashboard(self) -> None:
         """Ask once for the dashboard's city and tickers. Blank keeps the
-        default (no weather panel; the standard ticker set)."""
+        shown default; "-" turns the weather panel off."""
         if not os.environ.get("JARVIS_WEATHER_LOCATION"):
-            city = input("  City for the weather panel (blank to skip): ").strip()
-            if city:
+            city = input(f"  City for the weather panel [{self.weather_location}]: ").strip()
+            if city == "-":
+                self.weather_location = ""
+            elif city:
                 self.weather_location = city
         if not os.environ.get("JARVIS_STOCKS"):
             tickers = input(f"  Stock tickers [{self.stocks}]: ").strip()

@@ -46,6 +46,13 @@ export function renderHtml(env: Env): string {
 		? `${deviceCount} command${deviceCount === 1 ? "" : "s"} configured`
 		: "none (set JARVIS_DEVICES)";
 
+	// The default anchor for weather and directions before a wearer saves their
+	// own home_location fact (which overrides it).
+	const home = [env.JARVIS_HOME_LOCATION, env.JARVIS_TIMEZONE]
+		.map((v) => v?.trim())
+		.filter(Boolean)
+		.join(" · ") || "not set (ask Jarvis to remember your home)";
+
 	const name = env.JARVIS_NAME || "Jarvis";
 
 	// Show the bearer header in the example only when it's actually required, and
@@ -88,6 +95,7 @@ export function renderHtml(env: Env): string {
     <table>
       ${row("Brain", brain)}
       ${row("Phone app", "install from /app (Chrome → Install app)")}
+      ${row("Home", home)}
       ${row("Agency (tools)", agency)}
       ${row("Long-term memory", "ready (D1)")}
       ${row("Reminders", "ready (D1)")}

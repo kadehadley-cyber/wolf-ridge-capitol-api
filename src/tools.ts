@@ -88,6 +88,18 @@ export function homeAssistantConfigured(env: Env): boolean {
 }
 
 /**
+ * Where the wearer lives — the anchor for "what's the weather?" and for
+ * directions with no origin. Their saved fact wins; otherwise the operator's
+ * JARVIS_HOME_LOCATION default applies, so a fresh session already knows home.
+ * Blank values on either side count as unset.
+ */
+export function homeLocation(facts: Fact[], env: Env): string | undefined {
+	const saved = getFactValue(facts, "home_location")?.trim();
+	if (saved) return saved;
+	return env.JARVIS_HOME_LOCATION?.trim() || undefined;
+}
+
+/**
  * Run one tool by name, never throwing. Any failure becomes an error result the
  * model can read and recover from in a follow-up turn.
  */
@@ -191,7 +203,7 @@ const getWeatherTool: JarvisTool = {
 	},
 	async execute(input, ctx) {
 		const obj = asObject(input);
-		const place = optStr(obj, "location") ?? getFactValue(ctx.facts, "home_location");
+		const place = optStr(obj, "location") ?? homeLocation(ctx.facts, ctx.env);
 		if (!place) {
 			return JSON.stringify({
 				need: "location",
@@ -308,7 +320,7 @@ const getDirectionsTool: JarvisTool = {
 	async execute(input, ctx) {
 		const obj = asObject(input);
 		const destination = reqStr(obj, "destination");
-		const origin = optStr(obj, "origin") ?? getFactValue(ctx.facts, "home_location");
+		const origin = optStr(obj, "origin") ?? homeLocation(ctx.facts, ctx.env);
 		if (!origin) {
 			return JSON.stringify({
 				need: "origin",
