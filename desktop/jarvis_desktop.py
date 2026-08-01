@@ -290,6 +290,154 @@ def fetch_stocks(symbols: str):
     return result
 
 
+# --- Real machine telemetry for the HUD's readouts (psutil; degrades to
+# "unavailable" so the display falls back to its decorative numbers). ---
+
+_STATS = {"ts": 0.0, "data": None, "net": None, "cpu": None, "busy": False}
+_STATS_LOCK = threading.Lock()
+STATS_TTL = 1.0
+# Shortest span worth deriving a CPU figure from; below it, take a measured
+# sample rather than reporting the 0.0% a zero-length window produces.
+MIN_CPU_WINDOW = 0.3
+CPU_SAMPLE_SECS = 0.12
+
+
+def _disk_root() -> str:
+    """The filesystem the app lives on — 'C:\\' on Windows, '/' elsewhere."""
+    anchor = pathlib.Path(__file__).resolve().anchor
+    return anchor or os.sep
+
+
+def _cpu_busy_percent(prev, cur):
+    """Percent busy between two psutil.cpu_times() samples (psutil's own
+    arithmetic). Returns None when the samples are too close to divide."""
+    all_delta = sum(cur) - sum(prev)
+    if all_delta <= 0:
+        return None
+    busy_delta = (sum(cur) - cur.idle) - (sum(prev) - prev.idle)
+    return min(100.0, max(0.0, busy_delta / all_delta * 100.0))
+
+
+def prime_stats() -> None:
+    """Seed the CPU and network baselines (without caching a reading) so the
+    first request the HUD makes is measured over a real window."""
+    try:
+        import psutil
+
+        io = psutil.net_io_counters()
+        times = psutil.cpu_times()
+        with _STATS_LOCK:
+            mono = time.monotonic()
+            _STATS["net"] = (mono, io.bytes_sent, io.bytes_recv)
+            _STATS["cpu"] = (mono, times)
+    except Exception:  # noqa: BLE001 — priming is an optimisation, never fatal
+        pass
+
+
+def system_stats() -> dict:
+    """CPU/memory/disk/battery/network/uptime for the HUD.
+
+    Durations run on the monotonic clock so an NTP step or a resume can't
+    corrupt the cache window or the throughput maths. CPU is derived from our
+    own cpu_times() baseline rather than psutil.cpu_percent()'s, because that
+    one is keyed per calling thread and every request arrives on a new one.
+    """
+    mono = time.monotonic()
+    with _STATS_LOCK:
+        fresh = _STATS["data"] is not None and mono - _STATS["ts"] < STATS_TTL
+        if fresh or (_STATS["busy"] and _STATS["data"] is not None):
+            # Cached, or another thread is already probing: serve the last
+            # reading instead of stacking duplicate work on this one.
+            return _STATS["data"]
+        _STATS["busy"] = True
+    try:
+        try:
+            import psutil
+        except ImportError:
+            out = {"available": False}
+            with _STATS_LOCK:
+                _STATS.update(ts=mono, data=out)
+            return out
+
+        out: dict = {"available": True}
+        try:
+            cur = psutil.cpu_times()
+            with _STATS_LOCK:
+                prev = _STATS["cpu"]
+                _STATS["cpu"] = (mono, cur)
+            pct = None
+            if prev and mono - prev[0] >= MIN_CPU_WINDOW:
+                pct = _cpu_busy_percent(prev[1], cur)
+            if pct is None:
+                # No usable window yet. The blocking form takes its own
+                # baseline, so it is correct on any thread.
+                pct = psutil.cpu_percent(interval=CPU_SAMPLE_SECS)
+                with _STATS_LOCK:
+                    _STATS["cpu"] = (time.monotonic(), psutil.cpu_times())
+            out["cpu"] = round(pct, 1)
+        except Exception:  # noqa: BLE001 — telemetry must never break the HUD
+            pass
+        try:
+            mem = psutil.virtual_memory()
+            out["mem"] = round(mem.percent, 1)
+            out["mem_used_gb"] = round(mem.used / 1e9, 1)
+            out["mem_total_gb"] = round(mem.total / 1e9, 1)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            disk = psutil.disk_usage(_disk_root())
+            out["disk"] = round(disk.percent, 1)
+            out["disk_free_gb"] = round(disk.free / 1e9, 1)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            out["uptime"] = int(time.time() - psutil.boot_time())  # wall clock
+        except Exception:  # noqa: BLE001
+            pass
+        try:  # where the platform exposes it (Linux desktops; rarely Windows)
+            temps = psutil.sensors_temperatures() or {}
+            for name in ("coretemp", "k10temp", "cpu_thermal", "acpitz"):
+                if temps.get(name):
+                    out["temp_c"] = round(temps[name][0].current, 1)
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            bat = psutil.sensors_battery()
+            # plugged stays None when the platform can't tell — the display
+            # then shows the charge without claiming it's charging.
+            out["battery"] = (
+                {"percent": round(bat.percent), "plugged": bat.power_plugged}
+                if bat is not None else None
+            )
+        except Exception:  # noqa: BLE001 — not exposed on every platform
+            out["battery"] = None
+        try:
+            io = psutil.net_io_counters()
+            # Re-read the clock: a measured CPU sample may have taken time, and
+            # the span has to match the counters we just read.
+            net_now = time.monotonic()
+            with _STATS_LOCK:
+                prev_net = _STATS["net"]
+                _STATS["net"] = (net_now, io.bytes_sent, io.bytes_recv)
+            if prev_net:
+                span = net_now - prev_net[0]
+                if span > 0.05:
+                    # max(0, …) so a counter reset (interface reconnect, wrap)
+                    # reads as idle instead of a wild negative spike.
+                    out["net_up"] = round(max(0, io.bytes_sent - prev_net[1]) / span / 1024, 1)
+                    out["net_down"] = round(max(0, io.bytes_recv - prev_net[2]) / span / 1024, 1)
+        except Exception:  # noqa: BLE001
+            pass
+
+        with _STATS_LOCK:
+            _STATS.update(ts=mono, data=out)
+        return out
+    finally:
+        with _STATS_LOCK:
+            _STATS["busy"] = False
+
+
 def start_hud_server(port: int, state: AppState, cfg: "Config") -> bool:
     if not HUD_DIR.is_dir():
         log(f"HUD assets not found at {HUD_DIR}; running without the display.")
@@ -322,6 +470,8 @@ def start_hud_server(port: int, state: AppState, cfg: "Config") -> bool:
                 return self._json(fetch_weather(cfg.weather_location))
             if route == "/stocks":
                 return self._json(fetch_stocks(cfg.stocks))
+            if route == "/stats":
+                return self._json(system_stats())
             super().do_GET()
 
         def do_POST(self):  # noqa: N802 — the Claude chat panel
@@ -344,6 +494,7 @@ def start_hud_server(port: int, state: AppState, cfg: "Config") -> bool:
         log(f"HUD server couldn't start ({err}); running without the display.")
         return False
     threading.Thread(target=server.serve_forever, daemon=True).start()
+    prime_stats()
     return True
 
 

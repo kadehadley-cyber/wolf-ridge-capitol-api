@@ -151,6 +151,9 @@
     <div class="hud corner" id="br">
       <div><span class="v" id="m-cpu">12%</span>&nbsp;&nbsp;CPU</div>
       <div><span class="v" id="m-mem">41%</span>&nbsp;&nbsp;MEM</div>
+      <div id="r-disk" hidden><span class="v" id="m-disk">—</span>&nbsp;&nbsp;DISK</div>
+      <div id="r-net" hidden><span class="v" id="m-net">—</span>&nbsp;&nbsp;NET</div>
+      <div id="r-bat" hidden><span class="v" id="m-bat">—</span>&nbsp;&nbsp;BAT</div>
       <div><span class="v" id="m-uptime">00:00:00</span></div>
     </div>
 
@@ -390,21 +393,91 @@
   function easeOut(x) { return 1 - Math.pow(1 - x, 3); }
   requestAnimationFrame(frame);
 
-  // ---- Clock + flavor telemetry ----
+  // ---- Clock + telemetry ----
+  // Real machine stats when the device serves /stats; the stylised numbers
+  // below are only a stand-in for a display with no host to ask.
   const startTime = Date.now();
+  let statsLive = false;
   function pad(n) { return String(n).padStart(2, "0"); }
+  function hms(secs) {
+    const s = Math.max(0, Math.floor(secs));
+    const d = Math.floor(s / 86400);
+    const t = `${pad(Math.floor(s/3600) % 24)}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}`;
+    return d ? `${d}d ${t}` : t;
+  }
   setInterval(() => {
     const d = new Date();
     document.getElementById("time").textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
     document.getElementById("date").textContent =
       d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase();
-    const up = Math.floor((Date.now() - startTime) / 1000);
-    document.getElementById("m-uptime").textContent =
-      `${pad(Math.floor(up/3600))}:${pad(Math.floor(up/60)%60)}:${pad(up%60)}`;
+    if (statsLive) return;  // real numbers own these readouts
+    document.getElementById("m-uptime").textContent = hms((Date.now() - startTime) / 1000);
     document.getElementById("m-cpu").textContent = `${8 + Math.floor(Math.random()*10)}%`;
     document.getElementById("m-mem").textContent = `${38 + Math.floor(Math.random()*8)}%`;
     document.getElementById("m-core").textContent = `${(98 + Math.random()).toFixed(1)}%`;
   }, 1000);
+
+  let statsInFlight = false, statsMisses = 0;
+  async function refreshStats() {
+    if (statsInFlight) return;       // never let slow probes pile up
+    statsInFlight = true;
+    let s;
+    try {
+      const ctl = new AbortController();
+      const bail = setTimeout(() => ctl.abort(), 4000);
+      try {
+        const r = await fetch("/stats", { cache: "no-store", signal: ctl.signal });
+        if (!r.ok) throw 0;
+        s = await r.json();
+      } finally { clearTimeout(bail); }
+    } catch (e) {
+      // Telemetry stopped answering. Hand the readouts back to the stand-in
+      // rather than leaving stale numbers frozen on screen forever.
+      if (statsLive && ++statsMisses >= 3) { statsLive = false; statsMisses = 0; }
+      return;
+    } finally { statsInFlight = false; }
+    if (!s || s.available === false) return;
+    statsMisses = 0;
+    // Only take over the readouts once there is something real to show.
+    if (typeof s.cpu !== "number" && typeof s.mem !== "number") return;
+    statsLive = true;
+    const set = (id, text) => { document.getElementById(id).textContent = text; };
+    if (typeof s.cpu === "number") set("m-cpu", `${Math.round(s.cpu)}%`);
+    // CORE: the silicon's own temperature where the platform exposes it
+    // (a Pi always does), otherwise the finer-grained CPU load.
+    if (typeof s.temp_c === "number") set("m-core", `${s.temp_c.toFixed(1)}°C`);
+    else if (typeof s.cpu === "number") set("m-core", `${s.cpu.toFixed(1)}%`);
+    // Detail goes inline, not in a title tooltip: the HUD hides the cursor,
+    // so a hover-only readout would never be seen.
+    if (typeof s.mem === "number") {
+      set("m-mem", s.mem_total_gb != null
+        ? `${Math.round(s.mem)}% · ${s.mem_used_gb}/${s.mem_total_gb}G`
+        : `${Math.round(s.mem)}%`);
+    }
+    if (typeof s.disk === "number") {
+      set("m-disk", s.disk_free_gb != null
+        ? `${Math.round(s.disk)}% · ${s.disk_free_gb}G free`
+        : `${Math.round(s.disk)}%`);
+      document.getElementById("r-disk").hidden = false;
+    }
+    if (typeof s.net_down === "number") {
+      const rate = (kb) => kb >= 1024 ? `${(kb/1024).toFixed(1)}M` : `${Math.round(kb)}K`;
+      set("m-net", `↓${rate(s.net_down)} ↑${rate(s.net_up || 0)}`);
+      document.getElementById("r-net").hidden = false;
+    }
+    if (typeof s.uptime === "number") set("m-uptime", hms(s.uptime));
+    // Battery belongs in this corner: the dashboard panels cover the others.
+    if (s.battery && typeof s.battery.percent === "number") {
+      const mark = s.battery.plugged === true ? " ⚡"
+                 : s.battery.plugged === false ? "" : " ?";
+      set("m-bat", `${s.battery.percent}%${mark}`);
+      set("m-pwr", `${s.battery.percent}%${mark}`);
+      document.getElementById("r-bat").hidden = false;
+    } else if (s.battery === null) {
+      set("m-pwr", "AC");            // no battery: nothing worth a row here
+    }
+  }
+  refreshStats(); setInterval(refreshStats, 2000);
 
   // ---- Caption typewriter ----
   let typing = null;

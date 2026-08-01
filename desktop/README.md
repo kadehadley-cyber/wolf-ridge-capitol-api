@@ -78,6 +78,9 @@ The pop-up window is a J.A.R.V.I.S. dashboard: the arc-reactor centrepiece
   (keyless). Set `JARVIS_STOCKS` (e.g. `AAPL,MSFT,NVDA,BTC-USD`).
 - **Direct Line** — type to Jarvis and read the reply, sharing the **same
   brain, memory, and tools** as the voice. Voice turns show up here too.
+- **System telemetry** (bottom-right) — your machine's real CPU, memory, disk,
+  network throughput and uptime, plus battery and silicon temperature where
+  the platform reports them. Hover memory or disk for used/free detail.
 
 **First run asks for your city and tickers** and saves them to
 `~/.jarvis/desktop.json` — nothing to set by hand. (Upgrading from an older
@@ -214,6 +217,9 @@ Device control lives on the **Worker** (so every surface shares it):
 
 - The HUD window needs `pywebview`; without it the HUD opens in your default
   browser instead. Both are fine.
+- The telemetry readouts come from `psutil`. Without it (or on a display with
+  no host to ask) the HUD falls back to stylised placeholder numbers rather
+  than showing nothing.
 - Wake word needs `openwakeword`; without it the app falls back to push-to-talk.
 - Screen identification sends a **downscaled JPEG of your screen to the Worker →
   Anthropic** — same trust as anything else you tell Jarvis, but worth knowing.
