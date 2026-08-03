@@ -1,0 +1,7 @@
+Name,DisplayName,Icon,ReqLevel,FavorDrainPerTick,Effect,EffectValue
+fury,Warrior's Fury,⚔️,1,0.3,MeleeDamagePct,15
+hawkeye,Hawk's Eye,🏹,10,0.3,ArcheryDamagePct,15
+wrath,Mage's Wrath,🔮,20,0.3,SorceryDamagePct,15
+stoneskin,Stone Skin,🛡️,30,0.4,DamageTakenPct,-20
+bloodpact,Blood Pact,🩸,45,0.5,LifestealPerDamage,0.25
+sevenfold,Wrath of the Seven,⚡,60,0.8,AllDamagePct,25

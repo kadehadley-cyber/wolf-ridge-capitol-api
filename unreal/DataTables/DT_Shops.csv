@@ -1,0 +1,21 @@
+Name,ShopID,ShopName,ItemID,Stock,Price
+wolfridge_0,wolfridge,Wolf Ridge General Store,trout,10,8
+wolfridge_1,wolfridge,Wolf Ridge General Store,arrows,10,2
+wolfridge_2,wolfridge,Wolf Ridge General Store,bronze_sword,10,25
+wolfridge_3,wolfridge,Wolf Ridge General Store,bronze_armor,10,25
+wolfridge_4,wolfridge,Wolf Ridge General Store,shortbow,10,20
+wolfridge_5,wolfridge,Wolf Ridge General Store,apprentice_staff,10,20
+capitol_0,capitol,The Crown Armory,salmon,10,25
+capitol_1,capitol,The Crown Armory,arrows,10,2
+capitol_2,capitol,The Crown Armory,iron_sword,10,70
+capitol_3,capitol,The Crown Armory,steel_sword,10,140
+capitol_4,capitol,The Crown Armory,iron_armor,10,70
+capitol_5,capitol,The Crown Armory,steel_armor,10,140
+capitol_6,capitol,The Crown Armory,ironwood_bow,10,140
+capitol_7,capitol,The Crown Armory,acolyte_staff,10,140
+dorne_0,dorne,Sunspear Bazaar,blackfish,10,60
+dorne_1,dorne,Sunspear Bazaar,arrows,10,2
+dorne_2,dorne,Sunspear Bazaar,obsidian_sword,10,280
+dorne_3,dorne,Sunspear Bazaar,obsidian_armor,10,280
+dorne_4,dorne,Sunspear Bazaar,weirwood_bow,10,400
+dorne_5,dorne,Sunspear Bazaar,pyromancer_staff,10,400

@@ -106,6 +106,7 @@ export function renderHtml(env: Env): string {
       ${row("HTTP auth", httpAuth)}
       ${row("WhatsApp bridge", whatsapp)}
       ${row("Webhook signature", signature)}
+      <tr><td>Kandarin 👑</td><td><a href="/game/">play the browser RPG at /game/</a></td></tr>
     </table>
 
     <h2>Try the voice endpoint</h2>

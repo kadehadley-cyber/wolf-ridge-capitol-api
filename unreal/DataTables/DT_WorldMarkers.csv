@@ -1,0 +1,35 @@
+Name,Kind,Label,TileX,TileY
+npc_maera,NPC,Lady Maera Wolfhart,40,31
+npc_pyros,NPC,Grand Maester Pyros,53,99
+npc_rhaella,NPC,Dragonkeeper Rhaella,125,48
+npc_kessa,NPC,Slayer Master Kessa,61,96
+boss_gilded_sentinel,Boss,The Gilded Sentinel,20,108
+boss_venom_sentinel,Boss,The Venom Sentinel,40,124
+boss_flame_sentinel,Boss,The Flame Sentinel,127,65
+boss_frost_sentinel,Boss,The Frost Sentinel,70,7
+boss_chained_wraith,Boss,The Chained Wraith,124,120
+bank_0,bank,bank,36,32
+bank_1,bank,bank,51,91
+bank_2,bank,bank,49,137
+anvil_0,anvil,anvil,43,32
+anvil_1,anvil,anvil,62,91
+range_0,range,range,39,36
+range_1,range,range,55,95
+range_2,range,range,53,138
+shop_0,shop,wolfridge,43,36
+shop_1,shop,capitol,62,95
+shop_2,shop,dorne,57,137
+throne_0,throne,throne,57,102
+ferry_0,ferry,ferry,54,125
+ferry_1,ferry,ferry,54,131
+roost_0,roost,roost,127,47
+tower_0,tower,tower,120,62
+tower_1,tower,tower,134,62
+tower_2,tower,tower,120,69
+tower_3,tower,tower,134,69
+tower_4,tower,tower,127,72
+estate_house,estate,Your Estate (house plot),52,50
+estate_pond,estate,Estate fishing pool site,49,52
+estate_tree_goldleaf,estate,goldleaf tree site,55,47
+estate_tree_silverbark,estate,silverbark tree site,55,52
+estate_tree_heartwood,estate,heartwood tree site,49,47

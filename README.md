@@ -227,3 +227,14 @@ small deployments, not thousands of users.
   unset only for local dev). The WhatsApp webhook **fails closed** — with no
   `WHATSAPP_APP_SECRET` configured, inbound messages are rejected rather than
   trusted, since an accepted message now writes durable state.
+
+## Bonus: KANDARIN — Realm of Kings 👑
+
+This repo also hosts [`public/game/`](public/game/README.md) — **Kandarin: Realm of Kings**, a
+self-contained browser RPG: RuneScape-style skilling (16 skills, levels 1–99) in
+a Game of Thrones-inspired realm, with dragon riding, dragonfire castle raids,
+stores, and five elemental bosses, rendered in real 3D by a hand-written WebGL2
+engine (sun-lit elevated terrain, animated water, atmospheric fog, and a
+third-person chase camera; 2D fallback if WebGL is unavailable). No build step —
+open `public/game/index.html` locally, or play it on the deployed Worker at
+**`/game/`** (it ships as Workers static assets).

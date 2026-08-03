@@ -4,6 +4,9 @@
 	"main": "src/index.ts",
 	"name": "wolf-ridge-capitol-api",
 	"upload_source_maps": true,
+	"assets": {
+		"directory": "./public"
+	},
 	"d1_databases": [
 		{
 			"binding": "DB",
