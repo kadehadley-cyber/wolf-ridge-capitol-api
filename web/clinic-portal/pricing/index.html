@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  style-src 'self' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  connect-src 'self';
+  form-action 'self';
+  base-uri 'none';
+  object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="robots" content="noindex, nofollow">
+
+<title>Pricing &amp; Ordering — CelluNOVA</title>
+
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles/portal.css">
+<link rel="stylesheet" href="pricing.css">
+</head>
+<body class="portal-page">
+
+<div class="portal-layout">
+
+  <!-- ══ SIDEBAR ═══════════════════════════════════════════════════════════ -->
+  <aside class="portal-sidebar">
+    <div class="sidebar-brand">
+      <a href="/" aria-label="CelluNOVA home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-word">Cellu<strong>NOVA</strong></span>
+      </a>
+    </div>
+    <div class="sidebar-welcome">
+      <strong>Welcome, Dr!</strong>
+      <span id="sidebarEmail">clinic@example.com</span>
+    </div>
+    <nav class="sidebar-nav" aria-label="Portal sections">
+      <a href="/portal/protocols">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Protocols
+      </a>
+      <a href="/portal/pricing" class="active" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Pricing &amp; Ordering
+      </a>
+      <a href="/portal/orders">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+        Order History
+      </a>
+      <a href="/portal/support">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 113.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01"/></svg>
+        Support
+      </a>
+    </nav>
+    <form class="sidebar-signout" method="post" action="/portal/logout">
+      <input type="hidden" name="csrf" value="">
+      <button type="submit" class="btn ghost sm">Sign out</button>
+    </form>
+  </aside>
+
+  <!-- ══ CONTENT ═══════════════════════════════════════════════════════════ -->
+  <div class="portal-content-wrap">
+    <header class="portal-topbar">
+      <button class="topbar-menu" id="sidebarToggle" aria-label="Toggle navigation" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <h2 class="topbar-title">Pricing &amp; Ordering</h2>
+    </header>
+
+    <main class="portal-main">
+
+      <!-- ── Order hero (reconstructed from the captured .order-hero spec) ── -->
+      <div class="order-hero">
+        <div class="order-hero-content">
+          <span class="order-hero-badge">Physician-reviewed ordering</span>
+          <h1 class="order-hero-title">Order <span>biologics</span></h1>
+          <p class="order-hero-desc">Every order is reviewed by a physician before any payment is
+             processed. Build your order, add case notes, and our team confirms before you pay.</p>
+        </div>
+        <div class="order-journey" aria-hidden="true">
+          <div class="order-journey-line"><div class="order-journey-line-fill"></div></div>
+          <div class="oj-step oj-step-1"><div class="oj-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4"/><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/></svg></div><div class="oj-label">Build order</div></div>
+          <div class="oj-step oj-step-2"><div class="oj-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></div><div class="oj-label">Physician review</div></div>
+          <div class="oj-step oj-step-3"><div class="oj-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg></div><div class="oj-label">Pay &amp; ship</div></div>
+        </div>
+      </div>
+
+      <div class="crm-placeholder-note shop-note">
+        Placeholder catalog — the product line and per-cc cost were redone. Prices come from the
+        <code>PRODUCTS</code> / <code>PRICING</code> block at the top of <code>pricing.js</code>;
+        edit there and the whole page updates.
+      </div>
+
+      <!-- ── Shop layout: catalog left, sticky summary right ── -->
+      <div class="shop-layout">
+        <div>
+          <div class="prod-list" id="prodList"></div>
+          <div class="shop-consult-cta">
+            <div class="treatment-cta-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            </div>
+            <div>
+              <div class="treatment-cta-title">Not sure what to order?</div>
+              <div class="treatment-cta-desc">Ask a physician — we’ll recommend a protocol-matched cart.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="shop-summary-wrap">
+          <div class="shop-summary">
+            <div class="shop-summary-header">
+              <h3>Your order</h3>
+              <span class="shop-summary-count" id="summaryCount">0 items</span>
+            </div>
+            <div class="shop-summary-items" id="summaryItems">
+              <div class="shop-summary-empty">No items yet — pick a product and quantity.</div>
+            </div>
+            <div class="shop-summary-totals" id="summaryTotals" hidden>
+              <div class="shop-summary-row"><span>Subtotal</span><span id="summarySubtotal">$0</span></div>
+              <div class="shop-summary-total"><span>Total</span><span id="summaryTotal">$0</span></div>
+            </div>
+            <textarea class="shop-summary-notes" id="orderNotes" placeholder="Case / usage notes, best way to reach you…" data-no-log></textarea>
+            <button class="shop-summary-submit" id="orderSubmit" data-action="submit-order" disabled>Submit for review</button>
+            <p class="shop-summary-disclaimer">No payment is processed until a physician reviews and confirms your order.</p>
+          </div>
+        </div>
+      </div>
+
+      <footer class="portal-footer">
+        <span>&copy; CelluNOVA</span> ·
+        <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/portal/support">Support</a>
+      </footer>
+    </main>
+  </div>
+</div>
+
+<!-- ── Mobile order bar ── -->
+<div class="shop-mobile-bar" id="mobileBar">
+  <div class="shop-mobile-bar-collapsed" data-action="toggle-mobile-bar">
+    <div class="shop-mobile-bar-left">
+      <span class="shop-mobile-bar-count" id="mobileCount">0</span>
+      <span class="shop-mobile-bar-label">in order</span>
+    </div>
+    <span class="shop-mobile-bar-total" id="mobileTotal">$0</span>
+    <button class="shop-mobile-bar-btn" data-action="submit-order">Review</button>
+  </div>
+</div>
+
+<!-- ══ GENERIC MODAL ═════════════════════════════════════════════════════ -->
+<div id="cModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cModalTitle" hidden>
+  <div class="modal-box modal-box-xs">
+    <h2 id="cModalTitle"></h2>
+    <p class="modal-sub" id="cModalBody"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="cModalCancel" hidden>Cancel</button>
+      <button type="button" class="btn primary" id="cModalOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="pricing.js"></script>
+</body>
+</html>

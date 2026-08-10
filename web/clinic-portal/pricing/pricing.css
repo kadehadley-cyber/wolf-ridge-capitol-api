@@ -1,0 +1,162 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Pricing / Ordering — reconstructed from the captured portal.css shop spec
+   (.order-hero, .shop-layout, .prod-list/.prod-row, variant pills,
+   .shop-summary, .shop-mobile-bar). Values are the real captured ones; the
+   decorative order-hero particle/SVG-cell animations are omitted (their markup
+   wasn't captured). Tokens come from ../styles/portal.css :root.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.crm-placeholder-note {
+    font-size: 11.5px; color: var(--muted);
+    padding: 10px 14px; border-radius: 8px;
+    border: 1px dashed var(--line2); background: rgba(255,255,255,.02);
+}
+.crm-placeholder-note code {
+    background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; font-size: 11px;
+}
+.shop-note { margin-bottom: 20px; }
+
+/* ── Order hero ── */
+.order-hero { position: relative; margin: 0 -24px 36px; padding: 48px 32px 40px; overflow: hidden; }
+.order-hero::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background:
+        radial-gradient(ellipse 60% 50% at 30% 20%, rgba(57,255,138,.06), transparent 60%),
+        radial-gradient(ellipse 40% 60% at 75% 80%, rgba(0,212,255,.04), transparent 60%);
+}
+.order-hero-content { text-align: center; position: relative; z-index: 1; margin-bottom: 40px; }
+.order-hero-badge {
+    display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--brand); margin-bottom: 16px; padding: 5px 18px;
+    background: rgba(57,255,138,.06); border: 1px solid rgba(57,255,138,.12); border-radius: 999px;
+}
+.order-hero-title { font-size: clamp(30px, 5vw, 52px); font-weight: 900; line-height: 1.05; color: #e8ecf4; margin: 0 0 16px; letter-spacing: -.03em; }
+.order-hero-title span { color: var(--brand); text-shadow: 0 0 40px rgba(57,255,138,.2); }
+.order-hero-desc { font-size: 15px; color: var(--dim); line-height: 1.8; max-width: 460px; margin: 0 auto; }
+
+.order-journey { display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; max-width: 500px; margin: 0 auto; }
+.order-journey-line { position: absolute; top: 24px; left: 60px; right: 60px; height: 2px; background: rgba(255,255,255,.06); border-radius: 1px; }
+.order-journey-line-fill { width: 33%; height: 100%; background: linear-gradient(90deg, var(--brand), rgba(57,255,138,.3)); border-radius: 1px; }
+.oj-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; position: relative; }
+.oj-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; }
+.oj-icon svg { width: 22px; height: 22px; }
+.oj-step-1 .oj-icon { background: rgba(57,255,138,.08); border: 1px solid rgba(57,255,138,.2); color: #39ff8a; box-shadow: 0 0 20px rgba(57,255,138,.06); }
+.oj-step-2 .oj-icon { background: rgba(0,212,255,.06); border: 1px solid rgba(0,212,255,.15); color: #00d4ff; }
+.oj-step-3 .oj-icon { background: rgba(167,139,250,.06); border: 1px solid rgba(167,139,250,.15); color: #a78bfa; }
+.oj-label { font-size: 11px; font-weight: 700; color: #4a5568; text-align: center; letter-spacing: .02em; }
+
+/* ── Shop layout ── */
+.shop-layout { display: grid; grid-template-columns: 1fr 320px; gap: 28px; align-items: start; }
+
+/* ── Product list ── */
+.prod-list { margin-bottom: 20px; border-radius: 12px; overflow: hidden; background: rgba(255,255,255,.01); border: 1px solid var(--line); }
+.shop-cat-head { padding: 14px 20px 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+
+.prod-row { position: relative; border-bottom: 1px solid rgba(255,255,255,.03); transition: background .25s; }
+.prod-row:last-child { border-bottom: none; }
+.prod-row::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 0; transition: width .3s ease, background .3s ease; }
+.prod-row:hover { background: rgba(255,255,255,.02); }
+.prod-row:hover::before { width: 3px; background: rgba(255,255,255,.08); }
+.prod-msc:hover::before { background: #39ff8a; }
+.prod-exo:hover::before { background: #00d4ff; }
+.prod-lyo:hover::before { background: #a78bfa; }
+.prod-selected { background: rgba(57,255,138,.015); }
+.prod-selected::before { width: 3px !important; }
+.prod-msc.prod-selected::before { background: #39ff8a !important; }
+.prod-exo.prod-selected::before { background: #00d4ff !important; }
+.prod-lyo.prod-selected::before { background: #a78bfa !important; }
+
+.prod-main { display: flex; align-items: center; padding: 20px 16px 20px 20px; gap: 16px; }
+.prod-left { flex: 1; min-width: 0; }
+.prod-name { font-size: 16px; font-weight: 600; color: #e8ecf4; margin-bottom: 3px; line-height: 1.3; letter-spacing: -.01em; }
+.prod-meta { display: flex; align-items: center; gap: 8px; }
+.prod-vol { font-size: 11px; color: var(--dim); font-weight: 500; }
+.prod-pop { font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); background: rgba(57,255,138,.06); padding: 1px 7px; border-radius: 999px; }
+.prod-right { text-align: right; flex-shrink: 0; }
+.prod-price { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1; }
+.prod-msc .prod-price { color: #39ff8a; }
+.prod-exo .prod-price { color: #00d4ff; }
+.prod-lyo .prod-price { color: #a78bfa; }
+
+/* Variant pills */
+.prod-variants { display: flex; align-items: center; gap: 12px; padding: 0 16px 14px 20px; flex-wrap: wrap; }
+.prod-variants-label { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.prod-variants-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.prod-variant-pill {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px;
+    background: rgba(255,255,255,.025); border: 1px solid var(--line2); border-radius: 999px;
+    color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+    transition: background .15s, border-color .15s, transform .12s;
+}
+.prod-variant-pill:hover { background: rgba(255,255,255,.06); transform: translateY(-1px); }
+.prod-variant-pill .pv-vol { font-weight: 700; }
+.prod-variant-pill .pv-price { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+.prod-variant-pill.active { background: rgba(57,255,138,.10); border-color: rgba(57,255,138,.45); box-shadow: 0 0 0 1px rgba(57,255,138,.25); }
+.prod-variant-pill.active .pv-price { color: var(--brand); font-weight: 700; }
+.prod-exo .prod-variant-pill.active { background: rgba(0,212,255,.10); border-color: rgba(0,212,255,.45); }
+.prod-exo .prod-variant-pill.active .pv-price { color: #00d4ff; }
+.prod-lyo .prod-variant-pill.active { background: rgba(167,139,250,.10); border-color: rgba(167,139,250,.45); }
+.prod-lyo .prod-variant-pill.active .pv-price { color: #a78bfa; }
+
+/* Add / qty controls */
+.prod-select-area { flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center; }
+.prod-add-btn {
+    padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line2);
+    background: rgba(255,255,255,.03); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; transition: all .2s;
+}
+.prod-add-btn:hover { border-color: rgba(57,255,138,.4); color: var(--brand); background: rgba(57,255,138,.06); }
+.prod-qty { display: none; align-items: center; border-radius: 10px; overflow: hidden; border: 1px solid rgba(57,255,138,.15); background: rgba(57,255,138,.03); }
+.prod-qty.visible { display: flex; }
+.prod-qty-btn { background: transparent; border: none; color: var(--muted); width: 34px; height: 34px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.prod-qty-btn:hover { background: rgba(255,255,255,.06); color: #fff; }
+.prod-qty-val { min-width: 34px; text-align: center; font-size: 14px; font-weight: 700; color: #f0f4ff; }
+
+/* Consult CTA */
+.shop-consult-cta {
+    display: flex; align-items: center; gap: 16px; padding: 20px 24px;
+    background: rgba(0,212,255,.03); border: 1px solid rgba(0,212,255,.1); border-radius: 14px; margin-top: 8px;
+}
+.shop-consult-cta .treatment-cta-icon { width: 44px; height: 44px; border-radius: 12px; background: rgba(0,212,255,.08); color: var(--brand2); display: grid; place-items: center; flex-shrink: 0; }
+
+/* ── Sticky order summary ── */
+.shop-summary-wrap { position: sticky; top: 70px; }
+.shop-summary { background: #000; border: 1px solid var(--line2); border-radius: 18px; padding: 24px; }
+.shop-summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.shop-summary-header h3 { font-size: 16px; font-weight: 700; color: #f0f4ff; margin: 0; }
+.shop-summary-count { font-size: 11px; color: var(--muted); font-weight: 600; }
+.shop-summary-items { margin-bottom: 16px; max-height: 300px; overflow-y: auto; }
+.shop-summary-empty { color: var(--dim); font-size: 13px; padding: 20px 0; text-align: center; }
+.shop-summary-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,.04); }
+.shop-summary-item-name { color: #b8c4d0; }
+.shop-summary-item-name span { color: var(--muted); font-size: 11px; margin-left: 4px; }
+.shop-summary-item-price { color: var(--brand); font-weight: 700; font-variant-numeric: tabular-nums; }
+.shop-summary-item-x { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 15px; padding: 0 0 0 8px; }
+.shop-summary-item-x:hover { color: #ff6b8a; }
+.shop-summary-totals { padding-top: 12px; border-top: 1px solid var(--line); margin-bottom: 14px; }
+.shop-summary-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 3px 0; }
+.shop-summary-total { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; color: #f0f4ff; padding: 10px 0 0; border-top: 1px solid var(--line); margin-top: 6px; }
+.shop-summary-total span:last-child { color: var(--brand); }
+.shop-summary-notes { width: 100%; padding: 10px 14px; border-radius: 10px; font-size: 13px; background: rgba(255,255,255,.03); border: 1px solid var(--line2); color: #f0f4ff; resize: none; height: 56px; margin-bottom: 12px; font-family: inherit; }
+.shop-summary-notes:focus { border-color: rgba(57,255,138,.3); outline: none; }
+.shop-summary-submit { width: 100%; padding: 14px; background: var(--brand); color: #07070a; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: .02em; transition: all .2s; }
+.shop-summary-submit:hover:not(:disabled) { box-shadow: 0 4px 20px rgba(57,255,138,.3); transform: translateY(-1px); }
+.shop-summary-submit:disabled { opacity: .35; cursor: not-allowed; }
+.shop-summary-disclaimer { font-size: 11px; color: var(--dim); text-align: center; margin: 10px 0 0; line-height: 1.5; }
+
+/* ── Mobile order bar ── */
+.shop-mobile-bar { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 90; background: #0d0d18; border-top: 1px solid rgba(57,255,138,.15); box-shadow: 0 -4px 20px rgba(0,0,0,.5); }
+.shop-mobile-bar-collapsed { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; gap: 12px; cursor: pointer; }
+.shop-mobile-bar-left { display: flex; align-items: center; gap: 10px; }
+.shop-mobile-bar-count { background: var(--brand); color: #07070a; font-size: 12px; font-weight: 800; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; }
+.shop-mobile-bar-label { font-size: 12px; color: var(--dim); }
+.shop-mobile-bar-total { font-size: 18px; font-weight: 800; color: var(--brand); font-variant-numeric: tabular-nums; margin-left: auto; }
+.shop-mobile-bar-btn { background: var(--brand); color: #07070a; border: none; border-radius: 10px; padding: 10px 20px; font-size: 13px; font-weight: 700; cursor: pointer; }
+
+@media (max-width: 900px) {
+    .shop-layout { grid-template-columns: 1fr; }
+    .shop-summary-wrap { display: none; }
+    .shop-mobile-bar { display: block; }
+    .order-hero { margin: 0 -8px 28px; padding: 36px 18px 30px; }
+    body.portal-page { padding-bottom: 70px; }
+}

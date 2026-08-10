@@ -21,11 +21,18 @@ web/clinic-portal/
 │   ├── crm.css
 │   ├── crm.js              fit scoring + §2-safe link rendering
 │   └── README.md           faithful vs placeholder; the lead schema
-├── SECURITY-REVIEW.md      audit of both pages  ← read this first
+├── pricing/                Pricing / Ordering — catalog + cart
+│   ├── index.html
+│   ├── pricing.css         reconstructed from the captured shop CSS
+│   ├── pricing.js          catalog/cart, placeholder PRODUCTS block
+│   └── README.md
+├── SCRAPE-PLAN.md          rebuild plan + page inventory + capture recipe
+├── SECURITY-REVIEW.md      audit of the original pages  ← read this first
 └── README.md
 ```
 
-This file documents the protocols page; see `crm/README.md` for the CRM page.
+This file documents the protocols page; see `crm/README.md` and
+`pricing/README.md` for those pages, and `SCRAPE-PLAN.md` for the overall plan.
 
 ## Running it
 

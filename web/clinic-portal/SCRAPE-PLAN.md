@@ -46,7 +46,7 @@ Status: ✅ built · 🟡 partial · ⬜ not started
 | --- | --- | --- | --- |
 | Protocols | `/portal/protocols` | ✅ | complete (JS+CSS+DOM captured) |
 | CRM | `/portal/crm` | 🟡 | real `portal-crm.js` (64KB), CRM DOM, `.crm-*` CSS past 70KB |
-| Pricing / Ordering | `/portal/pricing` | ⬜ | page DOM, `portal-pricing.js`?, product data (placeholder) |
+| Pricing / Ordering | `/portal/pricing` | 🟡 | reconstructed from captured CSS; needs real `portal-pricing.js` + product data |
 | Tickets / Support chat | `/portal/tickets` | ⬜ | DOM; chat logic already partly in `portal.js` |
 | Order history | `/portal/orders` | ⬜ | DOM, order-card + timeline CSS (have some) |
 | Treatment schedule | `/portal/treatment-schedule` | ⬜ | DOM |
