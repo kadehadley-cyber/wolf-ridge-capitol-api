@@ -188,7 +188,9 @@
           </select>
           <select id="crmSort" aria-label="Sort">
             <option value="score" selected>Sort: Lead score</option>
-            <option value="fit">Sort: Best fit</option>
+            <option value="priority">Sort: Priority (buy + switch)</option>
+            <option value="buy">Sort: Buy propensity</option>
+            <option value="switch">Sort: Switch likelihood</option>
             <option value="patients">Sort: Patients/day</option>
             <option value="newest">Sort: Newest</option>
           </select>
@@ -197,6 +199,18 @@
           </label>
           <label class="crm-check">
             <input type="checkbox" id="crmOffersRegen"> Already runs regen
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmAdvertising"> Advertising regen
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmCashPay"> Cash-pay
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmSwitchWindow"> Switch window
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmHotOnly"> Priority: Hot only
           </label>
         </div>
         <div class="crm-tabs" role="tablist" aria-label="CRM view">

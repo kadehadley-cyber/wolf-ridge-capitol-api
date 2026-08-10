@@ -218,46 +218,127 @@
         ourPricePerCc: null         // PLACEHOLDER — set when the new cost is final
     };
 
-    /* ══ SWITCH-LIKELIHOOD / FIT ══════════════════════════════════════════
-     * Turns the raw lead signals into a 0–100 fit score, a Hot/Warm/Cold band,
-     * and the plain-English reasons a rep would lead with. A server override
-     * (`switch_likelihood`) wins when present. This is a transparent heuristic,
-     * not a model — tune the weights to match what actually closes. */
-    function computeFit(l) {
-        var reasons = [], s = 30;   // neutral base
+    /* ══ INTELLIGENCE SIGNALS (PLACEHOLDER) ═══════════════════════════════
+     * Extra screening signals the "intelligence" scan / rep enrichment would
+     * populate. Kept in a compact per-id map so the LEADS array above stays
+     * readable; missing fields fall back to SIGNAL_DEFAULTS. Replace with the
+     * server's enriched values.
+     *   cash_pay_focus         — predominantly cash-pay / elective practice
+     *   advertising_regen      — actively running ads for PRP / regen / etc.
+     *   website_mentions_regen — site already markets regenerative therapies
+     *   google_rating / review_count — reputation + demand proxy
+     *   decision_maker_is_owner— physician-owner signs off (faster close)
+     *   contract_status        — none | month_to_month | expiring | in_contract
+     *   supplier_risk          — current supplier hit a recall/backorder/warning
+     *   engagement             — none | email_open | visited_pricing |
+     *                            sample_requested | demo
+     *   competitors_nearby     — # of nearby practices already offering regen
+     *   buy_likelihood         — server override for the buy score (else null)
+     * ═════════════════════════════════════════════════════════════════════ */
+    var SIGNAL_DEFAULTS = {
+        cash_pay_focus: false, advertising_regen: false, website_mentions_regen: false,
+        google_rating: null, review_count: null, decision_maker_is_owner: false,
+        contract_status: 'none', supplier_risk: false, engagement: 'none',
+        competitors_nearby: null, buy_likelihood: null
+    };
+    var SIGNALS = {
+        1: { cash_pay_focus: true, website_mentions_regen: true, google_rating: 4.6, review_count: 180, decision_maker_is_owner: true, contract_status: 'none', engagement: 'visited_pricing', competitors_nearby: 5 },
+        2: { cash_pay_focus: true, advertising_regen: true, website_mentions_regen: true, google_rating: 4.8, review_count: 320, decision_maker_is_owner: false, contract_status: 'month_to_month', engagement: 'sample_requested', competitors_nearby: 9 },
+        3: { cash_pay_focus: true, advertising_regen: true, website_mentions_regen: true, google_rating: 4.9, review_count: 410, decision_maker_is_owner: true, contract_status: 'in_contract', engagement: 'demo', competitors_nearby: 4 },
+        4: { google_rating: 4.3, review_count: 75, decision_maker_is_owner: true, contract_status: 'expiring', supplier_risk: true, engagement: 'email_open', competitors_nearby: 6 },
+        5: { google_rating: null, review_count: null, contract_status: 'none', engagement: 'none', competitors_nearby: 0 },
+        6: { cash_pay_focus: true, advertising_regen: true, google_rating: 4.7, review_count: 210, decision_maker_is_owner: true, contract_status: 'month_to_month', engagement: 'visited_pricing', competitors_nearby: 7 },
+        7: { cash_pay_focus: true, advertising_regen: true, website_mentions_regen: true, google_rating: 4.5, review_count: 150, decision_maker_is_owner: true, contract_status: 'none', engagement: 'sample_requested', competitors_nearby: 8 },
+        8: { advertising_regen: true, website_mentions_regen: true, google_rating: 4.6, review_count: 260, decision_maker_is_owner: true, contract_status: 'expiring', supplier_risk: true, engagement: 'demo', competitors_nearby: 5 },
+        9: { google_rating: 4.2, review_count: 60, decision_maker_is_owner: true, contract_status: 'none', engagement: 'none', competitors_nearby: 3 }
+    };
+    LEADS.forEach(function (l) {
+        var s = SIGNALS[l.id] || {};
+        Object.keys(SIGNAL_DEFAULTS).forEach(function (k) {
+            if (l[k] === undefined) l[k] = (s[k] !== undefined ? s[k] : SIGNAL_DEFAULTS[k]);
+        });
+    });
+
+    /* How naturally a specialty uses stem cells / exosomes (buy-side weight). */
+    var SPECIALTY_FIT = {
+        ortho: 10, pain_management: 10, wellness: 8, med_spa: 7,
+        aesthetic: 7, plastic_surgery: 6, podiatry: 6
+    };
+    var ENGAGEMENT_LABELS = {
+        none: 'No engagement yet', email_open: 'Opened outreach email',
+        visited_pricing: 'Visited pricing', sample_requested: 'Requested a sample',
+        demo: 'Booked a demo'
+    };
+    var CONTRACT_LABELS = {
+        none: 'No supplier contract', month_to_month: 'Month-to-month',
+        expiring: 'Contract expiring', in_contract: 'Under contract'
+    };
+    function engagementLabel(e) { return ENGAGEMENT_LABELS[e] || '—'; }
+    function contractLabel(c) { return CONTRACT_LABELS[c] || '—'; }
+
+    function band(s, reasons) {
+        s = Math.max(0, Math.min(100, Math.round(s)));
+        return { score: s, band: s >= 70 ? 'hot' : s >= 45 ? 'warm' : 'cold', reasons: reasons };
+    }
+
+    /* ══ BUY PROPENSITY ═══════════════════════════════════════════════════
+     * Likelihood the clinic buys stem cells / exosomes at all — independent of
+     * who they buy from today. Transparent heuristic; tune to what closes.
+     * A server override (`buy_likelihood`) wins when present. */
+    function computeBuy(l) {
+        var reasons = [], s = 18;
+        if (!l.is_provider) { reasons.push('Not a medical provider — unlikely to administer biologics'); return band(6, reasons); }
 
         var runsRegen = l.offers_prp || l.offers_exosomes || l.offers_stem_cells;
-        if (runsRegen) { s += 18; reasons.push('Already runs regenerative medicine — in-category buyer'); }
-        else { reasons.push('No regen yet — longer education sell'); }
+        if (runsRegen) { s += 18; reasons.push('Already offers regenerative medicine — in-market'); }
+        else { s += 4; reasons.push('No regen yet — education sell, but larger upside'); }
+        if (l.offers_prp && !l.offers_exosomes && !l.offers_stem_cells) { s += 8; reasons.push('Runs PRP only — natural step up to exosomes/stem cells'); }
+        if (l.website_mentions_regen) { s += 7; reasons.push('Website already markets regenerative therapies'); }
+        if (l.advertising_regen) { s += 12; reasons.push('Actively advertising regenerative treatments — demand in place'); }
+        if (l.cash_pay_focus) { s += 8; reasons.push('Cash-pay / elective focus — margin fits biologics'); }
+        var sf = SPECIALTY_FIT[l.category] || 5; s += sf;
+        if (sf >= 9) reasons.push(cap(String(l.category).replace(/_/g, ' ')) + ' — high-use specialty for biologics');
+        if (l.patients_per_day >= 40) { s += 8; reasons.push('High patient volume (' + l.patients_per_day + '/day)'); }
+        else if (l.patients_per_day >= 20) { s += 4; }
+        if (l.est_monthly_cc >= 100) { s += 6; reasons.push('~' + l.est_monthly_cc + ' cc/mo potential'); }
+        if ((l.google_rating || 0) >= 4.5 && (l.review_count || 0) >= 100) { s += 5; reasons.push('Strong reputation (' + l.google_rating + '★, ' + l.review_count + ' reviews)'); }
+        if (l.engagement === 'sample_requested' || l.engagement === 'demo') { s += 12; reasons.push(engagementLabel(l.engagement) + ' — active buying signal'); }
+        else if (l.engagement === 'visited_pricing') { s += 6; reasons.push('Visited pricing — evaluating'); }
+        if (l.decision_maker_is_owner) { s += 4; reasons.push('Physician-owner decides — faster close'); }
 
-        // Runs PRP but not exosomes/stem cells = prime upsell into our core line.
-        if (l.offers_prp && !(l.offers_exosomes && l.offers_stem_cells)) {
-            s += 12; reasons.push('Runs PRP but not full exosome/stem-cell line — upsell target');
-        }
+        if (l.buy_likelihood != null) return band(Number(l.buy_likelihood), reasons);
+        return band(s, reasons);
+    }
 
+    /* ══ SWITCH LIKELIHOOD ════════════════════════════════════════════════
+     * Likelihood they leave their current supplier for us. A server override
+     * (`switch_likelihood`) wins when present. */
+    function computeSwitch(l) {
+        var reasons = [], s = 25;
         var supplier = (l.current_supplier || '').trim();
         var parity = PRICING.parityCompetitor;
-        if (supplier && supplier.toLowerCase() !== parity) {
-            s += 15;
-            reasons.push('On ' + supplier + ', not ' + cap(parity) + ' — price wedge applies (~$' +
-                PRICING.edgeMin + '–' + PRICING.edgeMax + '/cc under)');
-        } else if (supplier.toLowerCase() === parity) {
-            s -= 5;
-            reasons.push(cap(parity) + ' incumbent — near price parity; lead on physician-led + service, not price');
-        } else {
-            reasons.push('Supplier unknown — qualify current source and price/cc');
-        }
+        if (!supplier) { reasons.push('No current biologics supplier — first-fit sale, not a switch'); }
+        else if (supplier.toLowerCase() === parity) { s += 5; reasons.push(cap(parity) + ' incumbent — near price parity; win on physician-led sourcing + service'); }
+        else { s += 20; reasons.push('On ' + supplier + ' — price wedge applies (~$' + PRICING.edgeMin + '–' + PRICING.edgeMax + '/cc under)'); }
+        if (l.price_per_cc_current) reasons.push('Paying $' + l.price_per_cc_current + '/cc now — quantify savings against our price');
+        if (l.supplier_risk) { s += 20; reasons.push('Current supplier flagged (recall / backorder / warning) — active switch trigger'); }
+        if (l.contract_status === 'month_to_month') { s += 12; reasons.push('Month-to-month — no lock-in'); }
+        else if (l.contract_status === 'expiring') { s += 15; reasons.push('Supplier contract expiring — switch window open'); }
+        else if (l.contract_status === 'in_contract') { s -= 12; reasons.push('Under contract — time outreach to renewal'); }
+        if (l.est_monthly_cc >= 100) { s += 6; reasons.push('~' + l.est_monthly_cc + ' cc/mo — worth the switch effort'); }
+        if (l.competitors_nearby >= 6) { s += 3; reasons.push(l.competitors_nearby + ' nearby practices already in regen — competitive market'); }
+        if (l.engagement === 'sample_requested' || l.engagement === 'demo') { s += 8; reasons.push(engagementLabel(l.engagement)); }
 
-        // Deal size: throughput and estimated cc/month.
-        if (l.patients_per_day >= 40) { s += 8; reasons.push('High patient volume (' + l.patients_per_day + '/day) — larger account'); }
-        else if (l.patients_per_day >= 20) { s += 4; }
-        if (l.est_monthly_cc >= 100) { s += 6; reasons.push('~' + l.est_monthly_cc + ' cc/mo — high-volume deal'); }
+        if (l.switch_likelihood != null) return band(Number(l.switch_likelihood), reasons);
+        return band(s, reasons);
+    }
 
-        if (l.switch_likelihood != null) s = Number(l.switch_likelihood);
-        s = Math.max(0, Math.min(100, Math.round(s)));
-
-        var band = s >= 70 ? 'hot' : s >= 45 ? 'warm' : 'cold';
-        return { score: s, band: band, reasons: reasons };
+    /* Blended priority — reward a strong showing on EITHER buy or switch, since
+     * the goal is clinics most likely to buy AND/OR switch. */
+    function priority(l) {
+        var buy = computeBuy(l).score, sw = computeSwitch(l).score;
+        var blended = Math.max(0, Math.min(100, Math.round(0.6 * Math.max(buy, sw) + 0.4 * ((buy + sw) / 2))));
+        return { score: blended, band: blended >= 70 ? 'hot' : blended >= 45 ? 'warm' : 'cold', buy: buy, switch: sw };
     }
 
     function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -341,7 +422,11 @@
             category: $('crmFilterCategory').value,
             sort: $('crmSort').value,
             allTypes: $('crmAllTypes').checked,
-            offersRegen: $('crmOffersRegen').checked
+            offersRegen: $('crmOffersRegen').checked,
+            advertising: $('crmAdvertising').checked,
+            cashPay: $('crmCashPay').checked,
+            switchWindow: $('crmSwitchWindow').checked,
+            hotOnly: $('crmHotOnly').checked
         };
     }
 
@@ -351,6 +436,10 @@
         if (f.source && lead.source !== f.source) return false;
         if (!f.allTypes && f.category && lead.category !== f.category) return false;
         if (f.offersRegen && !(lead.offers_prp || lead.offers_exosomes || lead.offers_stem_cells)) return false;
+        if (f.advertising && !lead.advertising_regen) return false;
+        if (f.cashPay && !lead.cash_pay_focus) return false;
+        if (f.switchWindow && !(lead.supplier_risk || lead.contract_status === 'month_to_month' || lead.contract_status === 'expiring')) return false;
+        if (f.hotOnly && priority(lead).band !== 'hot') return false;
         if (f.q) {
             var hay = [lead.name, lead.owner_name, lead.doctor_name, lead.email, lead.phone, lead.city]
                 .join(' ').toLowerCase();
@@ -361,12 +450,14 @@
 
     function sortLeads(list, sort) {
         var by = {
-            fit:      function (a, b) { return computeFit(b).score - computeFit(a).score; },
+            priority: function (a, b) { return priority(b).score - priority(a).score; },
+            buy:      function (a, b) { return computeBuy(b).score - computeBuy(a).score; },
+            switch:   function (a, b) { return computeSwitch(b).score - computeSwitch(a).score; },
             score:    function (a, b) { return (b.score || 0) - (a.score || 0); },
             patients: function (a, b) { return (b.patients_per_day || 0) - (a.patients_per_day || 0); },
             newest:   function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); }
         };
-        return list.slice().sort(by[sort] || by.score);
+        return list.slice().sort(by[sort] || by.priority);
     }
 
     function renderList() {
@@ -381,7 +472,7 @@
 
         var shown = 0;
         sortLeads(LEADS.filter(function (l) { return matches(l, f); }), f.sort).forEach(function (l) {
-            var fit = computeFit(l);
+            var pr = priority(l);
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'crm-list-item' + (l.id === activeId ? ' active' : '');
@@ -395,8 +486,8 @@
             nm.className = 'crm-list-name';
             nm.textContent = l.name;                 // textContent — inert
             var fitBadge = document.createElement('span');
-            fitBadge.className = 'crm-fit crm-fit-' + fit.band;
-            fitBadge.textContent = fit.band.toUpperCase() + ' ' + fit.score;
+            fitBadge.className = 'crm-fit crm-fit-' + pr.band;
+            fitBadge.textContent = pr.band.toUpperCase() + ' ' + pr.score;
             top.append(nm, fitBadge);
 
             var meta = document.createElement('div');
@@ -453,10 +544,26 @@
         c.textContent = (on ? '✓ ' : '· ') + label;
         return c;
     }
+    /* A labelled 0–100 bar with its top reasons — one per score. */
+    function meterEl(label, res) {
+        var box = document.createElement('div');
+        box.className = 'crm-meter crm-fit-' + res.band;
+        var head = document.createElement('div');
+        head.className = 'crm-meter-head';
+        var lab = document.createElement('span'); lab.className = 'crm-meter-label'; lab.textContent = label;
+        var sc = document.createElement('span'); sc.className = 'crm-meter-score'; sc.textContent = res.score;
+        head.append(lab, sc);
+        var track = document.createElement('div'); track.className = 'crm-meter-track';
+        var fill = document.createElement('div'); fill.className = 'crm-meter-fill'; fill.style.width = res.score + '%';
+        track.appendChild(fill);
+        var ul = document.createElement('ul'); ul.className = 'crm-meter-reasons';
+        res.reasons.slice(0, 4).forEach(function (r) { var li = document.createElement('li'); li.textContent = r; ul.appendChild(li); });
+        box.append(head, track, ul);
+        return box;
+    }
 
     function renderDetail(lead) {
         detailEl.textContent = '';
-        var fit = computeFit(lead);
 
         var name = document.createElement('div');
         name.className = 'crm-lead-name';
@@ -475,29 +582,28 @@
             detailEl.appendChild(tier);
         }
 
-        /* ── Sales fit: the switch-likelihood + why ── */
-        var fitBox = document.createElement('div');
-        fitBox.className = 'crm-fitbox crm-fit-' + fit.band;
-        var fitHead = document.createElement('div');
-        fitHead.className = 'crm-fitbox-head';
-        var fitLabel = document.createElement('span');
-        fitLabel.className = 'crm-fit crm-fit-' + fit.band;
-        fitLabel.textContent = fit.band.toUpperCase() + ' · ' + fit.score + '/100 likely to switch';
-        fitHead.appendChild(fitLabel);
-        fitBox.appendChild(fitHead);
+        /* ── AI screening scores: priority + buy propensity + switch likelihood ── */
+        var pr = priority(lead);
+        var buyRes = computeBuy(lead), swRes = computeSwitch(lead);
+
+        var prBox = document.createElement('div');
+        prBox.className = 'crm-fitbox crm-fit-' + pr.band;
+        var prHead = document.createElement('div');
+        prHead.className = 'crm-fitbox-head';
+        var prLabel = document.createElement('span');
+        prLabel.className = 'crm-fit crm-fit-' + pr.band;
+        prLabel.textContent = pr.band.toUpperCase() + ' · Priority ' + pr.score + '/100 (buy and/or switch)';
+        prHead.appendChild(prLabel);
+        prBox.appendChild(prHead);
         var save = document.createElement('div');
         save.className = 'crm-fit-save';
         save.textContent = savingsLine(lead);
-        fitBox.appendChild(save);
-        var ul = document.createElement('ul');
-        ul.className = 'crm-fit-reasons';
-        fit.reasons.forEach(function (r) {
-            var li = document.createElement('li');
-            li.textContent = r;                       // textContent — inert
-            ul.appendChild(li);
-        });
-        fitBox.appendChild(ul);
-        detailEl.appendChild(fitBox);
+        prBox.appendChild(save);
+        var meters = document.createElement('div');
+        meters.className = 'crm-meters';
+        meters.append(meterEl('Buy propensity', buyRes), meterEl('Switch likelihood', swRes));
+        prBox.appendChild(meters);
+        detailEl.appendChild(prBox);
 
         /* ── Practice profile ── */
         detailEl.appendChild(sectionTitle('Practice profile'));
@@ -526,7 +632,28 @@
         buy.className = 'crm-lead-grid';
         kv2(buy, 'Current supplier', lead.current_supplier || 'Unknown');
         if (lead.price_per_cc_current != null) kv2(buy, 'Their price/cc', '$' + lead.price_per_cc_current);
+        kv2(buy, 'Contract', contractLabel(lead.contract_status));
+        if (lead.supplier_risk) kv2(buy, 'Supplier risk', 'Flagged — recall / backorder / warning');
         detailEl.appendChild(buy);
+
+        /* ── Buying signals (what the intelligence scan surfaced) ── */
+        detailEl.appendChild(sectionTitle('Buying signals'));
+        var sig = document.createElement('div');
+        sig.className = 'crm-chips';
+        sig.append(
+            yesNoChip(lead.cash_pay_focus, 'Cash-pay focus'),
+            yesNoChip(lead.advertising_regen, 'Advertising regen'),
+            yesNoChip(lead.website_mentions_regen, 'Markets regen'),
+            yesNoChip(lead.decision_maker_is_owner, 'Owner decides')
+        );
+        detailEl.appendChild(sig);
+        var sig2 = document.createElement('div');
+        sig2.className = 'crm-lead-grid';
+        sig2.style.marginTop = '10px';
+        if (lead.google_rating != null) kv2(sig2, 'Reputation', lead.google_rating + '★ (' + (lead.review_count || 0) + ' reviews)');
+        if (lead.competitors_nearby != null) kv2(sig2, 'Regen competitors nearby', String(lead.competitors_nearby));
+        kv2(sig2, 'Engagement', engagementLabel(lead.engagement));
+        detailEl.appendChild(sig2);
 
         /* ── Contact (the fields portal-crm.js renders) ── */
         detailEl.appendChild(sectionTitle('Contact'));
@@ -560,15 +687,26 @@
         if (lead.created_at) kv(grid, 'Added', textNode(fmt(lead.created_at)));
         detailEl.appendChild(grid);
 
-        // Intelligence enrichment (the confirmed "fetch website + nearby
-        // competitors + analyze" feature) — inert stub, no real scan.
-        var intel = document.createElement('div');
-        intel.className = 'crm-detail-row';
-        intel.style.marginTop = '16px';
-        intel.innerHTML =
-            '<button type="button" class="btn sm" data-action="run-intel">Run intelligence</button>' +
-            '<span class="crm-intel-status muted" id="crmIntelStatus" aria-live="polite"></span>';
-        detailEl.appendChild(intel);
+        /* ── AI screening tools (stubs — wire each to its endpoint) ── */
+        detailEl.appendChild(sectionTitle('AI screening tools'));
+        var tools = document.createElement('div');
+        tools.className = 'crm-tools';
+        [
+            ['run-intel',      'Scan website & ads'],
+            ['tool-reviews',   'Pull reviews & rating'],
+            ['tool-supplier',  'Check supplier risk'],
+            ['tool-lookalike', 'Find look-alikes'],
+            ['tool-outreach',  'Draft outreach email']
+        ].forEach(function (t) {
+            var b = document.createElement('button');
+            b.type = 'button'; b.className = 'btn sm'; b.dataset.action = t[0]; b.textContent = t[1];
+            tools.appendChild(b);
+        });
+        detailEl.appendChild(tools);
+        var toolStatus = document.createElement('div');
+        toolStatus.className = 'crm-tool-status muted'; toolStatus.id = 'crmIntelStatus';
+        toolStatus.setAttribute('aria-live', 'polite');
+        detailEl.appendChild(toolStatus);
 
         // Note + follow-up actions (the captured crmNoteInput / crmFollowupDate / crmDispNote).
         // Static markup (no lead-derived values) so innerHTML is safe here.
@@ -610,6 +748,17 @@
         $('crmTabQueue').classList.toggle('primary', tab === 'queue');
     }
 
+    /* Screening-tool stub: show the running copy, then a "wire me up" note.
+     * Every tool is inert in this static build — nothing is fetched or sent. */
+    function runTool(runningMsg, endpointName) {
+        var st = $('crmIntelStatus');
+        if (!st) return;
+        st.textContent = runningMsg;
+        setTimeout(function () {
+            st.textContent = 'Stub — wire to the ' + endpointName + ' endpoint. This static build runs no scan and sends nothing.';
+        }, 1100);
+    }
+
     /* ══ EVENTS ═══════════════════════════════════════════════════════════ */
     document.addEventListener('click', function (e) {
         var el = e.target.closest('[data-action]');
@@ -630,23 +779,18 @@
             case 'build-queue':
                 cModal.alert('Not wired', 'Queue building calls the server; not implemented in this build.');
                 break;
-            case 'run-intel': {
-                // Mirrors the real feature's status copy, but runs no scan.
-                var st = $('crmIntelStatus');
-                if (st) {
-                    st.textContent = 'Running intelligence — fetching website, nearby competitors, and analyzing…';
-                    setTimeout(function () {
-                        st.textContent = 'Stub — wire to the intelligence endpoint to enrich this lead.';
-                    }, 1200);
-                }
-                break;
-            }
+            case 'run-intel':      runTool('Scanning website & ads — regen mentions, services, ad presence…', 'website/ads intelligence'); break;
+            case 'tool-reviews':   runTool('Pulling reviews & rating — volume, recency, sentiment…', 'reviews / reputation'); break;
+            case 'tool-supplier':  runTool('Checking supplier risk — recalls, backorders, FDA warnings for the current supplier…', 'supplier-risk'); break;
+            case 'tool-lookalike': runTool('Finding look-alikes — clinics similar to your best customers in this territory…', 'look-alike'); break;
+            case 'tool-outreach':  runTool('Drafting outreach — a first email built from this lead’s buy / switch reasons…', 'outreach drafting'); break;
             case 'close-replay': $('replayOverlay').hidden = true; break;
         }
     });
 
     ['crmSearch', 'crmFilterStage', 'crmFilterSource', 'crmFilterCategory',
-     'crmSort', 'crmOffersRegen'].forEach(function (id) {
+     'crmSort', 'crmOffersRegen', 'crmAdvertising', 'crmCashPay',
+     'crmSwitchWindow', 'crmHotOnly'].forEach(function (id) {
         var el = $(id);
         if (el) el.addEventListener(el.tagName === 'INPUT' && el.type !== 'checkbox' ? 'input' : 'change', renderList);
     });
