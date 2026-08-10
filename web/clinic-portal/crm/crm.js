@@ -141,6 +141,62 @@
             offers_prp: false, offers_exosomes: false, offers_stem_cells: false,
             current_supplier: '', price_per_cc_current: null, est_monthly_cc: 0,
             switch_likelihood: null
+        },
+        {
+            id: 6, name: 'Lone Star Plastic Surgery', stage: 'new', tier: 'standard',
+            phone: '+1 512 555 0210', email: 'front@lonestar-plastics.test',
+            address: '400 Congress Ave', city: 'Austin', state: 'TX',
+            website: 'https://lonestar-plastics.test', category: 'plastic_surgery',
+            source: 'intelligence', score: 66,
+            last_contacted: '', next_followup: '',
+            rep_first: 'Sample', rep_last: 'Rep', created_at: '2026-08-06 10:15:00',
+            owner_name: 'Dr. Taylor Brooks', doctor_name: 'Dr. Taylor Brooks',
+            is_provider: true, patients_per_day: 28,
+            offers_prp: true, offers_exosomes: false, offers_stem_cells: false,
+            current_supplier: 'BioSource', price_per_cc_current: 1000, est_monthly_cc: 50,
+            switch_likelihood: null
+        },
+        {
+            id: 7, name: 'Sunshine Aesthetics', stage: 'contacted', tier: 'standard',
+            phone: '+1 305 555 0233', email: 'hello@sunshine-aesthetics.test',
+            address: '88 Ocean Dr', city: 'Miami', state: 'FL',
+            website: 'https://sunshine-aesthetics.test', category: 'aesthetic',
+            source: 'inbound', score: 70,
+            last_contacted: '2026-08-07 13:00:00', next_followup: '2026-08-18 00:00:00',
+            rep_first: 'Sample', rep_last: 'Rep', created_at: '2026-08-02 09:30:00',
+            owner_name: 'Dr. Morgan Diaz', doctor_name: 'Dr. Morgan Diaz',
+            is_provider: true, patients_per_day: 30,
+            offers_prp: true, offers_exosomes: true, offers_stem_cells: false,
+            current_supplier: '', price_per_cc_current: null, est_monthly_cc: 45,
+            switch_likelihood: null
+        },
+        {
+            id: 8, name: 'Summit Pain Management', stage: 'qualified', tier: 'priority',
+            phone: '+1 720 555 0244', email: 'care@summit-pain.test',
+            address: '1200 Alpine Way', city: 'Denver', state: 'CO',
+            website: 'https://summit-pain.test', category: 'pain_management',
+            source: 'referral', score: 88,
+            last_contacted: '2026-08-08 15:45:00', next_followup: '2026-08-22 00:00:00',
+            rep_first: 'Sample', rep_last: 'Rep', created_at: '2026-07-30 11:10:00',
+            owner_name: 'Dr. Jamie Fox', doctor_name: 'Dr. Jamie Fox',
+            is_provider: true, patients_per_day: 52,
+            offers_prp: true, offers_exosomes: true, offers_stem_cells: true,
+            current_supplier: 'MediGen', price_per_cc_current: 1050, est_monthly_cc: 130,
+            switch_likelihood: null
+        },
+        {
+            id: 9, name: 'Bay Area Foot & Ankle', stage: 'new', tier: 'standard',
+            phone: '+1 415 555 0255', email: 'intake@bayarea-footankle.test',
+            address: '30 Market St', city: 'San Francisco', state: 'CA',
+            website: 'https://bayarea-footankle.test', category: 'podiatry',
+            source: 'intelligence', score: 40,
+            last_contacted: '', next_followup: '',
+            rep_first: 'Sample', rep_last: 'Rep', created_at: '2026-08-09 14:05:00',
+            owner_name: 'Dr. Lee Nakamura', doctor_name: 'Dr. Lee Nakamura',
+            is_provider: true, patients_per_day: 26,
+            offers_prp: false, offers_exosomes: false, offers_stem_cells: false,
+            current_supplier: '', price_per_cc_current: null, est_monthly_cc: 20,
+            switch_likelihood: null
         }
     ];
 
@@ -206,6 +262,15 @@
 
     function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
 
+    /* Display labels for the sales stages. The stored value stays a clean slug
+     * (matches the filter <option value> and the .crm-pill CSS class); only the
+     * text shown to the rep comes from here. */
+    var STAGE_LABELS = {
+        new: 'New', contacted: 'Contacted', qualified: 'Qualified',
+        sold: 'Sold', not_interested: 'Not interested'
+    };
+    function stageLabel(s) { return STAGE_LABELS[s] || s || '—'; }
+
     /* Estimated per-cc savings a rep can quote, given the lead's current price.
      * Reads the placeholder PRICING config — numbers change when it does. */
     function savingsLine(l) {
@@ -225,6 +290,24 @@
     var listEl   = $('crmLeadList');
     var detailEl = $('crmLeadDetail');
     var activeId = null;
+
+    /* ── States multi-select ──
+     * Empty selection = all states (the master "All states" box just clears the
+     * individual boxes). The button label reflects the current selection. */
+    var statePanel = $('crmStatePanel'), stateBtn = $('crmStateBtn'), stateAll = $('crmStateAll');
+    function stateCbs() { return Array.prototype.slice.call(statePanel.querySelectorAll('.crm-state-cb')); }
+    function selectedStates() { return stateCbs().filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; }); }
+    function updateStateUI() {
+        var sel = stateCbs().filter(function (cb) { return cb.checked; });
+        stateAll.checked = sel.length === 0;
+        stateBtn.textContent = sel.length === 0 ? 'All states'
+            : sel.length === 1 ? sel[0].parentNode.textContent.trim()
+            : sel.length + ' states';
+    }
+    function openStates(open) {
+        statePanel.hidden = !open;
+        stateBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
 
     /* ══ MODAL HELPER (same contract as the protocols page) ═══════════════ */
     var cModal = (function () {
@@ -253,24 +336,21 @@
         return {
             q: ($('crmSearch').value || '').trim().toLowerCase(),
             stage: $('crmFilterStage').value,
-            state: $('crmFilterState').value,
+            states: selectedStates(),
             source: $('crmFilterSource').value,
             category: $('crmFilterCategory').value,
             sort: $('crmSort').value,
-            offersRegen: $('crmOffersRegen').checked,
-            notParity: $('crmNotPlatinum').checked,
-            providersOnly: $('crmShowProviders').checked
+            allTypes: $('crmAllTypes').checked,
+            offersRegen: $('crmOffersRegen').checked
         };
     }
 
     function matches(lead, f) {
         if (f.stage && lead.stage !== f.stage) return false;
-        if (f.state && lead.state !== f.state) return false;
+        if (f.states.length && f.states.indexOf(lead.state) === -1) return false;
         if (f.source && lead.source !== f.source) return false;
-        if (f.category && lead.category !== f.category) return false;
+        if (!f.allTypes && f.category && lead.category !== f.category) return false;
         if (f.offersRegen && !(lead.offers_prp || lead.offers_exosomes || lead.offers_stem_cells)) return false;
-        if (f.notParity && (lead.current_supplier || '').toLowerCase() === PRICING.parityCompetitor) return false;
-        if (f.providersOnly && !lead.is_provider) return false;
         if (f.q) {
             var hay = [lead.name, lead.owner_name, lead.doctor_name, lead.email, lead.phone, lead.city]
                 .join(' ').toLowerCase();
@@ -322,7 +402,7 @@
             var meta = document.createElement('div');
             meta.className = 'crm-list-meta';
             meta.textContent = [l.city, l.state].filter(Boolean).join(', ')
-                + ' · ' + l.stage + ' · ' + l.patients_per_day + '/day';
+                + ' · ' + stageLabel(l.stage) + ' · ' + l.patients_per_day + '/day';
 
             btn.append(top, meta);
             listEl.appendChild(btn);
@@ -385,7 +465,7 @@
 
         var pill = document.createElement('span');
         pill.className = 'crm-pill ' + (lead.stage || '');
-        pill.textContent = lead.stage || '—';
+        pill.textContent = stageLabel(lead.stage);
         detailEl.appendChild(pill);
         if (lead.tier && lead.tier !== 'standard') {
             var tier = document.createElement('span');
@@ -533,8 +613,14 @@
     /* ══ EVENTS ═══════════════════════════════════════════════════════════ */
     document.addEventListener('click', function (e) {
         var el = e.target.closest('[data-action]');
+        var action = el && el.dataset.action;
+
+        // States multi-select: toggle on the button, close on any outside click.
+        if (action === 'toggle-states') { openStates(statePanel.hidden); return; }
+        if (!e.target.closest('#crmStateMulti') && !statePanel.hidden) openStates(false);
+
         if (!el) return;
-        switch (el.dataset.action) {
+        switch (action) {
             case 'open-lead':   openLead(Number(el.dataset.id)); break;
             case 'tab':         showTab(el.dataset.tab); break;
             case 'save-note':
@@ -559,11 +645,26 @@
         }
     });
 
-    ['crmSearch', 'crmFilterStage', 'crmFilterState', 'crmFilterSource',
-     'crmFilterCategory', 'crmSort', 'crmShowProviders', 'crmOffersRegen',
-     'crmNotPlatinum'].forEach(function (id) {
+    ['crmSearch', 'crmFilterStage', 'crmFilterSource', 'crmFilterCategory',
+     'crmSort', 'crmOffersRegen'].forEach(function (id) {
         var el = $(id);
         if (el) el.addEventListener(el.tagName === 'INPUT' && el.type !== 'checkbox' ? 'input' : 'change', renderList);
+    });
+
+    // "All clinic types" overrides the category dropdown; disable it while on.
+    $('crmAllTypes').addEventListener('change', function () {
+        $('crmFilterCategory').disabled = this.checked;
+        renderList();
+    });
+
+    // States panel: the master box clears the individual boxes; any individual
+    // box unchecks the master. Either way, re-render.
+    statePanel.addEventListener('change', function (e) {
+        if (e.target === stateAll && stateAll.checked) {
+            stateCbs().forEach(function (cb) { cb.checked = false; });
+        }
+        updateStateUI();
+        renderList();
     });
 
     document.addEventListener('keydown', function (e) {
@@ -583,7 +684,11 @@
     if (CONFIG.viewingAs === 'clinic' && CONFIG.isAdmin) $('viewAsBanner').hidden = false;
     // Replay stays inert regardless; the overlay only *opens* if the server
     // authorizes it, and even then this build renders no player.
-    if ($('crmFilterState') && CONFIG.defaultState) $('crmFilterState').value = CONFIG.defaultState;
+    if (CONFIG.defaultState) {
+        var pin = statePanel.querySelector('.crm-state-cb[value="' + CONFIG.defaultState + '"]');
+        if (pin) pin.checked = true;
+    }
+    updateStateUI();
 
     renderList();
     showTab('leads');

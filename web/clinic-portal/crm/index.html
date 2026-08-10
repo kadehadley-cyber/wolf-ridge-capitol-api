@@ -108,63 +108,68 @@
             <option value="new">New</option>
             <option value="contacted">Contacted</option>
             <option value="qualified">Qualified</option>
-            <option value="won">Won</option>
-            <option value="lost">Lost</option>
+            <option value="sold">Sold</option>
+            <option value="not_interested">Not interested</option>
           </select>
-          <select id="crmFilterState" aria-label="State">
-            <option value="" selected>All states</option>
-            <option value="AL">Alabama</option>
-            <option value="AK">Alaska</option>
-            <option value="AZ">Arizona</option>
-            <option value="AR">Arkansas</option>
-            <option value="CA">California</option>
-            <option value="CO">Colorado</option>
-            <option value="CT">Connecticut</option>
-            <option value="DE">Delaware</option>
-            <option value="DC">District of Columbia</option>
-            <option value="FL">Florida</option>
-            <option value="GA">Georgia</option>
-            <option value="HI">Hawaii</option>
-            <option value="ID">Idaho</option>
-            <option value="IL">Illinois</option>
-            <option value="IN">Indiana</option>
-            <option value="IA">Iowa</option>
-            <option value="KS">Kansas</option>
-            <option value="KY">Kentucky</option>
-            <option value="LA">Louisiana</option>
-            <option value="ME">Maine</option>
-            <option value="MD">Maryland</option>
-            <option value="MA">Massachusetts</option>
-            <option value="MI">Michigan</option>
-            <option value="MN">Minnesota</option>
-            <option value="MS">Mississippi</option>
-            <option value="MO">Missouri</option>
-            <option value="MT">Montana</option>
-            <option value="NE">Nebraska</option>
-            <option value="NV">Nevada</option>
-            <option value="NH">New Hampshire</option>
-            <option value="NJ">New Jersey</option>
-            <option value="NM">New Mexico</option>
-            <option value="NY">New York</option>
-            <option value="NC">North Carolina</option>
-            <option value="ND">North Dakota</option>
-            <option value="OH">Ohio</option>
-            <option value="OK">Oklahoma</option>
-            <option value="OR">Oregon</option>
-            <option value="PA">Pennsylvania</option>
-            <option value="RI">Rhode Island</option>
-            <option value="SC">South Carolina</option>
-            <option value="SD">South Dakota</option>
-            <option value="TN">Tennessee</option>
-            <option value="TX">Texas</option>
-            <option value="UT">Utah</option>
-            <option value="VT">Vermont</option>
-            <option value="VA">Virginia</option>
-            <option value="WA">Washington</option>
-            <option value="WV">West Virginia</option>
-            <option value="WI">Wisconsin</option>
-            <option value="WY">Wyoming</option>
-          </select>
+          <div class="crm-multi" id="crmStateMulti">
+            <button type="button" class="crm-multi-btn" id="crmStateBtn" data-action="toggle-states" aria-haspopup="listbox" aria-expanded="false">All states</button>
+            <div class="crm-multi-panel" id="crmStatePanel" hidden role="group" aria-label="Filter by state">
+              <label class="crm-multi-opt crm-multi-all"><input type="checkbox" id="crmStateAll" checked> All states</label>
+              <div class="crm-multi-list">
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="AL"> Alabama</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="AK"> Alaska</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="AZ"> Arizona</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="AR"> Arkansas</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="CA"> California</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="CO"> Colorado</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="CT"> Connecticut</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="DE"> Delaware</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="DC"> District of Columbia</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="FL"> Florida</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="GA"> Georgia</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="HI"> Hawaii</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="ID"> Idaho</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="IL"> Illinois</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="IN"> Indiana</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="IA"> Iowa</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="KS"> Kansas</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="KY"> Kentucky</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="LA"> Louisiana</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="ME"> Maine</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MD"> Maryland</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MA"> Massachusetts</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MI"> Michigan</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MN"> Minnesota</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MS"> Mississippi</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MO"> Missouri</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MT"> Montana</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NE"> Nebraska</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NV"> Nevada</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NH"> New Hampshire</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NJ"> New Jersey</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NM"> New Mexico</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NY"> New York</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NC"> North Carolina</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="ND"> North Dakota</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="OH"> Ohio</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="OK"> Oklahoma</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="OR"> Oregon</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="PA"> Pennsylvania</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="RI"> Rhode Island</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="SC"> South Carolina</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="SD"> South Dakota</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="TN"> Tennessee</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="TX"> Texas</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="UT"> Utah</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="VT"> Vermont</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="VA"> Virginia</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="WA"> Washington</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="WV"> West Virginia</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="WI"> Wisconsin</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="WY"> Wyoming</label>
+              </div>
+            </div>
+          </div>
           <select id="crmFilterSource" aria-label="Source">
             <option value="">All sources</option>
             <option value="intelligence">Intelligence scan</option>
@@ -174,7 +179,11 @@
           <select id="crmFilterCategory" aria-label="Category">
             <option value="">All categories</option>
             <option value="med_spa">Med spa</option>
+            <option value="aesthetic">Aesthetic clinic</option>
+            <option value="plastic_surgery">Plastic surgery</option>
             <option value="ortho">Orthopedics</option>
+            <option value="podiatry">Podiatry clinic</option>
+            <option value="pain_management">Pain management clinic</option>
             <option value="wellness">Wellness</option>
           </select>
           <select id="crmSort" aria-label="Sort">
@@ -184,13 +193,10 @@
             <option value="newest">Sort: Newest</option>
           </select>
           <label class="crm-check">
-            <input type="checkbox" id="crmShowProviders" value="on"> Providers only
+            <input type="checkbox" id="crmAllTypes"> All clinic types
           </label>
           <label class="crm-check">
             <input type="checkbox" id="crmOffersRegen"> Already runs regen
-          </label>
-          <label class="crm-check">
-            <input type="checkbox" id="crmNotPlatinum"> Not on Platinum
           </label>
         </div>
         <div class="crm-tabs" role="tablist" aria-label="CRM view">
@@ -281,7 +287,11 @@
               <select id="crmQueueCategory">
                 <option value="">Any</option>
                 <option value="med_spa">Med spa</option>
+                <option value="aesthetic">Aesthetic clinic</option>
+                <option value="plastic_surgery">Plastic surgery</option>
                 <option value="ortho">Orthopedics</option>
+                <option value="podiatry">Podiatry clinic</option>
+                <option value="pain_management">Pain management clinic</option>
                 <option value="wellness">Wellness</option>
               </select>
             </div>

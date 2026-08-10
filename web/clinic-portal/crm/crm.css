@@ -32,6 +32,40 @@
 .crm-check input { width: auto; }
 .crm-tabs { display: flex; gap: 6px; margin-left: auto; }
 
+/* ── States multi-select ── */
+.crm-multi { position: relative; display: inline-block; }
+.crm-multi-btn {
+    font-family: inherit; font-size: 14px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.12);
+    color: var(--text); border-radius: 6px;
+    padding: 9px 30px 9px 12px; min-width: 130px; text-align: left;
+    cursor: pointer; position: relative;
+}
+.crm-multi-btn::after {
+    content: '▾'; position: absolute; right: 12px; top: 50%;
+    transform: translateY(-50%); color: var(--muted); font-size: 11px;
+}
+.crm-multi-btn:focus-visible { outline: 2px solid var(--brand2); outline-offset: 2px; }
+.crm-multi-panel {
+    position: absolute; z-index: 60; top: calc(100% + 6px); left: 0;
+    width: 240px; max-height: 300px; overflow-y: auto;
+    background: #12121e; border: 1px solid var(--line2); border-radius: 10px;
+    box-shadow: 0 16px 40px rgba(0,0,0,.5); padding: 8px;
+}
+.crm-multi-opt {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 6px;
+    font-size: 13px; color: var(--text); cursor: pointer;
+    text-transform: none; letter-spacing: 0;
+}
+.crm-multi-opt:hover { background: rgba(255,255,255,.04); }
+.crm-multi-opt input { width: auto; }
+.crm-multi-all {
+    font-weight: 600; border-bottom: 1px solid var(--line);
+    border-radius: 0; margin-bottom: 4px; padding-bottom: 8px;
+}
+
 /* ── Split: list | detail ── */
 .crm-split {
     display: grid;
@@ -140,8 +174,8 @@
 .crm-pill.new       { background: rgba(0,212,255,.12);  color: var(--brand2); }
 .crm-pill.contacted { background: rgba(255,200,50,.12); color: #ffd060; }
 .crm-pill.qualified { background: rgba(160,120,255,.14); color: var(--accent); }
-.crm-pill.won       { background: rgba(57,255,138,.12); color: var(--brand); }
-.crm-pill.lost      { background: rgba(255,107,138,.12); color: #ff6b8a; }
+.crm-pill.sold           { background: rgba(57,255,138,.12); color: var(--brand); }
+.crm-pill.not_interested { background: rgba(255,107,138,.12); color: #ff6b8a; }
 .crm-tier {
     font-size: 10px; padding: 2px 7px; border-radius: 4px;
     background: rgba(232,201,109,.15); color: #e8c96d; font-weight: 600;
