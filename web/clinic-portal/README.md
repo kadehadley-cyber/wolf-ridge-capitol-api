@@ -38,12 +38,19 @@ all visible copy, the `.order-bar` and `#demoControlsToggle` CSS blocks verbatim
 the five protocol categories from `_protoLabels`, and the four protocol entries
 that survived truncation.
 
-**Reconstructed, because the source was never captured:** everything else. The
-export truncated every extraction at ~1000 characters, and `style.css`,
-`portal.css`, `portal.js` and `portal-protocols.js` were not fetched at all. The
-theme here is derived from the colour values visible in the two inline `<style>`
-blocks (`--brand: #39ff8a`, `--brand2: #00d4ff`, the `#a078ff` accent, the
-`#0d1220`/`#070b12` grounds) — close in spirit, not pixel-identical.
+**Styling is the original's.** The first 50KB of `portal.css` was fetched on a
+later pass, which covers every section this page uses, so the layout metrics,
+the category palette (IA green, IM cyan, IV purple, Other amber, Pre coral), the
+hero gradients, the pill buttons and the dimmed light-on-dark protocol frame are
+the real values rather than inferred ones. `style.css` — which defines the
+shared `--bg`/`--text` tokens — was not captured, so those few root variables are
+still approximations.
+
+**Behaviour is not guesswork.** `portal.js` (59,237 chars) and
+`portal-protocols.js` (4,275 chars) were both fetched in full on a later pass, so
+the security review reflects the real implementation. This rebuild deliberately
+does not reproduce their architecture — it re-implements the same UI without the
+string-built HTML, the client-trusted authorization flags, or the telemetry.
 
 **Deliberately left blank:** the clinical content inside the protocol frame.
 Indications, dosing, dilution and administration sequence are server-rendered by
@@ -61,15 +68,15 @@ Each of these traces to a numbered finding in
 
 | Change | Why |
 | --- | --- |
-| Action Recorder removed entirely | §1 — captured keystrokes in clinical free-text fields |
-| Case Notes marked `data-no-log` | §1 — the field most likely to hold PHI was not excluded |
-| `PORTAL_CONFIG` treated as display hints only; locks re-checked server-side | §2 |
-| Un-pinned `chart.js` CDN tag dropped (nothing on this page used it) | §3 |
-| Strict CSP; every `onclick=` replaced with delegated listeners | §4 |
-| Protocol data lives in JS, not interpolated into an inline `<script>` | §5 |
-| Frame slug allowlisted; height via origin- and source-checked `postMessage` | §6 |
-| Demo controls `hidden` unless the server sets `PORTAL_CONFIG.demo` | §7 |
-| Date `min` computed from the browser clock | §9 — the baked value had gone stale |
+| Demo controls inert unless the server sets `PORTAL_CONFIG.demo`; no `demo_action` client | §1 — the original shipped a self-service permission-granting API |
+| No string-built HTML: nodes are created with `textContent` / `setAttribute` | §2 — the original's `escHtml` leaves quotes intact in attribute positions |
+| `PORTAL_CONFIG` and `locked` treated as display hints; never sent back as authority | §3 — the original posted `&locked=1` from the client |
+| Action Recorder removed entirely; Case Notes marked `data-no-log` | §4 — keystrokes from clinical free-text fields |
+| Frame height via origin- **and** source-checked `postMessage`; slug allowlisted | §5 |
+| CSRF token inputs present on every mutating form | §6 |
+| Un-pinned `chart.js` CDN tag dropped (neither bundle referenced `Chart`) | §9 |
+| Strict CSP; every `onclick=` replaced with delegated listeners | §10 |
+| Date `min` computed from the browser clock | §12 — the baked value had gone stale |
 
 Also picked up along the way: category counts are derived from the protocol list
 instead of hard-coded (the original's "4 protocols" label could drift from

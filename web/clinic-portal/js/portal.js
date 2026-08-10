@@ -6,9 +6,9 @@
  * index.html. Deliberately omitted from the original page:
  *
  *   - the "Action Recorder", which streamed every click and keystroke to
- *     /portal.php?action=user_events_log   (SECURITY-REVIEW.md §1)
+ *     /portal.php?action=user_events_log   (SECURITY-REVIEW.md §4)
  *   - the un-pinned chart.js CDN tag, which nothing on this page used
- *                                          (SECURITY-REVIEW.md §3)
+ *                                          (SECURITY-REVIEW.md §9)
  *
  * ───────────────────────────────────────────────────────────────────────── */
 (function () {
@@ -234,9 +234,13 @@
 
         Array.prototype.forEach.call(catsEl.children, function (card) {
             var on = card.dataset.cat === cat;
-            card.classList.toggle('selected', on);
+            card.classList.toggle('active', on);
             card.setAttribute('aria-pressed', on ? 'true' : 'false');
         });
+
+        // "Show All" is only meaningful once a category is selected.
+        document.querySelector('.proto-show-all-btn')
+            .classList.toggle('visible', cat !== 'all');
 
         var empty = buttonsEl.querySelector('.proto-empty');
         if (!shown && !empty) {

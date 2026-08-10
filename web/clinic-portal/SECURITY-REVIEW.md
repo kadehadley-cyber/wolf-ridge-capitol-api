@@ -1,252 +1,386 @@
 # Security review — CelluNOVA clinic portal, `/portal/protocols`
 
-Reviewed from a Chrome DevTools AI-assistance export dated 2026-08-10.
+Reviewed from Chrome DevTools AI-assistance exports dated 2026-08-10.
 
-## What was actually reviewable
+## Scope
 
-This matters more than any single finding below, so it goes first.
+Second pass. The first review covered only the page markup, because every DOM extraction
+hit the tool's output limit. The bundles have since been fetched, so this pass covers:
 
-Every extraction in that export hit the tool's output limit. `document.documentElement.outerHTML`
-failed, `document.body.innerHTML` failed, `.portal-layout` failed, and `.portal-content-wrap`
-failed. What came back was:
-
-- the complete `<head>`,
-- a structural outline of the DOM,
-- the **first ~1000 characters** of each top-level block, truncated mid-token.
-
-Critically, **the page's actual application code was never captured at all**:
-
-| Not captured | Why it matters |
+| Source | Coverage |
 | --- | --- |
-| `/frontend/js/dist/portal.js` | Session handling, modals, the `cModal`/`overlayClose` globals, whatever listens for `message` events |
-| `/frontend/js/dist/portal-protocols.js` | `loadProto()`, `filterProtos()`, the frame-resize logic, lock enforcement |
-| `/frontend/styles/style.css`, `portal.css` | — |
-| The rest of the Action Recorder | Cut off mid-function at `sessionStorage.getItem(SEQ_KE` — the part that builds and transmits the payload is missing |
-| `/portal.php` (all server code) | Every authorization decision |
+| `/frontend/js/dist/portal.js` | **complete** — 59,237 chars, five contiguous segments |
+| `/frontend/js/dist/portal-protocols.js` | **complete** — 4,275 chars |
+| Page markup, `<head>`, inline `<style>` | first ~1000 chars of each block |
+| Inline "Action Recorder" `<script>` | **partial** — cut off at `sessionStorage.getItem(SEQ_KE` |
+| `/frontend/styles/portal.css` | first 50KB of 107,287 — covers every section this page uses |
+| `/frontend/styles/style.css` | not captured (cosmetic) |
+| `/portal.php` | not captured — **every authorization decision lives here** |
 
-So: **nothing below is a clean bill of health.** In the fragments that were captured I found
-no obfuscated payload, no `eval`, no data exfiltration to a third-party domain, no injected
-redirect, no cryptominer, and no form-jacking. That is a real result, but it covers maybe a
-twentieth of what executes on that page. To actually clear it, pull the two bundles:
+**Verdict on malicious code: none.** With both bundles fully read, there is no `eval`, no
+`Function()` constructor, no obfuscation, no cryptominer, no injected redirect, no
+form-jacking, and no third-party exfiltration. Every `fetch` and image beacon targets
+`BASE + "/portal.php"`, and `BASE` is `''`. The only external scripts are Chart.js from
+jsDelivr and the Cloudflare beacon. That part is clean, and it is now an evidence-based
+statement rather than a hedge.
 
-```
-curl -s https://cellunova.bio/frontend/js/dist/portal.js          -o portal.js
-curl -s https://cellunova.bio/frontend/js/dist/portal-protocols.js -o portal-protocols.js
-```
+What the code *does* contain is two serious design flaws and a working XSS primitive.
 
-One more note, since the source was an AI chat export of live page content: I checked for
-prompt-injection — page text crafted to issue instructions to an AI agent reading it. There
-is none. The export is what it claims to be.
+Two caveats remain. The Action Recorder's transmit logic is still unread — the part that
+builds and sends the payload was never captured. And `portal.php` is the authority for
+findings 1 and 3; the client evidence is strong but the server gets the final word.
+
+The exports are AI-chat renderings of live page content, so I also checked for
+prompt-injection aimed at an agent reading them. There is none.
 
 ---
 
 ## Findings
 
-Ordered by how much they'd cost you if exploited, not by how exotic they are.
+### 1. `demo_action` is a self-service permission-granting API — **most serious**
 
-### 1. A keystroke recorder running on a portal that handles patient data — **highest concern**
-
-The second inline `<script>` is a session-replay recorder, self-documented in its own header
-comment:
-
-> Captures every interaction a logged-in user makes and batches it to
-> `/portal.php?action=user_events_log`. […] Inputs of type=password and any element with
-> `data-no-log` are skipped for keystroke capture.
-
-This is first-party and openly labelled, so it is **not malicious code** — it's an analytics
-feature. It is still the most dangerous thing on the page, for four reasons:
-
-1. **The exclusion list is an allowlist problem wearing a denylist's clothes.** Only
-   `type=password` and explicit `data-no-log` are skipped. Everything else is captured by
-   default, so any new field is logged unless someone remembers to opt it out.
-2. **The fields that most need excluding are not excluded.** The treatment scheduler collects
-   a date, a protocol, a patient count, and a free-text **Notes** textarea, on a page whose own
-   copy says *"Please add case/usage notes"*. None of those carry `data-no-log`. The one element
-   that does carry it is `#orderBar` — a static block of marketing text with no inputs at all.
-   The protection is on the thing that needs none.
-3. **Clinical free text is where PHI goes.** A physician typing "pt. presenting with…" into that
-   Notes box is streaming identifiable patient information into an events table. If this portal
-   is in HIPAA scope, that table is now PHI storage — with the retention, access-control, audit,
-   and BAA obligations that follow — and it very likely was not designed as such.
-4. **Admins can replay these sessions.** `_isReplayView` exists specifically to suppress
-   recording while an admin views a user's session, which confirms a replay UI exists on the
-   other end. That is broad surveillance of clinic users' keystrokes.
-
-**Fix.** Invert the default: capture nothing textual unless a field is explicitly marked
-`data-log-safe`. Never record `value` for `textarea`, `type=text`, `type=email`, or `type=tel`
-in a clinical context — record focus/blur/change *events* without content. Then set a retention
-window, restrict replay access, and if HIPAA applies, get the events table into your risk
-analysis. This rebuild ships without the recorder entirely.
-
-### 2. Authorization state that exists only in the browser
-
-The first inline script publishes the whole permission model to the client:
+`portal.js` ships this to the browser:
 
 ```js
-var _isAdmin  = false;
-var _clinicId = 2;
-var _isLocked = false;
+function _demoApi(sub, body) {
+  body = body || {};
+  body.sub = sub;
+  return fetch(BASE + "/portal.php?action=demo_action", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  }).then(function (r) { return r.json(); });
+}
+
+window.demoSavePermissions = function () {
+  var boxes = document.querySelectorAll("[data-demo-perm]");
+  var perms = {};
+  boxes.forEach(function (b) {
+    var key = b.getAttribute("data-demo-perm");
+    if (key && b.checked) perms[key] = 1;
+  });
+  _demoApi("set_permissions", { permissions: perms });
+};
 ```
 
-and each protocol button carries `data-locked="0"`. The "Back to Admin" control is a plain form
-POSTing `admin_view_as=admin`.
+The panel's own caption: *"Toggle any rep-level permission for your account. Saves
+immediately on change."*
 
-None of this is a vulnerability by itself — the client has to know what to render. It becomes one
-the moment the server *trusts* any of it. The questions to answer in `/portal.php`:
+So there is an endpoint, reachable from any authenticated session, whose stated purpose is
+**granting the caller arbitrary permissions on their own account**. The full sub-action list
+is `get_state`, `update_profile`, `set_permissions`, `view_splash`, `reset_splash`,
+`run_market_analysis`, `clear_ndas`, `clear_reports`, `clear_cart`,
+`clear_custom_pricing`, `reset_all`.
 
-- Does `action=proto_render` re-check the lock for `slug`, or does it serve any slug to any
-  authenticated clinic because the UI "wouldn't have shown the button"? If it's the latter,
-  `document.querySelectorAll('.proto-btn').forEach(b => b.dataset.locked = 0)` in the console
-  unlocks your paid library.
-- Does `admin_view_as` verify the session is genuinely an admin, or does accepting the field
-  imply it? If the latter, any clinic can POST `admin_view_as=admin` and escalate.
-- `_clinicId = 2` is a small sequential integer. If any endpoint accepts a clinic id from the
-  client, that's an IDOR into another clinic's data.
-
-Also: the button list leaks the **names and slugs of locked protocols** to every clinic, even
-when the content stays gated. Whether that matters is a business call, not a technical one.
-
-### 3. `chart.js` loaded from a CDN with no integrity pin
-
-```html
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-```
-
-No `integrity`, no `crossorigin`. A compromise of jsDelivr — or of that package — yields
-arbitrary JavaScript with full DOM access on an authenticated clinical portal, on the same page
-as the recorder in §1.
-
-The inconsistency is instructive: the Cloudflare beacon on the same page **is** pinned, with a
-SHA-512 `integrity` hash and `crossorigin="anonymous"`. Someone knew the pattern; it just wasn't
-applied here.
-
-Worth noting the version is pinned to `4.4.7` rather than a floating tag, which limits the blast
-radius. Also — nothing in the captured markup for this page uses Chart.js. If it's only needed on
-the dashboard, drop the tag here. Otherwise self-host it, or add SRI:
-
-```html
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
-        integrity="sha384-…" crossorigin="anonymous"></script>
-```
-
-### 4. No usable Content-Security-Policy
-
-No CSP meta tag appears in the `<head>`, and the page's construction makes one hard to add: it
-uses inline handlers everywhere (`onclick="filterProtos('ia')"`, `onclick="demoOpen()"`,
-`onclick="openTreatmentScheduler()"`), several inline `<script>` blocks, and inline `style`
-attributes throughout. Any policy would need `script-src 'unsafe-inline'`, which gives up most of
-what a CSP is for.
-
-Check whether one is set as a *response header* — that wouldn't show in the DOM export. If not,
-this is the single highest-leverage hardening available, because it turns most XSS from
-"full account compromise" into "blocked". This rebuild removes every inline handler so the
-policy in `index.html` can be strict.
-
-### 5. Server-rendered JSON inside an inline `<script>` — currently safe, fragile by construction
+The one question that matters: **does `demo_action` verify server-side that the session
+belongs to a demo account, on every sub-action?** If that check is missing — or if it only
+governs whether the template renders the button — then any clinic can run this in a console
+and escalate:
 
 ```js
-var _protoLabels = {"ia":"Intra-Articular", … ,"other":"Other \/ Specialized", …};
+fetch('/portal.php?action=demo_action', {
+  method: 'POST', credentials: 'same-origin',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ sub: 'set_permissions', permissions: { /* every key */ } })
+})
 ```
 
-Injecting server data into a `<script>` body is the classic XSS breakout: a label containing
-`</script>` ends the block early and the rest becomes markup.
+Hiding the button is not a control. The captured page had `_isAdmin = false` and
+`_clinicId = 2`, and the Demo button was rendered anyway, which confirms the surface reaches
+at least some non-admin clinic sessions.
 
-Here it's **currently fine**, and the escaped `\/` proves why — PHP's `json_encode` escapes
-forward slashes by default, so `</script>` is emitted as `<\/script>` and cannot break out.
+Two smaller notes on the same endpoint. `update_profile` accepts `npi` — a regulated
+provider identifier — as a free-text client-supplied field. And `reset_all` permanently
+deletes NDAs, marketing reports, custom pricing and carts; it operates on the session's own
+account, so the blast radius is self-inflicted, but it is still an unauthenticated-by-token
+destructive POST (see finding 6).
 
-The problem is that the safety is incidental. Anyone who later adds `JSON_UNESCAPED_SLASHES`
-for cleaner output — a purely cosmetic change, in an unrelated file — silently introduces stored
-XSS. Make it explicit and un-break-able:
+**Fix.** Gate `demo_action` in `portal.php` on a server-side `is_demo_account` check, per
+sub-action, before any dispatch. Allowlist permission keys instead of accepting whatever
+`permissions` map arrives. Ideally compile the whole surface out of production builds.
 
-```php
-json_encode($labels, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
+### 2. `escHtml()` does not escape quotes, and it is used in ~40 attribute positions
+
+The escaper both bundles rely on:
+
+```js
+function escHtml(str) {
+  var d = document.createElement("div");
+  d.textContent = String(str || "");
+  return d.innerHTML;
+}
 ```
 
-Better still, move the data out of executable context entirely:
-`<script type="application/json" id="proto-labels">` and `JSON.parse(el.textContent)`.
+Serializing a **text node** escapes `&`, `<`, `>` and ` ` — but *not* `"` or `'`.
+That makes this function correct for element content and unsafe for attribute values.
+Verified in Chromium:
 
-### 6. The protocol `<iframe>`: an unvalidated slug and unverified resizing
+```js
+escHtml('" onmouseover="alert(1)')   // → " onmouseover="alert(1)   (unchanged)
 
-```html
-<iframe id="protoFrame" scrolling="no"
-        src="/portal.php?action=proto_render&slug=general-wellness"
-        style="display: block; height: 2547px;">
+host.innerHTML = '<a href="' + escHtml('" onmouseover="alert(1)') + '">x</a>';
+host.querySelector('a').getAttributeNames();   // → ["href", "onmouseover"]
 ```
 
-Two issues.
+The injected handler becomes a real attribute on a real element. `portal.js` then uses
+`escHtml` inside quoted attributes throughout — `value="…"`, `href="…"`,
+`placeholder="…"`, `data-demo-perm="…"`. Any value containing a double quote breaks out.
 
-**The slug reaches the server.** `slug` is client-controlled and lands in a PHP render action.
-`proto_render` needs an explicit allowlist. If it maps the slug to a filesystem path or a database
-lookup, that's the path-traversal / injection surface on this page. It's also the endpoint that
-must enforce §2's locks.
+Two realistic paths to a `"`:
 
-**The height is set from somewhere.** `2547px` is computed at runtime, and `portal-protocols.js`
-wasn't captured, so I can't tell which mechanism is used. If it's a `message` listener,
-**check whether it validates `event.origin` and `event.source`** — an unvalidated listener that
-does anything richer than set a height (writes `innerHTML`, dispatches by `data.type`) is a DOM
-XSS sink reachable from any page that can get a handle to this window.
+- **Market analysis reports.** `loadMarketingReport()` renders
+  `'<a href="' + escHtml(c.website) + '" target="_blank">'` and the same for `c.maps_url`.
+  Those fields come from an AI-generated competitor scan built on web-derived data — the
+  least trustworthy input in the system, rendered straight into an `href`. The same function
+  is missing a scheme check, so `javascript:` URIs also survive: `escHtml` returns
+  `javascript:alert(1)` verbatim.
+- **Your own profile.** `_demoRender()` renders `p.clinic_name`, `p.npi`, `p.phys_first`,
+  `p.address` and the rest into `value="…"`, and those fields are user-writable through
+  `update_profile`. That is stored self-XSS on its own; it becomes stored XSS against staff
+  if any admin view renders the same fields through the same helper.
 
-The rebuild sizes the frame via `postMessage` with both checks:
+**Fix.** Add a distinct attribute escaper and use it in every attribute position:
+
+```js
+function escAttr(s) {
+  return escHtml(s).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+```
+
+Better, build these nodes with `createElement` + `setAttribute`/`textContent` instead of
+string-concatenated `innerHTML`. And allowlist `http:`/`https:` before assigning any `href`
+that came from a report.
+
+Note `esc()` in `portal-protocols.js` has the identical flaw but is used only in element
+content (`<li>`, `<td>`, `<h2>`), so it is currently safe. It is one refactor away from not
+being.
+
+### 3. The client tells the server which protocols it may read
+
+`loadProto()` in `portal-protocols.js`:
+
+```js
+var isLocked = btn.dataset.locked === "1";
+if (!isLocked) logEvent("protocol_view", slug);
+var url = BASE + "/portal.php?action=proto_render&slug=" + encodeURIComponent(slug);
+if (isLocked) url += "&locked=1";
+frame.src = url;
+```
+
+The lock flag is read from a DOM attribute and **sent to the server as a query parameter**.
+Nothing else in the client enforces the lock. So the request for gated content differs from
+the request for open content only by a parameter the user controls:
+
+```js
+document.querySelectorAll('.proto-btn').forEach(b => b.dataset.locked = '0');
+```
+
+…and every subsequent click requests the protocol without `&locked=1`.
+
+Whether that yields the content depends entirely on whether `proto_render` re-derives the
+lock from the session, or trusts `&locked=1`. A server that derived it independently would
+not need the client to send it — the parameter's existence is itself the smell. **Verify
+this one first.** Related: an unlocked view is logged and a locked view is not, so a
+successful bypass would also be invisible in the event log.
+
+Two more instances of the same shape, both in `portal.js`:
+
+```js
+function logEvent(event, detail) { if (_isAdmin) return; /* … */ }
+(function () { if (_isAdmin) return; /* 30s heartbeat */ })();
+```
+
+`_isAdmin` is a `var` in page scope. `_isAdmin = true` in the console silences the audit
+trail and the heartbeat. Client-side flags cannot enforce anything; the server must judge
+its own sessions.
+
+Also unresolved from the markup pass: the `admin_view_as=admin` form POST, and
+`_clinicId = 2` being a small sequential integer. If any endpoint accepts a clinic id from
+the client, that is an IDOR across tenants.
+
+### 4. Telemetry is broader than the recorder, and it is all GET pixels
+
+Three separate streams run on an authenticated clinical portal:
+
+| Stream | Mechanism |
+| --- | --- |
+| Action Recorder | batches clicks + keystrokes to `action=user_events_log` |
+| `logEvent()` | `new Image().src = …action=log_event&event=…&detail=…` |
+| Heartbeat | `new Image().src = …action=heartbeat&page=…&secs=30` every 30s while visible |
+
+The recorder remains the concern flagged in the first pass, and its exclusion list is still
+inverted: only `type=password` and `data-no-log` are skipped, so everything else is captured
+by default. The treatment scheduler's **Notes** textarea — sitting under copy that invites
+*"case/usage notes"* — carries neither, while the one element that does carry `data-no-log`
+is `#orderBar`, a block of static marketing text with no inputs. On a portal handling
+patient scheduling, that is PHI flowing into an events table, with the retention,
+access-control, audit and BAA obligations that follow. `_isReplayView` confirms a
+session-replay UI exists on the other end.
+
+The two beacons compound it: `logEvent` and `heartbeat` put activity data in **URLs**, where
+it lands in access logs, proxy logs and `Referer` chains rather than a request body. Neither
+carries PHI today, but `detail` is a free-text parameter one careless call site away from
+doing so.
+
+**Fix.** Invert the recorder's default — capture nothing textual unless explicitly marked
+safe, and never capture `value` for `textarea` or free-text inputs in a clinical context.
+Move the beacons to `POST`/`sendBeacon`. Set a retention window and restrict replay access.
+
+### 5. `postMessage` listener with no origin or source check — real, but low impact
+
+Confirmed in `portal-protocols.js`:
+
+```js
+window.addEventListener("message", function (e) {
+  if (e.data && e.data.type === "protoHeight") {
+    var frame = document.getElementById("protoFrame");
+    if (frame) frame.style.height = e.data.height + "px";
+  }
+});
+```
+
+No `e.origin` check, no `e.source` check. Any context holding a handle to this window — an
+opener, or a page framing it — can drive the message.
+
+Calibrating honestly: the sink is `style.height`, and the CSSOM property setter discards
+values that are not valid CSS lengths, so this is not an XSS vector. The achievable impact
+is frame-size manipulation — collapse the protocol viewer to `0px`, or expand it absurdly.
+UI spoofing and nuisance, not compromise. Worth fixing because it is two lines, and because
+this listener is exactly the thing that becomes dangerous the moment someone adds a second
+`data.type` branch that writes markup:
 
 ```js
 if (e.source !== frame.contentWindow) return;
 if (e.origin !== window.location.origin) return;
 ```
 
-One honest caveat on the `sandbox` attribute added in the rebuild: because the frame is
-same-origin and needs scripts, it must carry `allow-scripts allow-same-origin`, and that
-combination lets the frame remove its own sandbox. It is documentation, not a boundary. The real
-isolation win would be serving protocol fragments from a separate origin.
+The `slug` question from the first pass is now half-answered: the client wraps it in
+`encodeURIComponent`, so the client side is fine. What `proto_render` does with it —
+filesystem path, database lookup — is still unreviewed, and needs an allowlist.
 
-### 7. Demo controls shipped to live clinic sessions
+### 6. No CSRF tokens on any state-changing endpoint
 
-A floating **Demo** button and modal are present in the live DOM, captioned *"All actions hit your
-own account — safe to experiment."* Its body loads remotely (`Loading…`), so the actions behind it
-weren't captured — but a control panel offering state mutation "to experiment with" does not
-belong on a production clinical portal, even a demo tenant's.
+Every mutating call follows this shape, with no token:
 
-The risk isn't the button; it's the assumption behind it. If those endpoints check "is this a demo
-account?" only by whether the template rendered the button, they're callable by anyone who finds
-the URLs. Gate them server-side, per request. The rebuild keeps the component but leaves it
-`hidden` unless the server sets `PORTAL_CONFIG.demo`.
+```js
+fetch(BASE + "/portal.php?action=nda_sign", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ signer_name: name, signer_title: title, signer_email: email })
+});
+```
+
+Same for `demo_action`, `chat_send`, `chat_delete`, `chat_resolve`, `mark_splash_seen`.
+
+There is incidental protection: `Content-Type: application/json` makes these non-simple
+requests, so a cross-origin `fetch` triggers a preflight the server presumably will not
+approve. That is a side effect, not a control — it evaporates if the server ever accepts
+form-encoded or `text/plain` bodies for the same actions. Add a per-session token and
+verify `SameSite` is set on the session cookie.
+
+`nda_sign` deserves its own note: it is a legally-operative signature, and `signer_email`
+arrives from the client rather than the session, so a signer can attribute their typed
+signature to an address they do not control.
+
+### 7. Countdown-driven pricing — verify the deadline is real
+
+`portal.js` runs a per-second countdown against `data-expires` on `.nda-countdown-card`,
+adds a `nda-urgent` class under 24 hours, and on expiry writes:
+
+> `WINDOW EXPIRED — RELOAD TO SEE STANDARD PRICING`
+
+with `ndaShowStandard()` / `ndaShowQualifyBanner()` toggling the offer banner purely through
+`sessionStorage.nda_dismissed`.
+
+This is a product decision, not a bug, and I am flagging it only because the brief was to
+look for traps. A countdown that gates preferential pricing is a legitimate mechanic **if
+the deadline is real and enforced server-side**. It becomes a deceptive-urgency problem — the
+kind regulators have taken an interest in — if the timer resets per session, or if the
+"expired" pricing never actually differs. Worth confirming which one this is, since the
+client alone cannot tell.
 
 ### 8. Cloudflare beacon — no action needed
 
-```html
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/…"
-        integrity="sha512-…" crossorigin="anonymous" data-cf-beacon="{…}">
-```
+Standard Cloudflare Web Analytics, correctly pinned with a SHA-512 `integrity` hash and
+`crossorigin="anonymous"`. Noted so it is not mistaken for something to remove — it is the
+pattern finding 9 should copy.
 
-Standard Cloudflare Web Analytics, correctly pinned with SRI and `crossorigin`. Listed so it isn't
-mistaken for something to remove — this is the pattern §3 should copy.
-
-### 9. Minor: a stale minimum date
+### 9. `chart.js` from a CDN with no integrity pin
 
 ```html
-<input type="date" id="treatDate" min="2026-08-08" required>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 ```
 
-The export is dated **2026-08-10**, so the server-baked `min` was already two days stale and the
-scheduler accepted appointments in the past. Not a security issue — a correctness one, and a sign
-the value is rendered once and cached rather than computed per request. The rebuild derives it from
-the browser clock; the server should also reject past dates on submit, since a client `min` is
-advisory.
+No `integrity`, no `crossorigin`, on an authenticated clinical portal. The version is pinned
+to `4.4.7` rather than a floating tag, which limits the blast radius to a compromise of
+jsDelivr or that exact package. Neither bundle references `Chart` anywhere, so on this page
+the tag appears to be dead weight — drop it here, or self-host it, or add SRI.
+
+### 10. No usable CSP
+
+Inline `onclick=` handlers throughout the markup, inline `<script>` blocks, and
+string-built inline `style` attributes everywhere in `portal.js`. Any policy would need
+`script-src 'unsafe-inline'`, which forfeits most of the protection — and finding 2 is
+precisely the class of bug a real CSP contains. Check whether one is set as a response
+header; if not, this is the highest-leverage structural fix available.
+
+### 11. Two build artifacts in the shipped stylesheet
+
+Not security issues — found while reading `portal.css` for the rebuild, and both
+indicate something wrong in the build pipeline rather than the source.
+
+**A heredoc terminator leaked into the CSS.** At roughly offset 32,000:
+
+```css
+    .order-journey-line { left: 40px; right: 40px; top: 20px; }
+}
+
+CSSEOF
+
+/* Product grid */
+.shop-grid { … }
+```
+
+`CSSEOF` is a shell heredoc marker that was written into the output file instead
+of ending it. It is not valid at that position, so the parser folds it into the
+next rule and reads the selector as `CSSEOF .shop-grid` — a descendant selector
+matching a `<cssedof>` element that does not exist. **The `.shop-grid` rule
+never applies.** Worth checking whether the shop page's product grid is silently
+falling back to unstyled block layout, and whether the generator that emitted
+this dropped anything else.
+
+**The file is double-encoded.** Comment headers read
+`PORTAL DASHBOARD (portal.php Ã¢â‚¬â€ body.portal-page)` — UTF-8 bytes
+interpreted as Latin-1 and re-encoded, so every em-dash and box-drawing
+character in the comments is mangled. Confined to comments today, so it renders
+fine, but the same pipeline handles `content:` strings elsewhere, and there it
+would be visible. Worth fixing at the source that writes the file.
+
+### 12. Minor: a stale minimum date
+
+`<input type="date" id="treatDate" min="2026-08-08">` on an export dated **2026-08-10** —
+the server-baked floor was two days stale and the scheduler accepted past appointments.
+A correctness bug, and a hint the value is rendered once and cached.
 
 ---
 
 ## Priority
 
-| # | Finding | Severity | Effort |
+| # | Finding | Severity | Where it's settled |
 | --- | --- | --- | --- |
-| 1 | Keystroke recorder capturing clinical free text | **High** — privacy / possible HIPAA | Medium |
-| 2 | Client-side-only authorization signals | **High, if the server trusts them** | Low to verify |
-| 3 | Un-pinned CDN script | **Medium** — supply chain | Low |
-| 4 | No usable CSP | **Medium** — removes XSS mitigation | Medium |
-| 6 | Unvalidated `slug`; unverified frame resize | **Medium** | Low |
-| 7 | Demo controls in production | **Medium** | Low |
-| 5 | JSON-in-`<script>` | **Low now**, high if flags change | Low |
-| 9 | Stale `min` date | Low | Low |
+| 1 | `demo_action` grants permissions to the caller | **High** — privilege escalation | `portal.php` |
+| 2 | `escHtml` leaves quotes → attribute-injection XSS | **High** — confirmed primitive | client |
+| 3 | Client sends `&locked=1`; `_isAdmin` gates client-side | **High, if the server trusts it** | `portal.php` |
+| 4 | Recorder + beacons capturing clinical free text | **High** — privacy / possible HIPAA | both |
+| 6 | No CSRF tokens on mutating endpoints | Medium | `portal.php` |
+| 10 | No usable CSP | Medium | server headers |
+| 9 | Un-pinned CDN script | Medium — supply chain | client |
+| 5 | Unchecked `postMessage` origin | Low — sink is `style.height` | client |
+| 7 | Countdown-gated pricing | Verify enforcement | `portal.php` |
+| 11 | `CSSEOF` heredoc marker in shipped CSS kills `.shop-grid` | Low — build bug | build |
+| 12 | Stale `min` date | Low | server |
 
-Findings 2 and 6 are server-side and cannot be settled from the client. They are the two worth
-checking first, because they're the ones where the answer might be "already fine" — or might be a
-live authorization bypass.
+Findings 1 and 3 are the two to check first, because both might already be fine — and if
+either is not, it is a live authorization bypass rather than a hardening opportunity.
+Finding 2 is confirmed exploitable in the client and needs no server confirmation.

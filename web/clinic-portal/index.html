@@ -95,7 +95,7 @@
 
       <!-- Impersonation banner. Rendered only when the *server* has confirmed an
            admin session is viewing as a clinic; the button below is a hint, not
-           the authority — see SECURITY-REVIEW.md §2. -->
+           the authority — see SECURITY-REVIEW.md §3. -->
       <div class="status-banner demo" id="viewAsBanner" hidden>
         Viewing portal as <strong>Clinic</strong>
         <form method="post" action="/portal/" class="inline-form">
@@ -140,7 +140,7 @@
 
       <div class="proto-viewer open" id="protoViewer">
         <!-- Sandboxed, and sized by an origin-checked postMessage rather than by
-             reaching into the frame's document. See SECURITY-REVIEW.md §6. -->
+             reaching into the frame's document. See SECURITY-REVIEW.md §5. -->
         <iframe id="protoFrame"
                 class="proto-frame"
                 title="Protocol detail"
@@ -249,7 +249,7 @@
 <!-- ══ DEMO CONTROLS ═════════════════════════════════════════════════════
      Present in markup but inert unless the server marks the session as a demo
      account (PORTAL_CONFIG.demo). The original shipped this to every live
-     clinic session. See SECURITY-REVIEW.md §7. -->
+     clinic session. See SECURITY-REVIEW.md §1. -->
 <button id="demoControlsToggle" type="button" data-action="open-demo" title="Demo Controls" aria-label="Open Demo Controls" hidden>
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
   <span>Demo</span>
