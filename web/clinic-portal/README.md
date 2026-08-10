@@ -26,6 +26,11 @@ web/clinic-portal/
 │   ├── pricing.css         reconstructed from the captured shop CSS
 │   ├── pricing.js          catalog/cart, placeholder PRODUCTS block
 │   └── README.md
+├── orders/                 Order History — status timeline + conversation
+│   ├── index.html
+│   ├── orders.css          reconstructed from the captured order CSS
+│   ├── orders.js           placeholder ORDERS block
+│   └── README.md
 ├── SCRAPE-PLAN.md          rebuild plan + page inventory + capture recipe
 ├── SECURITY-REVIEW.md      audit of the original pages  ← read this first
 └── README.md
