@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Strict CSP. The original page could not carry one: it used inline event
+     handlers (onclick="...") and inline <script> blocks throughout, which force
+     script-src 'unsafe-inline' and defeat the point. This rebuild keeps all
+     behaviour in js/portal.js so the policy below can stay tight. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  style-src 'self' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  frame-src 'self';
+  form-action 'self';
+  base-uri 'none';
+  object-src 'none'">
+<!-- frame-ancestors is deliberately absent: browsers ignore it in a <meta>
+     policy. Send it as a response header alongside the rest of this policy. -->
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="robots" content="noindex, nofollow">
+
+<title>Clinic Portal — CelluNOVA</title>
+
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles/portal.css">
+</head>
+<body class="portal-page">
+
+<div class="portal-layout">
+
+  <!-- ══ SIDEBAR ═══════════════════════════════════════════════════════════ -->
+  <aside class="portal-sidebar">
+    <div class="sidebar-brand">
+      <a href="/" aria-label="CelluNOVA home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-word">Cellu<strong>NOVA</strong></span>
+      </a>
+    </div>
+
+    <div class="sidebar-welcome">
+      <strong>Welcome, Dr!</strong>
+      <!-- Identity is server-rendered in production. Placeholder here so a real
+           address is not committed to the repository. -->
+      <span id="sidebarEmail">clinic@example.com</span>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Portal sections">
+      <a href="/portal/protocols" class="active" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Protocols &amp; Treatments
+      </a>
+      <a href="/portal/pricing">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Pricing &amp; Ordering
+      </a>
+      <a href="/portal/treatment-schedule">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+        Treatment Schedule
+      </a>
+      <a href="/portal/orders">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+        Order History
+      </a>
+      <a href="/portal/support">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 113.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01"/></svg>
+        Support
+      </a>
+    </nav>
+
+    <form class="sidebar-signout" method="post" action="/portal/logout">
+      <!-- CSRF token is server-rendered; the placeholder keeps the shape visible. -->
+      <input type="hidden" name="csrf" value="">
+      <button type="submit" class="btn ghost sm">Sign out</button>
+    </form>
+  </aside>
+
+  <!-- ══ CONTENT ═══════════════════════════════════════════════════════════ -->
+  <div class="portal-content-wrap">
+
+    <header class="portal-topbar">
+      <button class="topbar-menu" id="sidebarToggle" aria-label="Toggle navigation" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <h2 class="topbar-title">Protocols &amp; Treatments</h2>
+    </header>
+
+    <main class="portal-main">
+
+      <!-- Impersonation banner. Rendered only when the *server* has confirmed an
+           admin session is viewing as a clinic; the button below is a hint, not
+           the authority — see SECURITY-REVIEW.md §2. -->
+      <div class="status-banner demo" id="viewAsBanner" hidden>
+        Viewing portal as <strong>Clinic</strong>
+        <form method="post" action="/portal/" class="inline-form">
+          <input type="hidden" name="csrf" value="">
+          <button type="submit" name="admin_view_as" value="admin" class="btn sm">Back to Admin</button>
+        </form>
+      </div>
+
+      <a href="/portal/treatment-schedule" class="proto-schedule-cta">
+        <div class="proto-schedule-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/><circle cx="12" cy="15" r="2"/>
+          </svg>
+        </div>
+        <div class="proto-schedule-body">
+          <div class="proto-schedule-eyebrow">Treatment Day Support</div>
+          <h3 class="proto-schedule-title">Have a patient scheduled for treatment?</h3>
+          <p class="proto-schedule-text">Schedule it in our calendar, and our physicians will make sure it goes right.</p>
+        </div>
+        <div class="proto-schedule-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </div>
+      </a>
+
+      <div class="proto-hero">
+        <div class="proto-hero-eyebrow">Clinical Protocol Library</div>
+        <h1 class="proto-hero-title">Protocols &amp; <span>Treatments</span></h1>
+        <p class="proto-hero-sub">Evidence-based administration protocols developed by Dr. Hadley for MSC biologics, exosomes, and regenerative treatments.</p>
+      </div>
+
+      <!-- Category cards. Counts are derived from the rendered protocol list in
+           portal.js rather than hard-coded, so the two can never disagree. -->
+      <div class="proto-cats" id="protoCats"></div>
+
+      <div class="proto-selector-wrap">
+        <div class="proto-selector-header">
+          <div class="proto-selector-label" id="protoSectionLabel">All Protocols</div>
+          <button type="button" class="proto-show-all-btn" data-action="filter" data-cat="all">Show All</button>
+        </div>
+        <div class="proto-buttons" id="protoButtons" role="tablist" aria-label="Protocols"></div>
+      </div>
+
+      <div class="proto-viewer open" id="protoViewer">
+        <!-- Sandboxed, and sized by an origin-checked postMessage rather than by
+             reaching into the frame's document. See SECURITY-REVIEW.md §6. -->
+        <iframe id="protoFrame"
+                class="proto-frame"
+                title="Protocol detail"
+                scrolling="no"
+                loading="lazy"
+                referrerpolicy="same-origin"
+                sandbox="allow-scripts allow-same-origin"
+                src="protocols/protocol.html?slug=general-wellness"></iframe>
+      </div>
+
+      <div class="treatment-cta">
+        <button type="button" class="treatment-cta-inner" data-action="open-scheduler">
+          <div class="treatment-cta-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
+          </div>
+          <div class="treatment-cta-text">
+            <div class="treatment-cta-title">Have a patient scheduled for treatment?</div>
+            <div class="treatment-cta-desc">Schedule it in our calendar, and our physicians will make sure it goes right.</div>
+          </div>
+          <div class="treatment-cta-arrow" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </div>
+        </button>
+      </div>
+
+      <footer class="portal-footer">
+        <span>&copy; CelluNOVA</span> ·
+        <a href="/terms">Terms</a> ·
+        <a href="/privacy">Privacy</a> ·
+        <a href="/portal/support">Support</a>
+      </footer>
+    </main>
+  </div>
+</div>
+
+<!-- ══ TREATMENT SCHEDULER MODAL ═════════════════════════════════════════ -->
+<div id="treatmentSchedulerModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="treatModalTitle" hidden>
+  <div class="modal-box modal-box-sm">
+    <h2 id="treatModalTitle">Schedule a Treatment</h2>
+    <p class="modal-sub">Our physicians will review and confirm your treatment plan.</p>
+
+    <form id="treatmentForm" class="form-grid" method="post" action="/portal/treatment-schedule" novalidate>
+      <input type="hidden" name="csrf" value="">
+      <div class="field">
+        <label for="treatDate">Treatment Date</label>
+        <!-- min is set from the browser clock in portal.js. The original page
+             carried a server-baked min of 2026-08-08 that had already gone
+             stale, so past dates were selectable. -->
+        <input type="date" id="treatDate" name="date" required>
+      </div>
+      <div class="field">
+        <label for="treatProtocol">Protocol / Treatment Type</label>
+        <select id="treatProtocol" name="protocol" required>
+          <option value="">Select a protocol...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="treatPatients">Number of Patients</label>
+        <input type="number" id="treatPatients" name="patients" min="1" max="50" value="1">
+      </div>
+      <div class="field">
+        <!-- data-no-log: free text here can carry patient detail. In the original
+             this field was NOT excluded from the keystroke recorder. -->
+        <label for="treatNotes">Case Notes <span class="field-hint">(avoid identifying patient information)</span></label>
+        <textarea id="treatNotes" name="notes" rows="4" data-no-log
+                  placeholder="Anything our review team should know."></textarea>
+      </div>
+      <p class="form-error" id="treatError" role="alert" hidden></p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" data-action="close-scheduler">Cancel</button>
+        <button type="submit" class="btn primary">Submit Request</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══ GENERIC MODAL (alert/confirm replacement) ═════════════════════════ -->
+<div id="cModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cModalTitle" hidden>
+  <div class="modal-box modal-box-xs">
+    <h2 id="cModalTitle"></h2>
+    <p class="modal-sub" id="cModalBody"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="cModalCancel" hidden>Cancel</button>
+      <button type="button" class="btn primary" id="cModalOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ORDER BAR ═════════════════════════════════════════════════════════ -->
+<div id="orderBar" class="order-bar" data-no-log>
+  <div class="order-bar-text">
+    <strong>Physician-reviewed ordering.</strong>
+    All orders are reviewed by a physician before any payment is ever processed. Please add case/usage notes or questions when submitting an order, plus the best way to reach you in case our review team recommends an adjustment.
+  </div>
+  <a href="/portal/pricing" class="order-bar-btn">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+      <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/>
+    </svg>
+    <span>Build an Order</span>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+  </a>
+  <button type="button" class="order-bar-close" data-action="dismiss-order-bar" aria-label="Dismiss">&times;</button>
+</div>
+
+<!-- ══ DEMO CONTROLS ═════════════════════════════════════════════════════
+     Present in markup but inert unless the server marks the session as a demo
+     account (PORTAL_CONFIG.demo). The original shipped this to every live
+     clinic session. See SECURITY-REVIEW.md §7. -->
+<button id="demoControlsToggle" type="button" data-action="open-demo" title="Demo Controls" aria-label="Open Demo Controls" hidden>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+  <span>Demo</span>
+</button>
+
+<div id="demoControlsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="demoTitle" hidden>
+  <div class="modal-box modal-box-lg">
+    <div class="modal-head">
+      <div>
+        <h2 id="demoTitle">Demo Controls</h2>
+        <div class="modal-sub">All actions hit your own account — safe to experiment.</div>
+      </div>
+      <button type="button" class="modal-x" data-action="close-demo" aria-label="Close">&times;</button>
+    </div>
+    <div id="demoControlsBody" class="modal-body">
+      <div class="muted">Demo mode is disabled for this session.</div>
+    </div>
+  </div>
+</div>
+
+<script src="js/portal.js"></script>
+</body>
+</html>

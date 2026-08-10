@@ -1,0 +1,92 @@
+/* Styles for the protocol detail frame. Kept separate from the parent's
+   stylesheet so the frame can run under its own `default-src 'none'` policy. */
+
+:root {
+    --panel:  #111119;
+    --line2:  rgba(255,255,255,0.10);
+    --text:   #e8edf5;
+    --muted:  #a7b3c5;
+    --brand:  #39ff8a;
+    --brand2: #00d4ff;
+    color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--panel);
+    color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.proto-doc { padding: 28px 30px 34px; }
+
+.proto-doc-eyebrow {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    font-weight: 600;
+    color: var(--brand2);
+}
+
+.proto-doc-title {
+    margin: 6px 0 20px;
+    font-size: 24px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+}
+
+.proto-doc-notice {
+    padding: 14px 16px;
+    margin-bottom: 26px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,179,71,0.28);
+    background: rgba(255,179,71,0.07);
+    font-size: 12.5px;
+    color: var(--muted);
+}
+.proto-doc-notice strong { color: #ffb347; }
+.proto-doc-notice code {
+    background: rgba(255,255,255,0.06);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11.5px;
+}
+
+.proto-doc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.proto-doc-card {
+    padding: 18px 20px;
+    border-radius: 12px;
+    border: 1px solid var(--line2);
+    background: rgba(255,255,255,0.02);
+}
+
+.proto-doc-card h2 {
+    margin: 0 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--brand);
+}
+
+/* Placeholder lines standing in for the server-rendered clinical copy. */
+.ph {
+    height: 9px;
+    margin: 0 0 10px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+}
+.ph.short { width: 62%; margin-bottom: 0; }
+
+@media (max-width: 600px) {
+    .proto-doc { padding: 22px 18px 26px; }
+}
