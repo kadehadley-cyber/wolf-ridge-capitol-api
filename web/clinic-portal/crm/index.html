@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Strict CSP. Same rationale as the protocols page: all behaviour lives in
+     crm.js so no inline handlers or inline <script> are needed, and the policy
+     can stay tight. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  style-src 'self' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  connect-src 'self';
+  form-action 'self';
+  base-uri 'none';
+  object-src 'none'">
+<!-- frame-ancestors belongs in a response header; browsers ignore it in <meta>. -->
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="robots" content="noindex, nofollow">
+
+<title>CRM — CelluNOVA</title>
+
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles/portal.css">
+<link rel="stylesheet" href="crm.css">
+</head>
+<body class="portal-page">
+
+<div class="portal-layout">
+
+  <!-- ══ SIDEBAR (shared shell; nav reflects the captured REP view) ═════════ -->
+  <aside class="portal-sidebar">
+    <div class="sidebar-brand">
+      <a href="/" aria-label="CelluNOVA home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-word">Cellu<strong>NOVA</strong></span>
+      </a>
+    </div>
+
+    <div class="sidebar-welcome">
+      <strong>Welcome, Dr!</strong>
+      <!-- Server-rendered in production; placeholder so no real address is committed. -->
+      <span id="sidebarEmail">rep@example.com</span>
+      <span class="role-badge rep">REP</span>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Portal sections">
+      <a href="/portal/crm" class="active" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        CRM
+      </a>
+      <a href="/portal/tickets">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Tickets
+      </a>
+      <a href="/portal/protocols">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Protocols
+      </a>
+      <a href="/portal/pricing">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Pricing
+      </a>
+    </nav>
+
+    <form class="sidebar-signout" method="post" action="/portal/logout">
+      <input type="hidden" name="csrf" value="">
+      <button type="submit" class="btn ghost sm">Sign out</button>
+    </form>
+  </aside>
+
+  <!-- ══ CONTENT ═══════════════════════════════════════════════════════════ -->
+  <div class="portal-content-wrap">
+
+    <header class="portal-topbar">
+      <button class="topbar-menu" id="sidebarToggle" aria-label="Toggle navigation" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <h2 class="topbar-title">CRM</h2>
+    </header>
+
+    <main class="portal-main crm-main">
+
+      <div class="status-banner demo" id="viewAsBanner" hidden>
+        Viewing portal as <strong>Clinic</strong>
+        <form method="post" action="/portal/" class="inline-form">
+          <input type="hidden" name="csrf" value="">
+          <button type="submit" name="admin_view_as" value="admin" class="btn sm">Back to Admin</button>
+        </form>
+      </div>
+
+      <!-- ── Toolbar: the captured filter IDs, wired for real ── -->
+      <div class="crm-toolbar">
+        <div class="crm-search">
+          <input type="text" id="crmSearch" placeholder="Search name, email, phone, city..."
+                 autocomplete="off" data-no-log>
+        </div>
+        <div class="crm-filters">
+          <select id="crmFilterStage" aria-label="Stage">
+            <option value="">All stages</option>
+            <!-- Sample list — replace with the server's stage vocabulary. -->
+            <option value="new">New</option>
+            <option value="contacted">Contacted</option>
+            <option value="qualified">Qualified</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+          </select>
+          <select id="crmFilterState" aria-label="State">
+            <option value="">All states</option>
+            <option value="AZ" selected>AZ</option>
+            <option value="UT">UT</option>
+            <option value="NV">NV</option>
+            <option value="CA">CA</option>
+          </select>
+          <select id="crmFilterSource" aria-label="Source">
+            <option value="">All sources</option>
+            <option value="intelligence">Intelligence scan</option>
+            <option value="referral">Referral</option>
+            <option value="inbound">Inbound</option>
+          </select>
+          <select id="crmFilterCategory" aria-label="Category">
+            <option value="">All categories</option>
+            <option value="med_spa">Med spa</option>
+            <option value="ortho">Orthopedics</option>
+            <option value="wellness">Wellness</option>
+          </select>
+          <select id="crmSort" aria-label="Sort">
+            <option value="fit" selected>Sort: Best fit</option>
+            <option value="score">Sort: Lead score</option>
+            <option value="patients">Sort: Patients/day</option>
+            <option value="newest">Sort: Newest</option>
+          </select>
+          <label class="crm-check">
+            <input type="checkbox" id="crmShowProviders" value="on"> Providers only
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmOffersRegen"> Already runs regen
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmNotPlatinum"> Not on Platinum
+          </label>
+        </div>
+        <div class="crm-tabs" role="tablist" aria-label="CRM view">
+          <button type="button" class="btn sm primary" id="crmTabLeads" data-action="tab" data-tab="leads" role="tab" aria-selected="true">Lead List</button>
+          <button type="button" class="btn sm" id="crmTabQueue" data-action="tab" data-tab="queue" role="tab" aria-selected="false">Queue</button>
+        </div>
+      </div>
+
+      <!-- ── Lead List view ── -->
+      <div class="crm-view" id="crmView-leads">
+        <div class="crm-split">
+          <!-- Lead list. Rows here are PLACEHOLDER sample data — real leads are
+               PII and were not captured. Rendered by crm.js. -->
+          <div class="crm-list" id="crmLeadList" role="listbox" aria-label="Leads"></div>
+
+          <!-- Lead detail. Fields match exactly what portal-crm.js renders. -->
+          <div class="crm-detail" id="crmLeadDetail">
+            <p class="crm-empty">Select a lead to view details.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Queue builder view ── -->
+      <div class="crm-view" id="crmView-queue" hidden>
+        <div class="crm-panel">
+          <h3>Build a call queue</h3>
+          <p class="muted">Sample controls — wire to the server's queue endpoint.</p>
+          <div class="form-grid crm-queue-form">
+            <div class="field">
+              <label for="crmQueueTerritory">Territory</label>
+              <select id="crmQueueTerritory">
+                <option value="AZ" selected>AZ</option>
+                <option value="UT">UT</option>
+                <option value="NV">NV</option>
+                <option value="CA">CA</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="crmQueueCategory">Category</label>
+              <select id="crmQueueCategory">
+                <option value="">Any</option>
+                <option value="med_spa">Med spa</option>
+                <option value="ortho">Orthopedics</option>
+                <option value="wellness">Wellness</option>
+              </select>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn primary" data-action="build-queue">Build queue</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="portal-footer">
+        <span>&copy; CelluNOVA</span> ·
+        <a href="/terms">Terms</a> ·
+        <a href="/privacy">Privacy</a> ·
+        <a href="/portal/support">Support</a>
+      </footer>
+    </main>
+  </div>
+</div>
+
+<!-- ══ REPLAY OVERLAY ════════════════════════════════════════════════════
+     Present in markup but INERT. In the original this plays back recorded
+     clinic sessions (see SECURITY-REVIEW.md §1). Here it does nothing unless
+     the server marks the session as replay-authorized (PORTAL_CONFIG.canReplay)
+     — and even then this rebuild ships no player, since replaying captured
+     keystrokes is the exact behaviour the review flags. -->
+<div id="replayOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="replayTitle" hidden>
+  <div class="modal-box modal-box-sm">
+    <div class="modal-head">
+      <div>
+        <h2 id="replayTitle">Session Replay</h2>
+        <div class="modal-sub">Replay is disabled in this build.</div>
+      </div>
+      <button type="button" class="modal-x" data-action="close-replay" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="replaySessionSel">Session</label>
+        <select id="replaySessionSel" disabled><option value="">—</option></select>
+      </div>
+      <div class="field">
+        <label for="replaySpeed">Speed</label>
+        <select id="replaySpeed" disabled>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </div>
+      <p class="form-error" hidden></p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ GENERIC MODAL ═════════════════════════════════════════════════════ -->
+<div id="cModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cModalTitle" hidden>
+  <div class="modal-box modal-box-xs">
+    <h2 id="cModalTitle"></h2>
+    <p class="modal-sub" id="cModalBody"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="cModalCancel" hidden>Cancel</button>
+      <button type="button" class="btn primary" id="cModalOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="crm.js"></script>
+</body>
+</html>

@@ -1,21 +1,39 @@
-# Security review — CelluNOVA clinic portal, `/portal/protocols`
+# Security review — CelluNOVA clinic portal (`/portal/protocols`, `/portal/crm`)
 
 Reviewed from Chrome DevTools AI-assistance exports dated 2026-08-10.
 
 ## Scope
 
-Second pass. The first review covered only the page markup, because every DOM extraction
-hit the tool's output limit. The bundles have since been fetched, so this pass covers:
+Started on `/portal/protocols`; a later export of `/portal/crm` extended it. Coverage:
 
 | Source | Coverage |
 | --- | --- |
 | `/frontend/js/dist/portal.js` | **complete** — 59,237 chars, five contiguous segments |
 | `/frontend/js/dist/portal-protocols.js` | **complete** — 4,275 chars |
-| Page markup, `<head>`, inline `<style>` | first ~1000 chars of each block |
+| `/frontend/js/dist/portal-crm.js` | **grep fragments only** — ~6 lines of 64,061; the fetch wrapper and the lead-detail renderer |
+| Page markup, `<head>`, inline `<style>` | first ~1000 chars of each block; CRM main content **not captured** |
 | Inline "Action Recorder" `<script>` | **partial** — cut off at `sessionStorage.getItem(SEQ_KE` |
-| `/frontend/styles/portal.css` | first 50KB of 107,287 — covers every section this page uses |
+| `/frontend/styles/portal.css` | first 70KB of 107,287 — `.crm-*` classes fall past that, uncaptured |
 | `/frontend/styles/style.css` | not captured (cosmetic) |
 | `/portal.php` | not captured — **every authorization decision lives here** |
+
+**What the CRM export confirmed.** Two findings that were "inferred" or "single-instance" are now
+evidenced:
+
+- **`#replayOverlay` is in the live `/portal/crm` DOM** (with `replaySessionSel` / `replaySpeed`
+  controls). This is the session-replay player finding §1 deduced from `_isReplayView`. The
+  keystrokes the Action Recorder captures on clinic sessions are replayed back by admins here.
+  §1 is confirmed, not suspected.
+- **`portal-crm.js` repeats the §2 `escHtml`-in-attribute bug on lead PII.** Its lead-detail
+  renderer builds `href="tel:'+escHtml(l.phone)+'"`, `href="mailto:'+escHtml(l.email)+'"`, and
+  `href="'+escHtml(l.website)+'"`. `escHtml` does not escape quotes (see §2), and `l.website`
+  originates from the "Running intelligence — fetching website, nearby competitors" scrape — i.e.
+  an **external, attacker-influenceable URL rendered straight into an `href`** with no scheme
+  check. This is the highest-value real instance of §2: a stored/reflected XSS whose input is
+  third-party web data, on an admin-facing page.
+- Context: `_isAdmin = true` on the CRM session (it was `false` on protocols), consistent with
+  `logEvent`/heartbeat skipping admin sessions. The CRM holds lead name/email/phone/address —
+  regulated contact data feeding the same telemetry surface as §4.
 
 **Verdict on malicious code: none.** With both bundles fully read, there is no `eval`, no
 `Function()` constructor, no obfuscation, no cryptominer, no injected redirect, no

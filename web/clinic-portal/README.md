@@ -1,24 +1,31 @@
-# Clinic Portal — Protocols & Treatments
+# Clinic Portal — hardened rebuild
 
-A self-contained static rebuild of the CelluNOVA clinic portal's
-`/portal/protocols` page, reconstructed from a Chrome DevTools export and
-hardened along the way.
+Self-contained static rebuilds of CelluNOVA clinic-portal pages, reconstructed
+from Chrome DevTools exports and hardened along the way. Two pages so far:
+`/portal/protocols` (this directory) and `/portal/crm` (`crm/`).
 
 Unrelated to the Jarvis Worker in `src/` — it lives here as a standalone
 front-end reference, with no build step and no dependencies.
 
 ```
 web/clinic-portal/
-├── index.html              page markup, strict CSP, no inline handlers
-├── styles/portal.css       layout + theme
-├── js/portal.js            all behaviour
+├── index.html              protocols page — strict CSP, no inline handlers
+├── styles/portal.css       shared shell: layout + theme
+├── js/portal.js            protocols page behaviour
 ├── protocols/
 │   ├── protocol.html       the detail frame
 │   ├── frame.css
 │   └── frame.js            origin-checked height messaging
-├── SECURITY-REVIEW.md      audit of the original page  ← read this first
+├── crm/                    CRM page — sales-intelligence lead ranking
+│   ├── index.html
+│   ├── crm.css
+│   ├── crm.js              fit scoring + §2-safe link rendering
+│   └── README.md           faithful vs placeholder; the lead schema
+├── SECURITY-REVIEW.md      audit of both pages  ← read this first
 └── README.md
 ```
+
+This file documents the protocols page; see `crm/README.md` for the CRM page.
 
 ## Running it
 
