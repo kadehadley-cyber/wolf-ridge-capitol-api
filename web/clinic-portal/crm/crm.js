@@ -25,7 +25,7 @@
         isAdmin: false,
         viewingAs: null,
         canReplay: false,
-        defaultState: 'AZ'
+        defaultState: ''      // '' = All states; server may pin a rep's territory
     };
 
     var $ = function (id) { return document.getElementById(id); };
@@ -286,7 +286,7 @@
             patients: function (a, b) { return (b.patients_per_day || 0) - (a.patients_per_day || 0); },
             newest:   function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); }
         };
-        return list.slice().sort(by[sort] || by.fit);
+        return list.slice().sort(by[sort] || by.score);
     }
 
     function renderList() {
@@ -583,7 +583,7 @@
     if (CONFIG.viewingAs === 'clinic' && CONFIG.isAdmin) $('viewAsBanner').hidden = false;
     // Replay stays inert regardless; the overlay only *opens* if the server
     // authorizes it, and even then this build renders no player.
-    if ($('crmFilterState')) $('crmFilterState').value = CONFIG.defaultState || 'AZ';
+    if ($('crmFilterState') && CONFIG.defaultState) $('crmFilterState').value = CONFIG.defaultState;
 
     renderList();
     showTab('leads');
