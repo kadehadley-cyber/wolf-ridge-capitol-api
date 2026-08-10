@@ -47,13 +47,13 @@ Status: ✅ built · 🟡 partial · ⬜ not started
 | Protocols | `/portal/protocols` | ✅ | complete (JS+CSS+DOM captured) |
 | CRM | `/portal/crm` | 🟡 | real `portal-crm.js` (64KB), CRM DOM, `.crm-*` CSS past 70KB |
 | Pricing / Ordering | `/portal/pricing` | 🟡 | reconstructed from captured CSS; needs real `portal-pricing.js` + product data |
-| Tickets / Support chat | `/portal/tickets` | ⬜ | DOM; chat logic already partly in `portal.js` |
+| Tickets / Support chat | `/portal/tickets` | 🟡 | mirrors `portal.js` chat flow; needs chat DOM + `.chat-*` CSS |
 | Order history | `/portal/orders` | 🟡 | reconstructed from captured CSS; needs real `portal-orders.js` + order data |
-| Treatment schedule | `/portal/treatment-schedule` | ⬜ | DOM |
-| Marketing resources | `/portal/marketing-resources` | ⬜ | DOM; report render already in `portal.js` |
-| First-login splash | `/portal/welcome` | ⬜ | DOM |
-| Admin dashboard | `/portal/` (admin) | ⬜ | DOM, admin tabs/financials (CSS partly captured) |
-| Public marketing site | `/` and children | ⬜ | separate from the portal; own CSS (`style.css`) |
+| Treatment schedule | `/portal/treatment-schedule` | 🟡 | fresh layout on captured scheduler fields; needs real DOM |
+| Marketing resources | `/portal/marketing-resources` | 🟡 | faithful report schema from `portal.js`; placeholder data |
+| First-login splash | `/portal/welcome` | 🟡 | fresh design; needs real splash DOM |
+| Admin dashboard | `/portal/` (admin) | 🟡 | reconstructed from partial admin CSS; all data placeholder |
+| Public marketing site | `/` and children | 🟡 | fresh invented landing; real site + `style.css` not captured |
 
 ## Per-page checklist
 

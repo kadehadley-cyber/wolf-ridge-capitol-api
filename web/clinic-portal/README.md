@@ -31,6 +31,12 @@ web/clinic-portal/
 │   ├── orders.css          reconstructed from the captured order CSS
 │   ├── orders.js           placeholder ORDERS block
 │   └── README.md
+├── admin/                  Admin dashboard — tabs, financial cards, clinics
+├── marketing/              Marketing Resources — market-scan report render
+├── tickets/                Support chat — thread list + messages
+├── treatment-schedule/     Schedule a treatment — form + upcoming
+├── welcome/                First-login splash
+├── site/                   Public marketing landing page (fresh design)
 ├── SCRAPE-PLAN.md          rebuild plan + page inventory + capture recipe
 ├── SECURITY-REVIEW.md      audit of the original pages  ← read this first
 └── README.md

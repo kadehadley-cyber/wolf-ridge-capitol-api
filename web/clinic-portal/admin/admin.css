@@ -1,0 +1,47 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Admin dashboard — reconstructed from the captured portal.css admin spec
+   (.admin-tabs, .fin-card / .financials-grid / .fin-*, .clinics-table,
+   .status-pill). Real captured values; data is placeholder.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.crm-placeholder-note { font-size: 11.5px; color: var(--muted); padding: 10px 14px; border-radius: 8px; border: 1px dashed var(--line2); background: rgba(255,255,255,.02); }
+.crm-placeholder-note code { background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+.shop-note { margin-bottom: 20px; }
+
+.portal-card { background: #0f0f17; border: 1px solid rgba(255,255,255,.07); border-radius: var(--radius); padding: 24px; margin-top: 4px; overflow-x: auto; }
+.order-section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+
+/* ── Tabs ── */
+.admin-tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,.07); }
+.admin-tab { padding: 10px 20px; font: inherit; font-size: 13px; color: #7a7a9a; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; cursor: pointer; transition: .15s; }
+.admin-tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+.admin-tab:hover:not(.active) { color: #f0f0f5; }
+
+/* ── Financial cards ── */
+.financials-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.fin-overview-grid { grid-template-columns: repeat(3, 1fr); }
+.fin-card { background: #13131d; border: 1px solid rgba(255,255,255,.07); border-radius: 8px; padding: 20px; }
+.fin-card .label { font-size: 11px; color: #7a7a9a; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+.fin-card .value { font-size: 28px; font-weight: 300; color: #f0f0f5; }
+.fin-card .value.settled { color: var(--brand); }
+.fin-settled-tag, .fin-est-tag { font-size: 9px; padding: 2px 6px; border-radius: 4px; vertical-align: middle; font-weight: 600; letter-spacing: .04em; margin-left: 6px; }
+.fin-settled-tag { background: rgba(57,255,138,.12); color: var(--brand); }
+.fin-est-tag { background: rgba(255,180,50,.12); color: #ffb432; }
+
+.fin-breakdown-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fin-breakdown-table th { text-align: left; font-size: 11px; color: #7a7a9a; text-transform: uppercase; letter-spacing: .06em; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.07); }
+.fin-breakdown-table td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.04); }
+.fin-breakdown-table tr:hover td { background: rgba(255,255,255,.02); }
+
+/* ── Clinics table ── */
+.clinics-table { width: 100%; border-collapse: collapse; }
+.clinics-table th { background: rgba(255,255,255,.03); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #7a7a9a; padding: 10px 14px; text-align: left; border-bottom: 1px solid rgba(255,255,255,.07); }
+.clinics-table td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.07); font-size: 13px; vertical-align: middle; }
+.clinics-table tr:hover td { background: rgba(255,255,255,.015); }
+.status-pill { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.status-pill.pending { background: rgba(255,200,50,.12); color: #ffd060; }
+.status-pill.approved { background: rgba(57,255,138,.1); color: var(--brand); }
+.status-pill.revoked { background: rgba(255,80,80,.1); color: #ff6060; }
+
+@media (max-width: 768px) { .fin-overview-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .fin-overview-grid { grid-template-columns: 1fr; } }
