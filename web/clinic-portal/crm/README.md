@@ -47,8 +47,27 @@ in the Platinum fallback, not a lead field or a scoring signal.
 `savingsLine()` quotes estimated per-cc and per-month savings from the lead's
 current price and volume.
 
-Sort defaults to **Best fit**; quick filters: already-runs-regen and
-not-on-Platinum.
+Sort defaults to **Best fit**; quick filters: already-runs-regen, providers-only,
+and not-on-Platinum. "Run intelligence" per lead is an **inert stub** mirroring
+the real feature's status copy — wire it to the enrichment endpoint.
+
+### Pricing is a placeholder in one spot
+
+The product line and cost were redone, so every price figure comes from a single
+`PRICING` block at the top of `crm.js`:
+
+```js
+var PRICING = {
+    edgeMin: 200,               // PLACEHOLDER  $/cc under a non-parity competitor
+    edgeMax: 400,               // PLACEHOLDER
+    parityCompetitor: 'platinum',
+    ourPricePerCc: null         // PLACEHOLDER  set when the new cost is final
+};
+```
+
+Change these four values and the fit reasons, savings lines, and the
+"Not on Platinum" logic all update. The per-lead `price_per_cc_current` figures
+in the sample `LEADS` are placeholders too.
 
 > The scoring is a rule-of-thumb to rank a rep's queue, not a prediction.
 > Treat lead PII (owner, doctor, phone, email) as regulated contact data —

@@ -80,7 +80,7 @@
             rep_first: 'Sample', rep_last: 'Rep', created_at: '2026-08-01 14:20:00',
             // ── sales intelligence ──
             owner_name: 'Dr. Alex Stone', doctor_name: 'Dr. Alex Stone',
-            patients_per_day: 34,
+            is_provider: true, patients_per_day: 34,
             offers_prp: true, offers_exosomes: false, offers_stem_cells: false,
             current_supplier: '', price_per_cc_current: null, est_monthly_cc: 40,
             switch_likelihood: null   // null = compute from signals
@@ -94,7 +94,7 @@
             last_contacted: '2026-08-05 10:00:00', next_followup: '2026-08-02 00:00:00',
             rep_first: 'Sample', rep_last: 'Rep', created_at: '2026-07-28 09:05:00',
             owner_name: 'Jordan Lee', doctor_name: 'Dr. Priya Nair',
-            patients_per_day: 22,
+            is_provider: true, patients_per_day: 22,
             offers_prp: true, offers_exosomes: true, offers_stem_cells: false,
             current_supplier: 'BioSource', price_per_cc_current: 950, est_monthly_cc: 60,
             switch_likelihood: null
@@ -108,17 +108,59 @@
             last_contacted: '2026-08-08 16:30:00', next_followup: '2026-08-20 00:00:00',
             rep_first: 'Sample', rep_last: 'Rep', created_at: '2026-07-15 11:40:00',
             owner_name: 'Dr. Sam Reyes', doctor_name: 'Dr. Sam Reyes',
-            patients_per_day: 48,
+            is_provider: true, patients_per_day: 48,
             offers_prp: true, offers_exosomes: true, offers_stem_cells: true,
             current_supplier: 'Platinum', price_per_cc_current: 1100, est_monthly_cc: 120,
+            switch_likelihood: null
+        },
+        {
+            id: 4, name: 'Canyon Sports Medicine', stage: 'new', tier: 'standard',
+            phone: '+1 480 555 0188', email: 'intake@canyon-sportsmed.test',
+            address: '210 Ridgeline Dr', city: 'Mesa', state: 'AZ',
+            website: 'https://canyon-sportsmed.test', category: 'ortho',
+            source: 'intelligence', score: 55,
+            last_contacted: '', next_followup: '',
+            rep_first: 'Sample', rep_last: 'Rep', created_at: '2026-08-09 08:10:00',
+            owner_name: 'Dr. Robin Vance', doctor_name: 'Dr. Robin Vance',
+            is_provider: true, patients_per_day: 41,
+            offers_prp: true, offers_exosomes: false, offers_stem_cells: false,
+            current_supplier: 'MediGen', price_per_cc_current: 1000, est_monthly_cc: 80,
+            switch_likelihood: null
+        },
+        {
+            id: 5, name: 'Aesthetics Marketing Group', stage: 'new', tier: 'standard',
+            phone: '+1 480 555 0199', email: 'team@aesthetics-mktg.test',
+            address: '77 Commerce Ct', city: 'Tempe', state: 'AZ',
+            website: 'https://aesthetics-mktg.test', category: 'wellness',
+            source: 'inbound', score: 21,
+            last_contacted: '', next_followup: '',
+            rep_first: 'Sample', rep_last: 'Rep', created_at: '2026-08-09 12:00:00',
+            owner_name: 'Casey Morgan', doctor_name: '',
+            // Not a medical provider — a vendor. "Providers only" should hide it.
+            is_provider: false, patients_per_day: 0,
+            offers_prp: false, offers_exosomes: false, offers_stem_cells: false,
+            current_supplier: '', price_per_cc_current: null, est_monthly_cc: 0,
             switch_likelihood: null
         }
     ];
 
-    /* Our positioning, as data a rep can act on — the only physician-led stem
-     * cell / exosome distributor, priced ~$200–400/cc under everyone except
-     * Platinum. Kept here so the numbers live in one place. */
-    var PRICE_EDGE_MIN = 200, PRICE_EDGE_MAX = 400, PRICE_PARITY_COMPETITOR = 'platinum';
+    /* ══ PRICING / POSITIONING — PLACEHOLDER ══════════════════════════════
+     * The product line and cost were redone; these numbers are stand-ins.
+     * This is the ONE place to update — every price claim, savings figure, and
+     * the fit weighting reads from here, so changing these values propagates
+     * through the whole page. Replace with the finalized line + cost.
+     *
+     *   edgeMin/edgeMax     — $/cc we come in under a non-parity competitor
+     *   parityCompetitor    — the competitor we're at price parity with
+     *   ourPricePerCc       — our own $/cc (placeholder; used for exact deltas
+     *                         once known — leave null to quote the range only)
+     * ═════════════════════════════════════════════════════════════════════ */
+    var PRICING = {
+        edgeMin: 200,               // PLACEHOLDER
+        edgeMax: 400,               // PLACEHOLDER
+        parityCompetitor: 'platinum',
+        ourPricePerCc: null         // PLACEHOLDER — set when the new cost is final
+    };
 
     /* ══ SWITCH-LIKELIHOOD / FIT ══════════════════════════════════════════
      * Turns the raw lead signals into a 0–100 fit score, a Hot/Warm/Cold band,
@@ -138,13 +180,14 @@
         }
 
         var supplier = (l.current_supplier || '').trim();
-        if (supplier && supplier.toLowerCase() !== PRICE_PARITY_COMPETITOR) {
+        var parity = PRICING.parityCompetitor;
+        if (supplier && supplier.toLowerCase() !== parity) {
             s += 15;
-            reasons.push('On ' + supplier + ', not Platinum — price wedge applies (~$' +
-                PRICE_EDGE_MIN + '–' + PRICE_EDGE_MAX + '/cc under)');
-        } else if (supplier.toLowerCase() === PRICE_PARITY_COMPETITOR) {
+            reasons.push('On ' + supplier + ', not ' + cap(parity) + ' — price wedge applies (~$' +
+                PRICING.edgeMin + '–' + PRICING.edgeMax + '/cc under)');
+        } else if (supplier.toLowerCase() === parity) {
             s -= 5;
-            reasons.push('Platinum incumbent — near price parity; lead on physician-led + service, not price');
+            reasons.push(cap(parity) + ' incumbent — near price parity; lead on physician-led + service, not price');
         } else {
             reasons.push('Supplier unknown — qualify current source and price/cc');
         }
@@ -161,15 +204,18 @@
         return { score: s, band: band, reasons: reasons };
     }
 
-    /* Estimated per-cc savings a rep can quote, given the lead's current price. */
+    function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+
+    /* Estimated per-cc savings a rep can quote, given the lead's current price.
+     * Reads the placeholder PRICING config — numbers change when it does. */
     function savingsLine(l) {
         var supplier = (l.current_supplier || '').trim();
-        if (supplier.toLowerCase() === PRICE_PARITY_COMPETITOR)
-            return 'Platinum incumbent — price parity; differentiate on physician-led sourcing + support.';
+        if (supplier.toLowerCase() === PRICING.parityCompetitor)
+            return cap(PRICING.parityCompetitor) + ' incumbent — price parity; differentiate on physician-led sourcing + support.';
         if (!supplier) return 'Qualify current supplier and price/cc to size the savings.';
-        var base = '~$' + PRICE_EDGE_MIN + '–' + PRICE_EDGE_MAX + '/cc under ' + supplier;
+        var base = '~$' + PRICING.edgeMin + '–' + PRICING.edgeMax + '/cc under ' + supplier;
         if (l.price_per_cc_current && l.est_monthly_cc) {
-            var lo = PRICE_EDGE_MIN * l.est_monthly_cc, hi = PRICE_EDGE_MAX * l.est_monthly_cc;
+            var lo = PRICING.edgeMin * l.est_monthly_cc, hi = PRICING.edgeMax * l.est_monthly_cc;
             base += '  ·  ~$' + lo.toLocaleString() + '–' + hi.toLocaleString() + '/mo at ' +
                 l.est_monthly_cc + ' cc';
         }
@@ -212,7 +258,8 @@
             category: $('crmFilterCategory').value,
             sort: $('crmSort').value,
             offersRegen: $('crmOffersRegen').checked,
-            notPlatinum: $('crmNotPlatinum').checked
+            notParity: $('crmNotPlatinum').checked,
+            providersOnly: $('crmShowProviders').checked
         };
     }
 
@@ -222,7 +269,8 @@
         if (f.source && lead.source !== f.source) return false;
         if (f.category && lead.category !== f.category) return false;
         if (f.offersRegen && !(lead.offers_prp || lead.offers_exosomes || lead.offers_stem_cells)) return false;
-        if (f.notPlatinum && (lead.current_supplier || '').toLowerCase() === PRICE_PARITY_COMPETITOR) return false;
+        if (f.notParity && (lead.current_supplier || '').toLowerCase() === PRICING.parityCompetitor) return false;
+        if (f.providersOnly && !lead.is_provider) return false;
         if (f.q) {
             var hay = [lead.name, lead.owner_name, lead.doctor_name, lead.email, lead.phone, lead.city]
                 .join(' ').toLowerCase();
@@ -432,7 +480,18 @@
         if (lead.created_at) kv(grid, 'Added', textNode(fmt(lead.created_at)));
         detailEl.appendChild(grid);
 
+        // Intelligence enrichment (the confirmed "fetch website + nearby
+        // competitors + analyze" feature) — inert stub, no real scan.
+        var intel = document.createElement('div');
+        intel.className = 'crm-detail-row';
+        intel.style.marginTop = '16px';
+        intel.innerHTML =
+            '<button type="button" class="btn sm" data-action="run-intel">Run intelligence</button>' +
+            '<span class="crm-intel-status muted" id="crmIntelStatus" aria-live="polite"></span>';
+        detailEl.appendChild(intel);
+
         // Note + follow-up actions (the captured crmNoteInput / crmFollowupDate / crmDispNote).
+        // Static markup (no lead-derived values) so innerHTML is safe here.
         var actions = document.createElement('div');
         actions.className = 'crm-detail-actions';
         actions.innerHTML =
@@ -485,6 +544,17 @@
             case 'build-queue':
                 cModal.alert('Not wired', 'Queue building calls the server; not implemented in this build.');
                 break;
+            case 'run-intel': {
+                // Mirrors the real feature's status copy, but runs no scan.
+                var st = $('crmIntelStatus');
+                if (st) {
+                    st.textContent = 'Running intelligence — fetching website, nearby competitors, and analyzing…';
+                    setTimeout(function () {
+                        st.textContent = 'Stub — wire to the intelligence endpoint to enrich this lead.';
+                    }, 1200);
+                }
+                break;
+            }
             case 'close-replay': $('replayOverlay').hidden = true; break;
         }
     });
