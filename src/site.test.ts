@@ -124,6 +124,15 @@ describe("cellsunova.com site routing", () => {
 		expect(res.headers.get("set-cookie")).toContain("HttpOnly");
 	});
 
+	it("signs in with the second admin account", async () => {
+		const { res, cookie } = await login("Admin", "NOVAto200M");
+		expect(res.status).toBe(303);
+		expect(cookie.startsWith("cn_admin=")).toBe(true);
+		// And a bad password for that account is still rejected.
+		const bad = await login("Admin", "wrong-password");
+		expect(bad.res.status).toBe(401);
+	});
+
 	it("serves the protocols page at /portal/ when signed in", async () => {
 		const { cookie } = await login();
 		const { calls } = await hit("/portal/", "www.cellsunova.com", "GET", cookie);
