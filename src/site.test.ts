@@ -508,6 +508,73 @@ describe("cellsunova.com site routing", () => {
 		}
 	});
 
+	it("returns the best-scored clinics first and drops weaker matches when capped", async () => {
+		const { env } = makeEnv();
+		const { cookie } = await login();
+
+		const realFetch = globalThis.fetch;
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			const u = String(input);
+			if (u.startsWith("https://npiregistry.cms.hhs.gov/")) {
+				return new Response(
+					JSON.stringify({
+						results: [
+							{
+								// Weakest: individual, not primary, no phone, no sub-specialty.
+								number: 5555555550,
+								enumeration_type: "NPI-1",
+								basic: { first_name: "Low", last_name: "Fit", credential: "MD" },
+								taxonomies: [{ desc: "Orthopaedic Surgery", primary: false }],
+								addresses: [{ address_purpose: "LOCATION", address_1: "1 Rd", city: "Boise", state: "ID" }],
+							},
+							{
+								// Strongest: organization, primary specialty, sports-medicine sub-specialty, phone.
+								number: 5555555551,
+								enumeration_type: "NPI-2",
+								basic: { organization_name: "Elite Ortho & Sports" },
+								taxonomies: [
+									{ desc: "Orthopaedic Surgery", primary: true },
+									{ desc: "Sports Medicine", primary: false },
+								],
+								addresses: [{ address_purpose: "LOCATION", address_1: "2 Rd", city: "Nampa", state: "ID", telephone_number: "208-555-0500" }],
+							},
+							{
+								// Middle: individual, primary specialty, phone, no sub-specialty.
+								number: 5555555552,
+								enumeration_type: "NPI-1",
+								basic: { first_name: "Mid", last_name: "Fit", credential: "DO" },
+								taxonomies: [{ desc: "Orthopaedic Surgery", primary: true }],
+								addresses: [{ address_purpose: "LOCATION", address_1: "3 Rd", city: "Meridian", state: "ID", telephone_number: "208-555-0600" }],
+							},
+						],
+					}),
+					{ headers: { "content-type": "application/json" } },
+				);
+			}
+			return realFetch(input as never);
+		}) as typeof fetch;
+
+		try {
+			const scan = await worker.fetch!(
+				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+					method: "POST",
+					headers: { cookie, "content-type": "application/json" },
+					body: JSON.stringify({ state: "ID", categories: ["ortho"], limit: 2 }),
+				}) as never,
+				env,
+				ctx,
+			);
+			expect(scan.status).toBe(200);
+			const data = (await scan.json()) as { added: number; leads: Array<Record<string, unknown>> };
+			expect(data.added).toBe(2); // capped at 2 of the 3 candidates
+			const names = data.leads.map((l) => l.name);
+			expect(names[0]).toBe("Elite Ortho & Sports"); // highest registry fit ranks first
+			expect(names).not.toContain("Low Fit, MD"); // weakest match dropped
+		} finally {
+			globalThis.fetch = realFetch;
+		}
+	});
+
 	it("rejects a scan without any specialties", async () => {
 		const { env } = makeEnv();
 		const { cookie } = await login();

@@ -96,12 +96,39 @@ async function currentLeads(env: Env): Promise<LeadRecord[]> {
 // specialty is actually enumerated (e.g. pain medicine vs. interventional pain).
 const SCAN_TAXONOMY: Record<string, string[]> = {
 	ortho: ["Orthopaedic Surgery", "Sports Medicine"],
-	pain_management: ["Pain Medicine", "Interventional Pain Medicine"],
+	pain_management: ["Pain Medicine", "Interventional Pain Medicine", "Physical Medicine & Rehabilitation"],
 	plastic_surgery: ["Plastic Surgery"],
 	podiatry: ["Podiatrist"],
 	med_spa: ["Dermatology"],
 	wellness: ["Chiropractor"],
 };
+
+// How strong a fit each category is for stem cells / exosomes (0-10). Mirrors
+// the client's SPECIALTY_FIT so the server can rank candidates before returning.
+const SPECIALTY_FIT: Record<string, number> = {
+	ortho: 10,
+	pain_management: 10,
+	wellness: 8,
+	med_spa: 7,
+	plastic_surgery: 6,
+	podiatry: 6,
+};
+
+// Sub-specialties that strongly indicate an active regenerative-medicine practice.
+// A provider listing any of these is a stronger buyer regardless of their category.
+const HIGH_VALUE_SUBSPECIALTIES = new Set([
+	"sports medicine",
+	"interventional pain medicine",
+	"physical medicine & rehabilitation",
+	"regenerative medicine",
+	"rheumatology",
+	"pain medicine",
+]);
+
+interface NppesTaxonomy {
+	desc?: string;
+	primary?: boolean;
+}
 
 interface NppesResult {
 	number?: number | string;
@@ -111,7 +138,9 @@ interface NppesResult {
 		first_name?: string;
 		last_name?: string;
 		credential?: string;
+		sole_proprietor?: string;
 	};
+	taxonomies?: NppesTaxonomy[];
 	addresses?: Array<{
 		address_purpose?: string;
 		address_1?: string;
@@ -119,6 +148,31 @@ interface NppesResult {
 		state?: string;
 		telephone_number?: string;
 	}>;
+}
+
+/* Rank a registry record on the fit signals NPPES actually gives us, so a scan
+ * returns the best-matched clinics instead of the first ones the registry lists:
+ *   - specialty fit of the requested category (ortho/pain rank highest)
+ *   - the target specialty being the provider's PRIMARY enumerated taxonomy
+ *   - any high-value regenerative sub-specialty in their taxonomy list
+ *   - organization (multi-provider volume) over a solo individual
+ *   - a reachable phone number
+ * Returns a 0-100 score. */
+function scanScore(r: NppesResult, category: string): number {
+	let s = 30;
+	s += (SPECIALTY_FIT[category] ?? 5) * 2; // up to +20
+
+	const taxa = r.taxonomies ?? [];
+	const wanted = (SCAN_TAXONOMY[category] ?? []).map((d) => d.toLowerCase());
+	const matched = taxa.find((t) => wanted.includes((t.desc ?? "").toLowerCase()));
+	if (matched?.primary) s += 12; // the target specialty is their main focus
+	if (taxa.some((t) => HIGH_VALUE_SUBSPECIALTIES.has((t.desc ?? "").toLowerCase()))) s += 12;
+
+	if (r.enumeration_type === "NPI-2") s += 6; // organization: more providers, more volume
+	const addr = r.addresses?.find((a) => a.address_purpose === "LOCATION") ?? r.addresses?.[0];
+	if (digits(addr?.telephone_number).length >= 10) s += 5; // reachable
+
+	return Math.max(0, Math.min(100, Math.round(s)));
 }
 
 /** Build a display name from a provider record — an organization name, or an
@@ -158,6 +212,9 @@ function nppesToLead(r: NppesResult, category: string): LeadRecord | null {
 		source: "intelligence",
 		stage: "new",
 		is_provider: true,
+		// A solo individual who is the sole proprietor is the physician-owner —
+		// the decision maker, so a faster close. Real NPPES field, not inferred.
+		decision_maker_is_owner: !isOrg && r.basic?.sole_proprietor === "YES",
 		created_at: new Date().toISOString(),
 	};
 }
@@ -184,9 +241,12 @@ export async function handleLeadScan(request: Request, env: Env): Promise<Respon
 	const categories = (body.categories ?? []).filter((c) => c in SCAN_TAXONOMY);
 	if (!categories.length) return json({ error: "Pick at least one specialty." }, 400);
 	const limit = Math.min(Math.max(Number(body.limit) || 40, 1), 200);
-	// One registry query per (category, taxonomy) pair; size each to reach the target.
+	// One registry query per (category, taxonomy) pair.
 	const taxa = categories.flatMap((c) => SCAN_TAXONOMY[c].map((t) => ({ category: c, taxonomy: t })));
-	const perQuery = Math.min(200, Math.max(20, Math.ceil(limit / categories.length)));
+	// Pull a candidate pool several times larger than the requested count, then
+	// keep only the best-scored clinics — so "Find leads" returns the strongest
+	// matches, not just the first ones the registry happens to list.
+	const candidateLimit = Math.min(200, Math.max(limit * 3, 100));
 
 	// Existing identities, for dedup.
 	const existing = await currentLeads(env);
@@ -194,7 +254,7 @@ export async function handleLeadScan(request: Request, env: Env): Promise<Respon
 	const seenPhone = new Set(existing.map((l) => digits(l.phone)).filter((d) => d.length >= 7));
 	const seenNameCity = new Set(existing.map(nameCityKey));
 
-	const found: LeadRecord[] = [];
+	const pool: Array<{ lead: LeadRecord; score: number }> = [];
 	const errors: string[] = [];
 	for (const { category, taxonomy } of taxa) {
 		// No enumeration_type filter: this returns both individual physicians
@@ -203,7 +263,7 @@ export async function handleLeadScan(request: Request, env: Env): Promise<Respon
 		const params = new URLSearchParams({
 			version: "2.1",
 			taxonomy_description: taxonomy,
-			limit: String(perQuery),
+			limit: String(candidateLimit),
 		});
 		// All-states scan omits the state filter for a nationwide pull.
 		if (!allStates) params.set("state", state);
@@ -234,14 +294,19 @@ export async function handleLeadScan(request: Request, env: Env): Promise<Respon
 				seenNpi.add(String(lead.npi));
 				if (phoneKey.length >= 7) seenPhone.add(phoneKey);
 				seenNameCity.add(nameCityKey(lead));
-				found.push(lead);
-				if (found.length >= limit) break;
+				const score = scanScore(r, category);
+				lead.scan_score = score;
+				lead.score = score;
+				pool.push({ lead, score });
 			}
 		} catch (err) {
 			errors.push(`${taxonomy}: ${String(err).slice(0, 120)}`);
 		}
-		if (found.length >= limit) break;
 	}
+
+	// Rank the whole candidate pool by registry fit and keep only the best.
+	pool.sort((a, b) => b.score - a.score);
+	const found = pool.slice(0, limit).map((p) => p.lead);
 
 	if (found.length) {
 		await ensureLeadsTable(env);
