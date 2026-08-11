@@ -37,14 +37,14 @@
                     ph: Math.random() * Math.PI * 2,
                     sp: 0.6 + Math.random() * 1.4,
                     col: amber ? (Math.random() < 0.5 ? '224,160,58' : '255,122,58')
-                               : (Math.random() < 0.5 ? '57,255,138' : '47,224,107')
+                               : (Math.random() < 0.5 ? '125,211,64' : '111,206,53')
                 });
             }
         }
 
         function glow() {
             var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(W, H) * 0.6);
-            g.addColorStop(0, 'rgba(47,224,107,.22)');
+            g.addColorStop(0, 'rgba(111,206,53,.22)');
             g.addColorStop(0.4, 'rgba(30,120,70,.10)');
             g.addColorStop(1, 'rgba(6,10,16,0)');
             ctx.fillStyle = g;

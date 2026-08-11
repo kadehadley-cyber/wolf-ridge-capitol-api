@@ -11,16 +11,16 @@
 .mk-list-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 12px 14px; border: none; border-bottom: 1px solid var(--line); background: none; color: inherit; font: inherit; cursor: pointer; transition: background .15s; }
 .mk-list-item:last-child { border-bottom: none; }
 .mk-list-item:hover { background: rgba(255,255,255,.03); }
-.mk-list-item.active { background: rgba(57,255,138,.06); box-shadow: inset 3px 0 0 var(--brand); }
+.mk-list-item.active { background: rgba(125,211,64,.06); box-shadow: inset 3px 0 0 var(--brand); }
 .mk-list-title { font-size: 13px; font-weight: 600; }
 .mk-list-date { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .mk-status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 999px; }
-.mk-status.completed { background: rgba(57,255,138,.12); color: var(--brand); }
+.mk-status.completed { background: rgba(125,211,64,.12); color: var(--brand); }
 .mk-status.running, .mk-status.queued { background: rgba(255,170,68,.14); color: #ffaa44; }
 .mk-status.failed { background: rgba(255,96,96,.12); color: #ff6060; }
 
 .mk-detail { border: 1px solid var(--line2); border-radius: var(--radius); background: var(--panel); padding: 22px 24px; min-height: 200px; }
-.mk-summary { font-size: 14px; line-height: 1.6; padding: 14px 16px; background: rgba(57,255,138,.05); border-left: 3px solid var(--brand); border-radius: 4px; margin-bottom: 18px; }
+.mk-summary { font-size: 14px; line-height: 1.6; padding: 14px 16px; background: rgba(125,211,64,.05); border-left: 3px solid var(--brand); border-radius: 4px; margin-bottom: 18px; }
 .mk-section { margin-bottom: 18px; }
 .mk-section-h { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; }
 .mk-card { padding: 10px 12px; background: var(--card2); border-radius: 6px; margin-bottom: 6px; }

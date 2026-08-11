@@ -46,7 +46,7 @@
             var sub = document.createElement('div'); sub.className = 'sched-sub'; sub.textContent = u.patients + (u.patients === 1 ? ' patient' : ' patients');
             body.append(title, sub);
             var pill = document.createElement('span'); pill.className = 'sched-pill'; pill.textContent = u.status;
-            if (u.status === 'confirmed') { pill.style.background = 'rgba(57,255,138,.12)'; pill.style.color = '#39ff8a'; }
+            if (u.status === 'confirmed') { pill.style.background = 'rgba(125,211,64,.12)'; pill.style.color = '#7dd340'; }
             row.append(date, body, pill);
             el.appendChild(row);
         });

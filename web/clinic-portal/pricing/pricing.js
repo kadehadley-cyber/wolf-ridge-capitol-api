@@ -25,29 +25,25 @@
      * drives the colour: msc=green, exo=cyan, lyo=purple. `popular` is a badge.
      * ═════════════════════════════════════════════════════════════════════ */
     var CATEGORIES = [
-        { key: 'msc', label: 'MSC biologics' },
-        { key: 'exo', label: 'Exosomes' },
-        { key: 'lyo', label: 'Lyophilized' }
+        { key: 'msc', label: 'NOVA biologics' },
+        { key: 'exo', label: 'Exosomes' }
     ];
-    /* Pricing: $800 per cc across the line, except NOVA-EXO+ at $500 per cc.
-     * Lyophilized is priced per vial at the same $800 rate (adjust if the
-     * finalized vial price differs). Product names other than NOVA-EXO+ are
-     * still placeholders from the redone line. */
+    /* The NOVA product family, from the CelluNOVA Brand Standards Guide:
+     * NOVA-FLOW, NOVA-FLEX, NOVA-ELITE at $800 per cc; NOVA-EXO+ at $500 per
+     * cc. Volume options are placeholders until the finalized sizes are set. */
     var PRICING = {
         perCc: 800,
         novaExoPlusPerCc: 500
     };
     var PRODUCTS = [
-        { id: 'msc-umb', name: 'Umbilical MSC', cat: 'msc',
+        { id: 'nova-flow',  name: 'NOVA-FLOW', cat: 'msc',
           variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }, { vol: '5 cc', price: 4000 }] },
-        { id: 'msc-wj', name: 'Wharton’s Jelly MSC', cat: 'msc',
-          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }] },
-        { id: 'exo-plus', name: 'NOVA-EXO+', cat: 'exo', popular: true,
-          variants: [{ vol: '1 cc', price: 500 }, { vol: '2 cc', price: 1000 }, { vol: '5 cc', price: 2500 }] },
-        { id: 'exo-hi',  name: 'Exosomes high-count', cat: 'exo',
-          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }] },
-        { id: 'lyo-exo', name: 'Lyophilized exosomes', cat: 'lyo',
-          variants: [{ vol: '1 vial', price: 800 }, { vol: '3 vials', price: 2400 }] }
+        { id: 'nova-flex',  name: 'NOVA-FLEX', cat: 'msc',
+          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }, { vol: '5 cc', price: 4000 }] },
+        { id: 'nova-elite', name: 'NOVA-ELITE', cat: 'msc', popular: true,
+          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }, { vol: '5 cc', price: 4000 }] },
+        { id: 'exo-plus',   name: 'NOVA-EXO+', cat: 'exo', popular: true,
+          variants: [{ vol: '1 cc', price: 500 }, { vol: '2 cc', price: 1000 }, { vol: '5 cc', price: 2500 }] }
     ];
 
     var catLabel = {};

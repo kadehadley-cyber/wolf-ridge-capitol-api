@@ -50,7 +50,7 @@
 .crm-multi-panel {
     position: absolute; z-index: 60; top: calc(100% + 6px); left: 0;
     width: 240px; max-height: 300px; overflow-y: auto;
-    background: #12121e; border: 1px solid var(--line2); border-radius: 10px;
+    background: #121d18; border: 1px solid var(--line2); border-radius: 10px;
     box-shadow: 0 16px 40px rgba(0,0,0,.5); padding: 8px;
 }
 .crm-multi-opt {
@@ -96,7 +96,7 @@
 }
 .crm-list-item:last-child { border-bottom: none; }
 .crm-list-item:hover { background: rgba(255,255,255,.03); }
-.crm-list-item.active { background: rgba(57,255,138,.06); box-shadow: inset 3px 0 0 var(--brand); }
+.crm-list-item.active { background: rgba(125,211,64,.06); box-shadow: inset 3px 0 0 var(--brand); }
 .crm-list-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .crm-list-name { font-size: 13.5px; font-weight: 600; }
 .crm-list-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
@@ -107,7 +107,7 @@
     font-size: 10px; font-weight: 700; letter-spacing: .04em;
     padding: 2px 8px; border-radius: 999px; white-space: nowrap;
 }
-.crm-fit-hot  { background: rgba(57,255,138,.14); color: var(--brand); }
+.crm-fit-hot  { background: rgba(125,211,64,.14); color: var(--brand); }
 .crm-fit-warm { background: rgba(255,200,50,.14); color: #ffd060; }
 .crm-fit-cold { background: rgba(255,255,255,.06); color: var(--muted); }
 
@@ -119,7 +119,7 @@
     border: 1px solid var(--line2);
     background: rgba(255,255,255,.02);
 }
-.crm-fitbox.crm-fit-hot  { border-color: rgba(57,255,138,.30); background: rgba(57,255,138,.05); }
+.crm-fitbox.crm-fit-hot  { border-color: rgba(125,211,64,.30); background: rgba(125,211,64,.05); }
 .crm-fitbox.crm-fit-warm { border-color: rgba(255,200,50,.28); background: rgba(255,200,50,.04); }
 .crm-fitbox-head { margin-bottom: 8px; }
 .crm-fitbox .crm-fit { font-size: 12px; padding: 3px 12px; }
@@ -131,7 +131,7 @@
 .crm-meters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
 @media (max-width: 560px) { .crm-meters { grid-template-columns: 1fr; } }
 .crm-meter { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line2); background: rgba(255,255,255,.02); }
-.crm-meter.crm-fit-hot  { border-color: rgba(57,255,138,.30); background: rgba(57,255,138,.05); }
+.crm-meter.crm-fit-hot  { border-color: rgba(125,211,64,.30); background: rgba(125,211,64,.05); }
 .crm-meter.crm-fit-warm { border-color: rgba(255,200,50,.28); background: rgba(255,200,50,.04); }
 .crm-meter-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .crm-meter-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
@@ -156,7 +156,7 @@
     background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12);
     color: var(--text); border-radius: 6px; padding: 9px 12px; width: 100%; outline: none;
 }
-#outreachModal input[type="text"]:focus { border-color: rgba(57,255,138,.4); background: rgba(57,255,138,.03); }
+#outreachModal input[type="text"]:focus { border-color: rgba(125,211,64,.4); background: rgba(125,211,64,.03); }
 #outreachModal textarea { min-height: 260px; font-size: 13.5px; line-height: 1.6; }
 .outreach-note { font-size: 11px; margin: 0; }
 #outreachModal .modal-actions { align-items: center; }
@@ -172,7 +172,7 @@
     font-size: 12px; font-weight: 600;
     padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line2);
 }
-.crm-chip.on  { color: var(--brand); border-color: rgba(57,255,138,.35); background: rgba(57,255,138,.06); }
+.crm-chip.on  { color: var(--brand); border-color: rgba(125,211,64,.35); background: rgba(125,211,64,.06); }
 .crm-chip.off { color: var(--muted); background: rgba(255,255,255,.02); }
 
 .crm-detail {
@@ -206,10 +206,10 @@
     text-transform: uppercase;
     letter-spacing: .05em;
 }
-.crm-pill.new       { background: rgba(0,212,255,.12);  color: var(--brand2); }
+.crm-pill.new       { background: rgba(79,179,165,.12);  color: var(--brand2); }
 .crm-pill.contacted { background: rgba(255,200,50,.12); color: #ffd060; }
-.crm-pill.qualified { background: rgba(160,120,255,.14); color: var(--accent); }
-.crm-pill.sold           { background: rgba(57,255,138,.12); color: var(--brand); }
+.crm-pill.qualified { background: rgba(212,175,55,.14); color: var(--accent); }
+.crm-pill.sold           { background: rgba(125,211,64,.12); color: var(--brand); }
 .crm-pill.not_interested { background: rgba(255,107,138,.12); color: #ff6b8a; }
 .crm-tier {
     font-size: 10px; padding: 2px 7px; border-radius: 4px;
