@@ -86,10 +86,11 @@ async function currentLeads(env: Env): Promise<LeadRecord[]> {
 
 /* ── Lead scan: discover clinics from the NPI Registry ──────────────────
  * NPPES is the U.S. government's public registry of medical providers: free,
- * no API key, searchable by state and taxonomy. The scan pulls organizations
- * for the requested specialties, maps them into the CRM schema, dedupes
- * against everything already stored (NPI, phone, name+city), and appends the
- * new ones to crm_leads. Nothing is ever imported manually. */
+ * no API key, searchable by state and taxonomy. The scan pages through the
+ * registry for the requested specialties (individuals and organizations),
+ * scores every candidate on registry-fit signals, keeps one best entry per
+ * practice, dedupes against everything already stored (NPI, phone, name+city),
+ * and appends the top-ranked new clinics. Nothing is ever imported manually. */
 
 // Each CRM category maps to one or more NUCC taxonomy descriptions. The registry
 // is searched for every taxonomy in the list, so a category can span the way a
@@ -241,72 +242,89 @@ export async function handleLeadScan(request: Request, env: Env): Promise<Respon
 	const categories = (body.categories ?? []).filter((c) => c in SCAN_TAXONOMY);
 	if (!categories.length) return json({ error: "Pick at least one specialty." }, 400);
 	const limit = Math.min(Math.max(Number(body.limit) || 40, 1), 200);
-	// One registry query per (category, taxonomy) pair.
 	const taxa = categories.flatMap((c) => SCAN_TAXONOMY[c].map((t) => ({ category: c, taxonomy: t })));
-	// Pull a candidate pool several times larger than the requested count, then
-	// keep only the best-scored clinics — so "Find leads" returns the strongest
-	// matches, not just the first ones the registry happens to list.
-	const candidateLimit = Math.min(200, Math.max(limit * 3, 100));
+	// Page through the registry to build a large candidate pool to rank from,
+	// bounded so the whole scan stays well under the Worker subrequest budget.
+	const PAGE_SIZE = 200; // NPPES max results per request
+	const pageCap = Math.min(4, Math.max(1, Math.floor(24 / taxa.length)));
 
-	// Existing identities, for dedup.
+	// Existing identities, so a scan never re-adds a lead already in the CRM.
 	const existing = await currentLeads(env);
-	const seenNpi = new Set(existing.map((l) => String(l.npi ?? "")).filter(Boolean));
-	const seenPhone = new Set(existing.map((l) => digits(l.phone)).filter((d) => d.length >= 7));
-	const seenNameCity = new Set(existing.map(nameCityKey));
+	const existNpi = new Set(existing.map((l) => String(l.npi ?? "")).filter(Boolean));
+	const existPhone = new Set(existing.map((l) => digits(l.phone)).filter((d) => d.length >= 7));
+	const existNameCity = new Set(existing.map(nameCityKey));
 
 	const pool: Array<{ lead: LeadRecord; score: number }> = [];
 	const errors: string[] = [];
 	for (const { category, taxonomy } of taxa) {
-		// No enumeration_type filter: this returns both individual physicians
-		// (NPI-1) and practice organizations (NPI-2). Individuals are the bulk of
-		// regenerative-medicine providers, so org-only scans came back nearly empty.
-		const params = new URLSearchParams({
-			version: "2.1",
-			taxonomy_description: taxonomy,
-			limit: String(candidateLimit),
-		});
-		// All-states scan omits the state filter for a nationwide pull.
-		if (!allStates) params.set("state", state);
-		try {
-			const res = await fetch(`https://npiregistry.cms.hhs.gov/api/?${params}`, {
-				headers: { accept: "application/json" },
+		for (let page = 0; page < pageCap; page++) {
+			// No enumeration_type filter: this returns both individual physicians
+			// (NPI-1) and practice organizations (NPI-2). Individuals are the bulk
+			// of regenerative-medicine providers, so org-only scans were near-empty.
+			const params = new URLSearchParams({
+				version: "2.1",
+				taxonomy_description: taxonomy,
+				limit: String(PAGE_SIZE),
 			});
-			if (!res.ok) {
-				errors.push(`${taxonomy}: registry returned ${res.status}`);
-				continue;
+			if (!allStates) params.set("state", state); // all-states omits the filter
+			if (page > 0) params.set("skip", String(page * PAGE_SIZE));
+
+			let results: NppesResult[];
+			try {
+				const res = await fetch(`https://npiregistry.cms.hhs.gov/api/?${params}`, {
+					headers: { accept: "application/json" },
+				});
+				if (!res.ok) { errors.push(`${taxonomy}: registry returned ${res.status}`); break; }
+				const data = (await res.json()) as { results?: NppesResult[]; Errors?: Array<{ description?: string }> };
+				if (data.Errors?.length) {
+					errors.push(`${taxonomy}: ${data.Errors.map((e) => e.description).filter(Boolean).join("; ")}`);
+					break;
+				}
+				results = data.results ?? [];
+			} catch (err) {
+				errors.push(`${taxonomy}: ${String(err).slice(0, 120)}`);
+				break;
 			}
-			const data = (await res.json()) as { results?: NppesResult[]; Errors?: Array<{ description?: string }> };
-			if (data.Errors?.length) {
-				errors.push(`${taxonomy}: ${data.Errors.map((e) => e.description).filter(Boolean).join("; ")}`);
-				continue;
-			}
-			for (const r of data.results ?? []) {
+
+			for (const r of results) {
 				const lead = nppesToLead(r, category);
 				if (!lead) continue;
+				// Actionable only: needs a phone to call or at least a location.
+				if (digits(lead.phone).length < 7 && !lead.address) continue;
+				// Skip anything already stored in the CRM.
 				const phoneKey = digits(lead.phone);
 				if (
-					(lead.npi && seenNpi.has(String(lead.npi))) ||
-					(phoneKey.length >= 7 && seenPhone.has(phoneKey)) ||
-					seenNameCity.has(nameCityKey(lead))
+					(lead.npi && existNpi.has(String(lead.npi))) ||
+					(phoneKey.length >= 7 && existPhone.has(phoneKey)) ||
+					existNameCity.has(nameCityKey(lead))
 				) {
 					continue;
 				}
-				seenNpi.add(String(lead.npi));
-				if (phoneKey.length >= 7) seenPhone.add(phoneKey);
-				seenNameCity.add(nameCityKey(lead));
 				const score = scanScore(r, category);
 				lead.scan_score = score;
 				lead.score = score;
 				pool.push({ lead, score });
 			}
-		} catch (err) {
-			errors.push(`${taxonomy}: ${String(err).slice(0, 120)}`);
+			if (results.length < PAGE_SIZE) break; // reached the last page for this taxonomy
 		}
 	}
 
-	// Rank the whole candidate pool by registry fit and keep only the best.
+	// Rank by registry fit, then collapse to one best entry per practice (same
+	// phone, or same name+city) and per NPI so a clinic's many listed providers
+	// don't flood the list. Sorting first means the highest score wins each key.
 	pool.sort((a, b) => b.score - a.score);
-	const found = pool.slice(0, limit).map((p) => p.lead);
+	const chosenByPractice = new Map<string, LeadRecord>();
+	const chosenNpi = new Set<string>();
+	for (const { lead } of pool) {
+		const npi = String(lead.npi ?? "");
+		if (npi && chosenNpi.has(npi)) continue;
+		const practiceKey = digits(lead.phone).length >= 7 ? digits(lead.phone) : nameCityKey(lead);
+		if (chosenByPractice.has(practiceKey)) continue;
+		chosenByPractice.set(practiceKey, lead);
+		if (npi) chosenNpi.add(npi);
+		if (chosenByPractice.size >= limit) break;
+	}
+	const found = [...chosenByPractice.values()];
 
 	if (found.length) {
 		await ensureLeadsTable(env);
