@@ -5,29 +5,43 @@ import worker from "./index";
 
 const ctx = {} as ExecutionContext;
 
-/** Minimal in-memory D1 stand-in covering the SQL the signup flow uses. */
+/** Minimal in-memory D1 stand-in covering the SQL the signup + leads flows use. */
 function makeDb() {
-	const rows = new Map<string, Record<string, unknown>>();
-	const stmt = (sql: string, args: unknown[]) => ({
+	const apps = new Map<string, Record<string, unknown>>();
+	const leads = new Map<string, { data: string }>();
+	const exec = (sql: string, args: unknown[]) => ({
 		run: async () => {
-			if (sql.trimStart().startsWith("INSERT")) {
-				rows.set(String(args[0]), {
+			const s = sql.trimStart();
+			if (s.startsWith("INSERT INTO clinic_applications")) {
+				apps.set(String(args[0]), {
 					id: args[0], clinic_name: args[1], contact_name: args[2], email: args[3],
 					phone: args[4], npi: args[5], status: args[6], token: args[7],
 					created_at: args[8], approved_at: null,
 				});
-			} else if (sql.trimStart().startsWith("UPDATE")) {
-				const row = rows.get(String(args[1]));
+			} else if (s.startsWith("UPDATE clinic_applications")) {
+				const row = apps.get(String(args[1]));
 				if (row) { row.status = "approved"; row.approved_at = args[0]; }
+			} else if (s.startsWith("INSERT INTO crm_leads")) {
+				leads.set(String(args[0]), { data: String(args[1]) });
+			} else if (s.startsWith("DELETE FROM crm_leads")) {
+				leads.clear();
 			}
 			return {};
 		},
-		first: async () => rows.get(String(args[0])) ?? null,
+		first: async () => apps.get(String(args[0])) ?? null,
+		all: async () => ({
+			results: sql.includes("FROM crm_leads") ? [...leads.values()] : [...apps.values()],
+		}),
 	});
 	return {
-		rows,
+		rows: apps,
+		leads,
 		prepare(sql: string) {
-			return { bind: (...args: unknown[]) => stmt(sql, args), ...stmt(sql, []) };
+			return { bind: (...args: unknown[]) => exec(sql, args), ...exec(sql, []) };
+		},
+		batch: async (stmts: Array<{ run: () => Promise<unknown> }>) => {
+			for (const s of stmts) await s.run();
+			return [];
 		},
 	};
 }
@@ -247,6 +261,85 @@ describe("cellsunova.com site routing", () => {
 			ctx,
 		);
 		expect(bad.status).toBe(403);
+	});
+
+	it("requires a session for the leads API and returns JSON, not a redirect", async () => {
+		const { env } = makeEnv();
+		const res = await worker.fetch!(
+			new Request("https://www.cellsunova.com/portal/api/leads") as never,
+			env,
+			ctx,
+		);
+		expect(res.status).toBe(401);
+		expect(res.headers.get("content-type")).toContain("application/json");
+	});
+
+	it("serves clinic applications as CRM leads automatically", async () => {
+		const { env } = makeEnv();
+		const body = new FormData();
+		body.set("clinic_name", "Inbound Clinic");
+		body.set("contact_name", "Dr. Lead");
+		body.set("email", "lead@inbound.test");
+		body.set("phone", "+1 555 2");
+		await worker.fetch!(
+			new Request("https://www.cellsunova.com/signup", { method: "POST", body }) as never,
+			env,
+			ctx,
+		);
+		const { cookie } = await login();
+		const res = await worker.fetch!(
+			new Request("https://www.cellsunova.com/portal/api/leads", { headers: { cookie } }) as never,
+			env,
+			ctx,
+		);
+		const data = (await res.json()) as { leads: Array<Record<string, unknown>> };
+		expect(data.leads).toHaveLength(1);
+		expect(data.leads[0].name).toBe("Inbound Clinic");
+		expect(data.leads[0].source).toBe("inbound");
+		expect(data.leads[0].stage).toBe("new");
+	});
+
+	it("stores uploaded leads and merges them with applications, deduping by email", async () => {
+		const { env } = makeEnv();
+		const form = new FormData();
+		form.set("clinic_name", "Dupe Clinic");
+		form.set("contact_name", "Dr. D");
+		form.set("email", "dupe@clinic.test");
+		form.set("phone", "+1 555 3");
+		await worker.fetch!(
+			new Request("https://www.cellsunova.com/signup", { method: "POST", body: form }) as never,
+			env,
+			ctx,
+		);
+		const { cookie } = await login();
+		const upload = await worker.fetch!(
+			new Request("https://www.cellsunova.com/portal/api/leads", {
+				method: "POST",
+				headers: { cookie, "content-type": "application/json" },
+				body: JSON.stringify({
+					leads: [
+						{ name: "Uploaded One", email: "one@x.test" },
+						{ name: "Dupe Clinic Uploaded", email: "dupe@clinic.test" },
+					],
+				}),
+			}) as never,
+			env,
+			ctx,
+		);
+		expect(upload.status).toBe(200);
+		const data = (await upload.json()) as { leads: Array<Record<string, unknown>> };
+		// Two uploaded + zero from applications (the application email is deduped).
+		expect(data.leads).toHaveLength(2);
+		expect(data.leads.map((l) => l.id)).toEqual([1, 2]);
+
+		// A later GET returns the same merged list.
+		const again = await worker.fetch!(
+			new Request("https://www.cellsunova.com/portal/api/leads", { headers: { cookie } }) as never,
+			env,
+			ctx,
+		);
+		const againData = (await again.json()) as { leads: Array<Record<string, unknown>> };
+		expect(againData.leads).toHaveLength(2);
 	});
 
 	it("leaves other hosts on the Jarvis routes", async () => {

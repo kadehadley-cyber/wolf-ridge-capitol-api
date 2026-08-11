@@ -129,7 +129,8 @@ p { margin: 0; }
 .orb-ring.r3 { width: 580px; height: 580px; border-color: rgba(111,206,53,.08); }
 
 /* ── What we offer ── */
-.offer-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.offer-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; }
+.offer-grid > .offer-card { grid-column: span 2; }
 .offer-card { position: relative; padding: 30px; border-radius: 18px; border: 1px solid var(--line2); background: var(--panel); transition: transform .2s, border-color .2s; }
 .offer-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,.2); }
 .offer-card.feature { grid-column: 1 / -1; border-color: rgba(111,206,53,.32); background: linear-gradient(150deg, rgba(111,206,53,.07), var(--panel) 60%); }
@@ -142,7 +143,19 @@ p { margin: 0; }
 .offer-card p { font-size: 14px; color: var(--muted); margin-bottom: 0; }
 .offer-card.feature p { margin-bottom: 20px; }
 .offer-tag { position: absolute; top: 22px; right: 22px; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--brand); background: rgba(125,211,64,.1); border: 1px solid rgba(125,211,64,.2); padding: 4px 11px; border-radius: 999px; }
-@media (max-width: 760px) { .offer-grid { grid-template-columns: 1fr; } .offer-tag { position: static; display: inline-block; margin-bottom: 12px; } }
+.offer-grid > .offer-card.feature.half { grid-column: span 3; }
+.offer-card.feature.gold { border-color: rgba(212,175,55,.38); background: linear-gradient(150deg, rgba(212,175,55,.08), var(--panel) 60%); }
+.offer-tag.gold { color: var(--accent); background: rgba(212,175,55,.1); border-color: rgba(212,175,55,.25); }
+.offer-card.gold .offer-ic.g { background: rgba(212,175,55,.12); color: var(--accent); }
+@media (max-width: 960px) {
+  .offer-grid { grid-template-columns: 1fr 1fr; }
+  .offer-grid > .offer-card { grid-column: auto; }
+  .offer-grid > .offer-card.feature.half { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .offer-grid { grid-template-columns: 1fr; }
+  .offer-tag { position: static; display: inline-block; margin-bottom: 12px; }
+}
 
 /* ── Reused lower sections ── */
 .section { padding: 88px 0; }

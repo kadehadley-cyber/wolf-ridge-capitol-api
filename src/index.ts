@@ -19,6 +19,7 @@ import {
 	verifyCredentials,
 } from "./auth";
 import { ask, type ImageAttachment } from "./jarvis";
+import { handleLeadsApi } from "./leads";
 import { handleApprove, handleSignup } from "./signup";
 import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
@@ -158,6 +159,17 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		url.search = "";
 		url.hash = "";
 		return Response.redirect(url.toString() + "#clinic-signup", 302);
+	}
+
+	// ── CRM leads API (JSON; session required, 401 rather than a redirect) ──
+	if (p === "/portal/api/leads") {
+		if (!(await hasValidSession(env, request))) {
+			return new Response(JSON.stringify({ error: "Sign in required." }), {
+				status: 401,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+		return handleLeadsApi(request, env);
 	}
 
 	if (request.method !== "GET" && request.method !== "HEAD") {
