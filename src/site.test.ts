@@ -410,6 +410,56 @@ describe("cellsunova.com site routing", () => {
 		}
 	});
 
+	it("maps individual providers (NPI-1) with their credential", async () => {
+		const { env, db } = makeEnv();
+		const { cookie } = await login();
+
+		const realFetch = globalThis.fetch;
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			const u = String(input);
+			if (u.startsWith("https://npiregistry.cms.hhs.gov/")) {
+				// A scan with no enumeration_type filter returns individuals too.
+				expect(u).not.toContain("enumeration_type");
+				return new Response(
+					JSON.stringify({
+						results: [
+							{
+								number: 3333333333,
+								enumeration_type: "NPI-1",
+								basic: { first_name: "Jane", last_name: "Smith", credential: "M.D." },
+								addresses: [
+									{ address_purpose: "LOCATION", address_1: "9 Elm St", city: "Boise", state: "ID", telephone_number: "208-555-0300" },
+								],
+							},
+						],
+					}),
+					{ headers: { "content-type": "application/json" } },
+				);
+			}
+			return realFetch(input as never);
+		}) as typeof fetch;
+
+		try {
+			const scan = await worker.fetch!(
+				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+					method: "POST",
+					headers: { cookie, "content-type": "application/json" },
+					body: JSON.stringify({ state: "ID", categories: ["podiatry"], limit: 25 }),
+				}) as never,
+				env,
+				ctx,
+			);
+			expect(scan.status).toBe(200);
+			const data = (await scan.json()) as { added: number; leads: Array<Record<string, unknown>> };
+			expect(data.added).toBe(1);
+			expect(data.leads[0].name).toBe("Jane Smith, M.D.");
+			expect(data.leads[0].doctor_name).toBe("Jane Smith");
+			expect(db.leads.size).toBe(1);
+		} finally {
+			globalThis.fetch = realFetch;
+		}
+	});
+
 	it("rejects a scan without a state or specialties", async () => {
 		const { env } = makeEnv();
 		const { cookie } = await login();
