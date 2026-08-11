@@ -575,6 +575,51 @@ describe("cellsunova.com site routing", () => {
 		}
 	});
 
+	it("pages past the first 200 results to widen the candidate pool", async () => {
+		const { env } = makeEnv();
+		const { cookie } = await login();
+
+		let sawSkip = false;
+		const realFetch = globalThis.fetch;
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			const u = String(input);
+			if (u.startsWith("https://npiregistry.cms.hhs.gov/")) {
+				if (u.includes("skip=200")) {
+					sawSkip = true;
+					return new Response(JSON.stringify({ results: [] }), { headers: { "content-type": "application/json" } });
+				}
+				// A full page of 200 must trigger a second page request.
+				const results = Array.from({ length: 200 }, (_, i) => ({
+					number: 900000000 + i,
+					enumeration_type: "NPI-2",
+					basic: { organization_name: "Podiatry Group " + i },
+					taxonomies: [{ desc: "Podiatrist", primary: true }],
+					addresses: [{ address_purpose: "LOCATION", city: "Boise", state: "ID", telephone_number: "2085" + String(100000 + i) }],
+				}));
+				return new Response(JSON.stringify({ results }), { headers: { "content-type": "application/json" } });
+			}
+			return realFetch(input as never);
+		}) as typeof fetch;
+
+		try {
+			const scan = await worker.fetch!(
+				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+					method: "POST",
+					headers: { cookie, "content-type": "application/json" },
+					body: JSON.stringify({ state: "ID", categories: ["podiatry"], limit: 50 }),
+				}) as never,
+				env,
+				ctx,
+			);
+			expect(scan.status).toBe(200);
+			const data = (await scan.json()) as { added: number };
+			expect(sawSkip).toBe(true); // paged past the first 200
+			expect(data.added).toBe(50); // capped at the requested limit
+		} finally {
+			globalThis.fetch = realFetch;
+		}
+	});
+
 	it("rejects a scan without any specialties", async () => {
 		const { env } = makeEnv();
 		const { cookie } = await login();
