@@ -453,22 +453,28 @@
      * who they buy from today. Transparent heuristic; tune to what closes.
      * A server override (`buy_likelihood`) wins when present. */
     function computeBuy(l) {
-        var reasons = [], s = 18;
+        // Baseline: a verified medical provider in a target specialty is already a
+        // real prospect. Unknown signals stay NEUTRAL (no penalty) so a freshly
+        // scanned clinic lands warm, not cold; confirmed positives lift it toward hot.
+        var reasons = [], s = 40;
         if (!l.is_provider) { reasons.push('Not a medical provider, unlikely to administer biologics'); return band(6, reasons); }
+        reasons.push('Active medical provider, can administer biologics in-clinic');
+
+        var sf = SPECIALTY_FIT[l.category] || 5; s += sf;
+        var catName = cap(String(l.category || 'clinic').replace(/_/g, ' '));
+        if (sf >= 9) reasons.push(catName + ', high-use specialty for stem cells and exosomes');
+        else if (l.category) reasons.push(catName + ', a fit for regenerative protocols');
 
         var runsRegen = l.offers_prp || l.offers_exosomes || l.offers_stem_cells;
-        if (runsRegen) { s += 18; reasons.push('Already offers regenerative medicine, in-market'); }
-        else { s += 4; reasons.push('No regen yet, education sell, but larger upside'); }
+        if (runsRegen) { s += 15; reasons.push('Already offers regenerative medicine, in-market'); }
         if (l.offers_prp && !l.offers_exosomes && !l.offers_stem_cells) { s += 8; reasons.push('Runs PRP only, natural step up to exosomes/stem cells'); }
-        if (l.website_mentions_regen) { s += 7; reasons.push('Website already markets regenerative therapies'); }
-        if (l.advertising_regen) { s += 12; reasons.push('Actively advertising regenerative treatments, demand in place'); }
-        var sf = SPECIALTY_FIT[l.category] || 5; s += sf;
-        if (sf >= 9) reasons.push(cap(String(l.category).replace(/_/g, ' ')) + ', high-use specialty for biologics');
+        if (l.website_mentions_regen) { s += 6; reasons.push('Website already markets regenerative therapies'); }
+        if (l.advertising_regen) { s += 10; reasons.push('Actively advertising regenerative treatments, demand in place'); }
         if (l.patients_per_day >= 40) { s += 8; reasons.push('High patient volume (' + l.patients_per_day + '/day)'); }
         else if (l.patients_per_day >= 20) { s += 4; }
         if (l.est_monthly_cc >= 100) { s += 6; reasons.push('~' + l.est_monthly_cc + ' cc/mo potential'); }
         if ((l.google_rating || 0) >= 4.5 && (l.review_count || 0) >= 100) { s += 5; reasons.push('Strong reputation (' + l.google_rating + '★, ' + l.review_count + ' reviews)'); }
-        if (l.engagement === 'sample_requested' || l.engagement === 'demo') { s += 12; reasons.push(engagementLabel(l.engagement) + ', active buying signal'); }
+        if (l.engagement === 'sample_requested' || l.engagement === 'demo') { s += 10; reasons.push(engagementLabel(l.engagement) + ', active buying signal'); }
         else if (l.engagement === 'visited_pricing') { s += 6; reasons.push('Visited pricing, evaluating'); }
         if (l.decision_maker_is_owner) { s += 4; reasons.push('Physician-owner decides, faster close'); }
 
@@ -480,12 +486,15 @@
      * Likelihood they leave their current supplier for us. A server override
      * (`switch_likelihood`) wins when present. */
     function computeSwitch(l) {
-        var reasons = [], s = 25;
+        // Baseline: a reachable prospect. An UNKNOWN supplier is treated as a
+        // greenfield opportunity (neutral), never a penalty; a known displaceable
+        // supplier scores higher because it's a clearer switch target.
+        var reasons = [], s = 44;
         var supplier = (l.current_supplier || '').trim();
         var parity = PRICING.parityCompetitor;
-        if (!supplier) { reasons.push('No current biologics supplier, so this is a first-fit sale, not a switch'); }
+        if (!supplier) { reasons.push('No known biologics supplier, a first-fit, greenfield sale'); }
         else if (supplier.toLowerCase() === parity) { s += 5; reasons.push(cap(parity) + ' incumbent at near price parity; win on physician-led sourcing and service'); }
-        else { s += 20; reasons.push('On ' + supplier + ', not at price parity, so competitive pricing applies'); }
+        else { s += 18; reasons.push('On ' + supplier + ', not at price parity, so competitive pricing applies'); }
         if (l.price_per_cc_current && l.price_per_cc_current > PRICING.ourPricePerCc)
             reasons.push('Paying $' + l.price_per_cc_current + ' per cc against our $' + PRICING.ourPricePerCc
                 + ', a $' + (l.price_per_cc_current - PRICING.ourPricePerCc) + ' per cc gap');
@@ -1089,12 +1098,23 @@
     function populateScanStates() {
         var sel = $('scanState');
         if (!sel || sel.options.length) return;
+        var all = document.createElement('option');
+        all.value = 'ALL';
+        all.textContent = 'All states (nationwide)';
+        sel.appendChild(all);
         stateCbs().forEach(function (cb) {
             var o = document.createElement('option');
             o.value = cb.value;
             o.textContent = cb.parentNode.textContent.trim();
             sel.appendChild(o);
         });
+    }
+
+    function scanCatEls() { return Array.prototype.slice.call(document.querySelectorAll('.scan-cat')); }
+    /* Keep the "All clinics" master box in sync with the individual specialties. */
+    function syncScanAllCats() {
+        var master = $('scanAllCats');
+        if (master) master.checked = scanCatEls().every(function (c) { return c.checked; });
     }
     function openScan() {
         populateScanStates();
@@ -1104,7 +1124,7 @@
         var pinned = states[0] || CONFIG.defaultState || '';
         if (pinned) $('scanState').value = pinned;
         var f = currentFilters();
-        var scanCats = Array.prototype.slice.call(document.querySelectorAll('.scan-cat'));
+        var scanCats = scanCatEls();
         if (!f.allTypes && f.category) {
             // A single category is chosen in the toolbar: scan exactly that specialty.
             scanCats.forEach(function (c) { c.checked = (c.value === f.category); });
@@ -1113,6 +1133,7 @@
         } else if (f.allTypes) {
             scanCats.forEach(function (c) { c.checked = true; });
         }
+        syncScanAllCats();
         $('scanError').hidden = true;
         $('scanStatus').textContent = '';
         scanLastFocus = document.activeElement;
@@ -1293,6 +1314,16 @@
     outreachModal.addEventListener('click', function (e) { if (e.target === outreachModal) closeOutreach(); });
 
     scanModal.addEventListener('click', function (e) { if (e.target === scanModal) closeScan(); });
+
+    // "All clinics" toggles every specialty; unchecking one clears the master.
+    scanModal.addEventListener('change', function (e) {
+        if (e.target.id === 'scanAllCats') {
+            var on = e.target.checked;
+            scanCatEls().forEach(function (c) { c.checked = on; });
+        } else if (e.target.classList && e.target.classList.contains('scan-cat')) {
+            syncScanAllCats();
+        }
+    });
 
     document.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape') return;

@@ -175,14 +175,18 @@ export async function handleLeadScan(request: Request, env: Env): Promise<Respon
 	} catch {
 		return json({ error: "Body must be JSON." }, 400);
 	}
-	const state = String(body.state ?? "").toUpperCase().slice(0, 2);
-	if (!/^[A-Z]{2}$/.test(state)) return json({ error: "Pick a state to scan." }, 400);
+	const stateRaw = String(body.state ?? "").toUpperCase().trim();
+	const allStates = stateRaw === "" || stateRaw === "ALL" || stateRaw === "*";
+	const state = allStates ? "" : stateRaw.slice(0, 2);
+	if (!allStates && !/^[A-Z]{2}$/.test(state)) {
+		return json({ error: "Pick a state to scan, or choose All states." }, 400);
+	}
 	const categories = (body.categories ?? []).filter((c) => c in SCAN_TAXONOMY);
 	if (!categories.length) return json({ error: "Pick at least one specialty." }, 400);
-	const limit = Math.min(Math.max(Number(body.limit) || 40, 1), 100);
+	const limit = Math.min(Math.max(Number(body.limit) || 40, 1), 200);
 	// One registry query per (category, taxonomy) pair; size each to reach the target.
 	const taxa = categories.flatMap((c) => SCAN_TAXONOMY[c].map((t) => ({ category: c, taxonomy: t })));
-	const perQuery = Math.min(100, Math.max(20, Math.ceil(limit / categories.length)));
+	const perQuery = Math.min(200, Math.max(20, Math.ceil(limit / categories.length)));
 
 	// Existing identities, for dedup.
 	const existing = await currentLeads(env);
@@ -198,10 +202,11 @@ export async function handleLeadScan(request: Request, env: Env): Promise<Respon
 		// regenerative-medicine providers, so org-only scans came back nearly empty.
 		const params = new URLSearchParams({
 			version: "2.1",
-			state,
 			taxonomy_description: taxonomy,
 			limit: String(perQuery),
 		});
+		// All-states scan omits the state filter for a nationwide pull.
+		if (!allStates) params.set("state", state);
 		try {
 			const res = await fetch(`https://npiregistry.cms.hhs.gov/api/?${params}`, {
 				headers: { accept: "application/json" },
