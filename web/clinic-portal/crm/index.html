@@ -222,8 +222,9 @@
           </label>
         </div>
         <div class="crm-import">
+          <button type="button" class="btn sm primary" data-action="open-scan" title="Search the NPI Registry for clinics and add them automatically">Find leads</button>
           <input type="file" id="crmImportFile" accept=".csv,.json,text/csv,application/json" hidden data-no-log>
-          <button type="button" class="btn sm" data-action="import-leads" title="Load a CSV or JSON lead list; stays on this device">Import leads</button>
+          <button type="button" class="btn sm" data-action="import-leads" title="Load a CSV or JSON lead list">Import</button>
           <button type="button" class="btn sm ghost" id="crmClearLocal" data-action="clear-local" hidden title="Remove the lead list saved on this device">Clear saved</button>
         </div>
         <div class="crm-tabs" role="tablist" aria-label="CRM view">
@@ -369,6 +370,55 @@
         </select>
       </div>
       <p class="form-error" hidden></p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ FIND LEADS (SCAN) MODAL ═══════════════════════════════════════════
+     Searches the NPI Registry (the U.S. government's public provider
+     registry) by state and specialty, dedupes against the stored lead base,
+     and appends the new clinics automatically. -->
+<div id="scanModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="scanTitle" hidden>
+  <div class="modal-box modal-box-sm">
+    <div class="modal-head">
+      <div>
+        <h2 id="scanTitle">Find leads</h2>
+        <div class="modal-sub">Search the NPI Registry and add new clinics automatically.</div>
+      </div>
+      <button type="button" class="modal-x" data-action="close-scan" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field">
+          <label for="scanState">State</label>
+          <select id="scanState"></select>
+        </div>
+        <div class="field">
+          <label>Specialties</label>
+          <div class="crm-chips scan-cats">
+            <label class="crm-check"><input type="checkbox" class="scan-cat" value="ortho" checked> Orthopedics</label>
+            <label class="crm-check"><input type="checkbox" class="scan-cat" value="pain_management" checked> Pain management</label>
+            <label class="crm-check"><input type="checkbox" class="scan-cat" value="plastic_surgery"> Plastic surgery</label>
+            <label class="crm-check"><input type="checkbox" class="scan-cat" value="podiatry"> Podiatry</label>
+            <label class="crm-check"><input type="checkbox" class="scan-cat" value="med_spa"> Dermatology / med spa</label>
+            <label class="crm-check"><input type="checkbox" class="scan-cat" value="wellness"> Chiropractic / wellness</label>
+          </div>
+        </div>
+        <div class="field">
+          <label for="scanLimit">How many</label>
+          <select id="scanLimit">
+            <option value="25">Up to 25</option>
+            <option value="50" selected>Up to 50</option>
+            <option value="100">Up to 100</option>
+          </select>
+        </div>
+        <p class="form-error" id="scanError" role="alert" hidden></p>
+        <div class="modal-actions">
+          <span class="muted" id="scanStatus" aria-live="polite"></span>
+          <button type="button" class="btn ghost" data-action="close-scan">Cancel</button>
+          <button type="button" class="btn primary" id="scanRun" data-action="run-scan">Scan</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

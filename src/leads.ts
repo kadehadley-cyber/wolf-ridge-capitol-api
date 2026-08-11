@@ -84,6 +84,138 @@ async function currentLeads(env: Env): Promise<LeadRecord[]> {
 	return [...uploaded, ...fromApplications].map((l, i) => ({ ...l, id: i + 1 }));
 }
 
+/* ── Lead scan: discover clinics from the NPI Registry ──────────────────
+ * NPPES is the U.S. government's public registry of medical providers: free,
+ * no API key, searchable by state and taxonomy. The scan pulls organizations
+ * for the requested specialties, maps them into the CRM schema, dedupes
+ * against everything already stored (NPI, phone, name+city), and appends the
+ * new ones to crm_leads. Nothing is ever imported manually. */
+
+const SCAN_TAXONOMY: Record<string, string> = {
+	ortho: "Orthopaedic Surgery",
+	pain_management: "Pain Medicine",
+	plastic_surgery: "Plastic Surgery",
+	podiatry: "Podiatrist",
+	med_spa: "Dermatology",
+	wellness: "Chiropractor",
+};
+
+interface NppesResult {
+	number?: number | string;
+	basic?: { organization_name?: string };
+	addresses?: Array<{
+		address_purpose?: string;
+		address_1?: string;
+		city?: string;
+		state?: string;
+		telephone_number?: string;
+	}>;
+}
+
+function nppesToLead(r: NppesResult, category: string): LeadRecord | null {
+	const name = r.basic?.organization_name?.trim();
+	if (!name) return null;
+	const addr =
+		r.addresses?.find((a) => a.address_purpose === "LOCATION") ?? r.addresses?.[0] ?? {};
+	return {
+		name,
+		phone: addr.telephone_number ?? "",
+		address: addr.address_1 ?? "",
+		city: addr.city ?? "",
+		state: (addr.state ?? "").toUpperCase().slice(0, 2),
+		npi: String(r.number ?? ""),
+		category,
+		source: "intelligence",
+		stage: "new",
+		is_provider: true,
+		created_at: new Date().toISOString(),
+	};
+}
+
+const digits = (s: unknown) => String(s ?? "").replace(/\D/g, "");
+const nameCityKey = (l: LeadRecord) =>
+	(String(l.name ?? "").toLowerCase().trim() + "|" + String(l.city ?? "").toLowerCase().trim());
+
+export async function handleLeadScan(request: Request, env: Env): Promise<Response> {
+	if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+
+	let body: { state?: string; categories?: string[]; limit?: number };
+	try {
+		body = await request.json();
+	} catch {
+		return json({ error: "Body must be JSON." }, 400);
+	}
+	const state = String(body.state ?? "").toUpperCase().slice(0, 2);
+	if (!/^[A-Z]{2}$/.test(state)) return json({ error: "Pick a state to scan." }, 400);
+	const categories = (body.categories ?? []).filter((c) => c in SCAN_TAXONOMY);
+	if (!categories.length) return json({ error: "Pick at least one specialty." }, 400);
+	const limit = Math.min(Math.max(Number(body.limit) || 40, 1), 100);
+	const perCategory = Math.min(50, Math.max(10, Math.ceil(limit / categories.length)));
+
+	// Existing identities, for dedup.
+	const existing = await currentLeads(env);
+	const seenNpi = new Set(existing.map((l) => String(l.npi ?? "")).filter(Boolean));
+	const seenPhone = new Set(existing.map((l) => digits(l.phone)).filter((d) => d.length >= 7));
+	const seenNameCity = new Set(existing.map(nameCityKey));
+
+	const found: LeadRecord[] = [];
+	const errors: string[] = [];
+	for (const category of categories) {
+		const params = new URLSearchParams({
+			version: "2.1",
+			enumeration_type: "NPI-2",
+			state,
+			taxonomy_description: SCAN_TAXONOMY[category],
+			limit: String(perCategory),
+		});
+		try {
+			const res = await fetch(`https://npiregistry.cms.hhs.gov/api/?${params}`, {
+				headers: { accept: "application/json" },
+			});
+			if (!res.ok) {
+				errors.push(`${category}: registry returned ${res.status}`);
+				continue;
+			}
+			const data = (await res.json()) as { results?: NppesResult[] };
+			for (const r of data.results ?? []) {
+				const lead = nppesToLead(r, category);
+				if (!lead) continue;
+				const phoneKey = digits(lead.phone);
+				if (
+					(lead.npi && seenNpi.has(String(lead.npi))) ||
+					(phoneKey.length >= 7 && seenPhone.has(phoneKey)) ||
+					seenNameCity.has(nameCityKey(lead))
+				) {
+					continue;
+				}
+				seenNpi.add(String(lead.npi));
+				if (phoneKey.length >= 7) seenPhone.add(phoneKey);
+				seenNameCity.add(nameCityKey(lead));
+				found.push(lead);
+				if (found.length >= limit) break;
+			}
+		} catch (err) {
+			errors.push(`${category}: ${String(err).slice(0, 120)}`);
+		}
+		if (found.length >= limit) break;
+	}
+
+	if (found.length) {
+		await ensureLeadsTable(env);
+		const createdAt = new Date().toISOString();
+		const statements = found.map((lead) =>
+			env.DB.prepare(`INSERT INTO crm_leads (id, data, created_at) VALUES (?1, ?2, ?3)`).bind(
+				crypto.randomUUID(),
+				JSON.stringify(lead),
+				createdAt,
+			),
+		);
+		await env.DB.batch(statements);
+	}
+
+	return json({ added: found.length, errors, leads: await currentLeads(env) });
+}
+
 export async function handleLeadsApi(request: Request, env: Env): Promise<Response> {
 	if (request.method === "GET") {
 		return json({ leads: await currentLeads(env) });
