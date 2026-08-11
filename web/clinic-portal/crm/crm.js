@@ -2,7 +2,7 @@
  * CRM page.
  *
  * Reconstructed from a Chrome DevTools export that captured the filter input
- * IDs and the exact field set portal-crm.js renders per lead — but NOT the
+ * IDs and the exact field set portal-crm.js renders per lead, but NOT the
  * CRM's markup, its 64KB of logic, or its styles. So: the toolbar and the
  * lead-detail card are faithful; the lead rows below are clearly-marked
  * PLACEHOLDER sample data, and the "intelligence" scan and replay player are
@@ -11,13 +11,13 @@
  * Hardened against the two findings the CRM export confirmed:
  *   §1  no Action Recorder; the replay overlay is inert and server-gated.
  *   §2  lead links (tel/mailto/website) are built with createElement +
- *       setAttribute and a scheme allowlist — never string-concatenated into
+ *       setAttribute and a scheme allowlist, never string-concatenated into
  *       an href through the quote-unsafe escHtml the original uses.
  * ───────────────────────────────────────────────────────────────────────── */
 (function () {
     'use strict';
 
-    /* Server-rendered in production. Display hints only — never authority.
+    /* Server-rendered in production. Display hints only, never authority.
      * `canReplay`, `isAdmin` etc. are reflected in the UI but enforced by the
      * backend. */
     var CONFIG = window.PORTAL_CONFIG || {
@@ -31,10 +31,10 @@
     var $ = function (id) { return document.getElementById(id); };
 
     /* ══ SAFE OUTPUT HELPERS ══════════════════════════════════════════════
-     * escHtml — safe for element *content* only (escapes < & > but, like the
+     * escHtml, safe for element *content* only (escapes < & > but, like the
      *   browser's serializer, NOT quotes). Kept for text nodes.
-     * escAttr — safe for quoted attribute values; escapes quotes too.
-     * safeUrl — returns a URL only if its scheme is allowlisted, else "#".
+     * escAttr, safe for quoted attribute values; escapes quotes too.
+     * safeUrl, returns a URL only if its scheme is allowlisted, else "#".
      *
      * The original's bug (§2) was using escHtml inside href="…". This file
      * avoids string-built HTML for anything user/lead-derived: it builds nodes
@@ -66,7 +66,7 @@
      * Not real data. The real list is PII delivered by the server and was
      * never captured. The base fields (name, phone, email, …) match
      * portal-crm.js exactly; the sales-intelligence fields below are the CRM's
-     * new lead schema — populate them server-side (self-reported, scraped by
+     * new lead schema, populate them server-side (self-reported, scraped by
      * the "intelligence" scan, or rep-entered). `website` on lead 2 is a
      * hostile value that must render inert (§2 demo). */
     var LEADS = [
@@ -136,7 +136,7 @@
             last_contacted: '', next_followup: '',
             rep_first: 'Sample', rep_last: 'Rep', created_at: '2026-08-09 12:00:00',
             owner_name: 'Casey Morgan', doctor_name: '',
-            // Not a medical provider — a vendor. "Providers only" should hide it.
+            // Not a medical provider, a vendor. "Providers only" should hide it.
             is_provider: false, patients_per_day: 0,
             offers_prp: false, offers_exosomes: false, offers_stem_cells: false,
             current_supplier: '', price_per_cc_current: null, est_monthly_cc: 0,
@@ -200,22 +200,15 @@
         }
     ];
 
-    /* ══ PRICING / POSITIONING — PLACEHOLDER ══════════════════════════════
-     * The product line and cost were redone; these numbers are stand-ins.
-     * This is the ONE place to update — every price claim, savings figure, and
-     * the fit weighting reads from here, so changing these values propagates
-     * through the whole page. Replace with the finalized line + cost.
-     *
-     *   edgeMin/edgeMax     — $/cc we come in under a non-parity competitor
-     *   parityCompetitor    — the competitor we're at price parity with
-     *   ourPricePerCc       — our own $/cc (placeholder; used for exact deltas
-     *                         once known — leave null to quote the range only)
+    /* ══ PRICING / POSITIONING (PLACEHOLDER) ══════════════════════════════
+     * The product line and cost were redone. This is the one place to set
+     * positioning: parityCompetitor is the supplier we treat as at price parity
+     * (differentiate on sourcing and service, not price); ourPricePerCc is our
+     * own per-cc cost, left null until the finalized number is set.
      * ═════════════════════════════════════════════════════════════════════ */
     var PRICING = {
-        edgeMin: 200,               // PLACEHOLDER
-        edgeMax: 400,               // PLACEHOLDER
         parityCompetitor: 'platinum',
-        ourPricePerCc: null         // PLACEHOLDER — set when the new cost is final
+        ourPricePerCc: null         // PLACEHOLDER: set when the finalized cost is known
     };
 
     /* ══ INTELLIGENCE SIGNALS (PLACEHOLDER) ═══════════════════════════════
@@ -223,17 +216,17 @@
      * populate. Kept in a compact per-id map so the LEADS array above stays
      * readable; missing fields fall back to SIGNAL_DEFAULTS. Replace with the
      * server's enriched values.
-     *   cash_pay_focus         — predominantly cash-pay / elective practice
-     *   advertising_regen      — actively running ads for PRP / regen / etc.
-     *   website_mentions_regen — site already markets regenerative therapies
-     *   google_rating / review_count — reputation + demand proxy
-     *   decision_maker_is_owner— physician-owner signs off (faster close)
-     *   contract_status        — none | month_to_month | expiring | in_contract
-     *   supplier_risk          — current supplier hit a recall/backorder/warning
-     *   engagement             — none | email_open | visited_pricing |
+     *   cash_pay_focus        , predominantly cash-pay / elective practice
+     *   advertising_regen     , actively running ads for PRP / regen / etc.
+     *   website_mentions_regen, site already markets regenerative therapies
+     *   google_rating / review_count, reputation + demand proxy
+     *   decision_maker_is_owner,  physician-owner signs off (faster close)
+     *   contract_status       , none | month_to_month | expiring | in_contract
+     *   supplier_risk         , current supplier hit a recall/backorder/warning
+     *   engagement            , none | email_open | visited_pricing |
      *                            sample_requested | demo
-     *   competitors_nearby     — # of nearby practices already offering regen
-     *   buy_likelihood         — server override for the buy score (else null)
+     *   competitors_nearby    , # of nearby practices already offering regen
+     *   buy_likelihood        , server override for the buy score (else null)
      * ═════════════════════════════════════════════════════════════════════ */
     var SIGNAL_DEFAULTS = {
         cash_pay_focus: false, advertising_regen: false, website_mentions_regen: false,
@@ -273,8 +266,8 @@
         none: 'No supplier contract', month_to_month: 'Month-to-month',
         expiring: 'Contract expiring', in_contract: 'Under contract'
     };
-    function engagementLabel(e) { return ENGAGEMENT_LABELS[e] || '—'; }
-    function contractLabel(c) { return CONTRACT_LABELS[c] || '—'; }
+    function engagementLabel(e) { return ENGAGEMENT_LABELS[e] || ', '; }
+    function contractLabel(c) { return CONTRACT_LABELS[c] || ', '; }
 
     function band(s, reasons) {
         s = Math.max(0, Math.min(100, Math.round(s)));
@@ -282,29 +275,29 @@
     }
 
     /* ══ BUY PROPENSITY ═══════════════════════════════════════════════════
-     * Likelihood the clinic buys stem cells / exosomes at all — independent of
+     * Likelihood the clinic buys stem cells / exosomes at all, independent of
      * who they buy from today. Transparent heuristic; tune to what closes.
      * A server override (`buy_likelihood`) wins when present. */
     function computeBuy(l) {
         var reasons = [], s = 18;
-        if (!l.is_provider) { reasons.push('Not a medical provider — unlikely to administer biologics'); return band(6, reasons); }
+        if (!l.is_provider) { reasons.push('Not a medical provider, unlikely to administer biologics'); return band(6, reasons); }
 
         var runsRegen = l.offers_prp || l.offers_exosomes || l.offers_stem_cells;
-        if (runsRegen) { s += 18; reasons.push('Already offers regenerative medicine — in-market'); }
-        else { s += 4; reasons.push('No regen yet — education sell, but larger upside'); }
-        if (l.offers_prp && !l.offers_exosomes && !l.offers_stem_cells) { s += 8; reasons.push('Runs PRP only — natural step up to exosomes/stem cells'); }
+        if (runsRegen) { s += 18; reasons.push('Already offers regenerative medicine, in-market'); }
+        else { s += 4; reasons.push('No regen yet, education sell, but larger upside'); }
+        if (l.offers_prp && !l.offers_exosomes && !l.offers_stem_cells) { s += 8; reasons.push('Runs PRP only, natural step up to exosomes/stem cells'); }
         if (l.website_mentions_regen) { s += 7; reasons.push('Website already markets regenerative therapies'); }
-        if (l.advertising_regen) { s += 12; reasons.push('Actively advertising regenerative treatments — demand in place'); }
-        if (l.cash_pay_focus) { s += 8; reasons.push('Cash-pay / elective focus — margin fits biologics'); }
+        if (l.advertising_regen) { s += 12; reasons.push('Actively advertising regenerative treatments, demand in place'); }
+        if (l.cash_pay_focus) { s += 8; reasons.push('Cash-pay / elective focus, margin fits biologics'); }
         var sf = SPECIALTY_FIT[l.category] || 5; s += sf;
-        if (sf >= 9) reasons.push(cap(String(l.category).replace(/_/g, ' ')) + ' — high-use specialty for biologics');
+        if (sf >= 9) reasons.push(cap(String(l.category).replace(/_/g, ' ')) + ', high-use specialty for biologics');
         if (l.patients_per_day >= 40) { s += 8; reasons.push('High patient volume (' + l.patients_per_day + '/day)'); }
         else if (l.patients_per_day >= 20) { s += 4; }
         if (l.est_monthly_cc >= 100) { s += 6; reasons.push('~' + l.est_monthly_cc + ' cc/mo potential'); }
         if ((l.google_rating || 0) >= 4.5 && (l.review_count || 0) >= 100) { s += 5; reasons.push('Strong reputation (' + l.google_rating + '★, ' + l.review_count + ' reviews)'); }
-        if (l.engagement === 'sample_requested' || l.engagement === 'demo') { s += 12; reasons.push(engagementLabel(l.engagement) + ' — active buying signal'); }
-        else if (l.engagement === 'visited_pricing') { s += 6; reasons.push('Visited pricing — evaluating'); }
-        if (l.decision_maker_is_owner) { s += 4; reasons.push('Physician-owner decides — faster close'); }
+        if (l.engagement === 'sample_requested' || l.engagement === 'demo') { s += 12; reasons.push(engagementLabel(l.engagement) + ', active buying signal'); }
+        else if (l.engagement === 'visited_pricing') { s += 6; reasons.push('Visited pricing, evaluating'); }
+        if (l.decision_maker_is_owner) { s += 4; reasons.push('Physician-owner decides, faster close'); }
 
         if (l.buy_likelihood != null) return band(Number(l.buy_likelihood), reasons);
         return band(s, reasons);
@@ -317,23 +310,23 @@
         var reasons = [], s = 25;
         var supplier = (l.current_supplier || '').trim();
         var parity = PRICING.parityCompetitor;
-        if (!supplier) { reasons.push('No current biologics supplier — first-fit sale, not a switch'); }
-        else if (supplier.toLowerCase() === parity) { s += 5; reasons.push(cap(parity) + ' incumbent — near price parity; win on physician-led sourcing + service'); }
-        else { s += 20; reasons.push('On ' + supplier + ' — price wedge applies (~$' + PRICING.edgeMin + '–' + PRICING.edgeMax + '/cc under)'); }
-        if (l.price_per_cc_current) reasons.push('Paying $' + l.price_per_cc_current + '/cc now — quantify savings against our price');
-        if (l.supplier_risk) { s += 20; reasons.push('Current supplier flagged (recall / backorder / warning) — active switch trigger'); }
-        if (l.contract_status === 'month_to_month') { s += 12; reasons.push('Month-to-month — no lock-in'); }
-        else if (l.contract_status === 'expiring') { s += 15; reasons.push('Supplier contract expiring — switch window open'); }
-        else if (l.contract_status === 'in_contract') { s -= 12; reasons.push('Under contract — time outreach to renewal'); }
-        if (l.est_monthly_cc >= 100) { s += 6; reasons.push('~' + l.est_monthly_cc + ' cc/mo — worth the switch effort'); }
-        if (l.competitors_nearby >= 6) { s += 3; reasons.push(l.competitors_nearby + ' nearby practices already in regen — competitive market'); }
+        if (!supplier) { reasons.push('No current biologics supplier, so this is a first-fit sale, not a switch'); }
+        else if (supplier.toLowerCase() === parity) { s += 5; reasons.push(cap(parity) + ' incumbent at near price parity; win on physician-led sourcing and service'); }
+        else { s += 20; reasons.push('On ' + supplier + ', not at price parity, so competitive pricing applies'); }
+        if (l.price_per_cc_current) reasons.push('Paying $' + l.price_per_cc_current + '/cc now, quantify savings against our price');
+        if (l.supplier_risk) { s += 20; reasons.push('Current supplier flagged (recall / backorder / warning), active switch trigger'); }
+        if (l.contract_status === 'month_to_month') { s += 12; reasons.push('Month-to-month, no lock-in'); }
+        else if (l.contract_status === 'expiring') { s += 15; reasons.push('Supplier contract expiring, switch window open'); }
+        else if (l.contract_status === 'in_contract') { s -= 12; reasons.push('Under contract, time outreach to renewal'); }
+        if (l.est_monthly_cc >= 100) { s += 6; reasons.push('~' + l.est_monthly_cc + ' cc/mo, worth the switch effort'); }
+        if (l.competitors_nearby >= 6) { s += 3; reasons.push(l.competitors_nearby + ' nearby practices already in regen, competitive market'); }
         if (l.engagement === 'sample_requested' || l.engagement === 'demo') { s += 8; reasons.push(engagementLabel(l.engagement)); }
 
         if (l.switch_likelihood != null) return band(Number(l.switch_likelihood), reasons);
         return band(s, reasons);
     }
 
-    /* Blended priority — reward a strong showing on EITHER buy or switch, since
+    /* Blended priority, reward a strong showing on EITHER buy or switch, since
      * the goal is clinics most likely to buy AND/OR switch. */
     function priority(l) {
         var buy = computeBuy(l).score, sw = computeSwitch(l).score;
@@ -350,22 +343,16 @@
         new: 'New', contacted: 'Contacted', qualified: 'Qualified',
         sold: 'Sold', not_interested: 'Not interested'
     };
-    function stageLabel(s) { return STAGE_LABELS[s] || s || '—'; }
+    function stageLabel(s) { return STAGE_LABELS[s] || s || ', '; }
 
     /* Estimated per-cc savings a rep can quote, given the lead's current price.
-     * Reads the placeholder PRICING config — numbers change when it does. */
+     * Reads the placeholder PRICING config, numbers change when it does. */
     function savingsLine(l) {
         var supplier = (l.current_supplier || '').trim();
         if (supplier.toLowerCase() === PRICING.parityCompetitor)
-            return cap(PRICING.parityCompetitor) + ' incumbent — price parity; differentiate on physician-led sourcing + support.';
-        if (!supplier) return 'Qualify current supplier and price/cc to size the savings.';
-        var base = '~$' + PRICING.edgeMin + '–' + PRICING.edgeMax + '/cc under ' + supplier;
-        if (l.price_per_cc_current && l.est_monthly_cc) {
-            var lo = PRICING.edgeMin * l.est_monthly_cc, hi = PRICING.edgeMax * l.est_monthly_cc;
-            base += '  ·  ~$' + lo.toLocaleString() + '–' + hi.toLocaleString() + '/mo at ' +
-                l.est_monthly_cc + ' cc';
-        }
-        return base;
+            return cap(PRICING.parityCompetitor) + ' incumbent at price parity; differentiate on physician-led sourcing and support.';
+        if (!supplier) return 'Qualify current supplier and price per cc to size the opportunity.';
+        return 'Competitive pricing versus ' + supplier + '; quantify once our per-cc cost is set.';
     }
 
     var listEl   = $('crmLeadList');
@@ -466,7 +453,7 @@
 
         var note = document.createElement('div');
         note.className = 'crm-placeholder-note';
-        note.textContent = 'Placeholder leads — real lead data is PII and was not captured. '
+        note.textContent = 'Placeholder leads, real lead data is PII and was not captured. '
             + 'Replace LEADS in crm.js with the server’s list.';
         listEl.appendChild(note);
 
@@ -484,7 +471,7 @@
             top.className = 'crm-list-top';
             var nm = document.createElement('div');
             nm.className = 'crm-list-name';
-            nm.textContent = l.name;                 // textContent — inert
+            nm.textContent = l.name;                 // textContent, inert
             var fitBadge = document.createElement('span');
             fitBadge.className = 'crm-fit crm-fit-' + pr.band;
             fitBadge.textContent = pr.band.toUpperCase() + ' ' + pr.score;
@@ -544,7 +531,7 @@
         c.textContent = (on ? '✓ ' : '· ') + label;
         return c;
     }
-    /* A labelled 0–100 bar with its top reasons — one per score. */
+    /* A labelled 0-100 bar with its top reasons, one per score. */
     function meterEl(label, res) {
         var box = document.createElement('div');
         box.className = 'crm-meter crm-fit-' + res.band;
@@ -633,7 +620,7 @@
         kv2(buy, 'Current supplier', lead.current_supplier || 'Unknown');
         if (lead.price_per_cc_current != null) kv2(buy, 'Their price/cc', '$' + lead.price_per_cc_current);
         kv2(buy, 'Contract', contractLabel(lead.contract_status));
-        if (lead.supplier_risk) kv2(buy, 'Supplier risk', 'Flagged — recall / backorder / warning');
+        if (lead.supplier_risk) kv2(buy, 'Supplier risk', 'Flagged, recall / backorder / warning');
         detailEl.appendChild(buy);
 
         /* ── Buying signals (what the intelligence scan surfaced) ── */
@@ -687,7 +674,7 @@
         if (lead.created_at) kv(grid, 'Added', textNode(fmt(lead.created_at)));
         detailEl.appendChild(grid);
 
-        /* ── AI screening tools (stubs — wire each to its endpoint) ── */
+        /* ── AI screening tools (stubs, wire each to its endpoint) ── */
         detailEl.appendChild(sectionTitle('AI screening tools'));
         var tools = document.createElement('div');
         tools.className = 'crm-tools';
@@ -749,13 +736,13 @@
     }
 
     /* Screening-tool stub: show the running copy, then a "wire me up" note.
-     * Every tool is inert in this static build — nothing is fetched or sent. */
+     * Every tool is inert in this static build, nothing is fetched or sent. */
     function runTool(runningMsg, endpointName) {
         var st = $('crmIntelStatus');
         if (!st) return;
         st.textContent = runningMsg;
         setTimeout(function () {
-            st.textContent = 'Stub — wire to the ' + endpointName + ' endpoint. This static build runs no scan and sends nothing.';
+            st.textContent = 'Stub, wire to the ' + endpointName + ' endpoint. This static build runs no scan and sends nothing.';
         }, 1100);
     }
 
@@ -779,11 +766,11 @@
             case 'build-queue':
                 cModal.alert('Not wired', 'Queue building calls the server; not implemented in this build.');
                 break;
-            case 'run-intel':      runTool('Scanning website & ads — regen mentions, services, ad presence…', 'website/ads intelligence'); break;
-            case 'tool-reviews':   runTool('Pulling reviews & rating — volume, recency, sentiment…', 'reviews / reputation'); break;
-            case 'tool-supplier':  runTool('Checking supplier risk — recalls, backorders, FDA warnings for the current supplier…', 'supplier-risk'); break;
-            case 'tool-lookalike': runTool('Finding look-alikes — clinics similar to your best customers in this territory…', 'look-alike'); break;
-            case 'tool-outreach':  runTool('Drafting outreach — a first email built from this lead’s buy / switch reasons…', 'outreach drafting'); break;
+            case 'run-intel':      runTool('Scanning website & ads, regen mentions, services, ad presence…', 'website/ads intelligence'); break;
+            case 'tool-reviews':   runTool('Pulling reviews & rating, volume, recency, sentiment…', 'reviews / reputation'); break;
+            case 'tool-supplier':  runTool('Checking supplier risk, recalls, backorders, FDA warnings for the current supplier…', 'supplier-risk'); break;
+            case 'tool-lookalike': runTool('Finding look-alikes, clinics similar to your best customers in this territory…', 'look-alike'); break;
+            case 'tool-outreach':  runTool('Drafting outreach, a first email built from this lead’s buy / switch reasons…', 'outreach drafting'); break;
             case 'close-replay': $('replayOverlay').hidden = true; break;
         }
     });

@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   CRM page — layout for the parts the export actually gave us.
+   CRM page, layout for the parts the export actually gave us.
 
    The real portal's `.crm-*` classes live past the 70KB of portal.css that was
    captured, so this is reconstructed to match the shell's visual language
@@ -101,7 +101,7 @@
 .crm-list-name { font-size: 13.5px; font-weight: 600; }
 .crm-list-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 
-/* Fit badge — switch likelihood, shown in the list and detail */
+/* Fit badge, switch likelihood, shown in the list and detail */
 .crm-fit {
     flex-shrink: 0;
     font-size: 10px; font-weight: 700; letter-spacing: .04em;

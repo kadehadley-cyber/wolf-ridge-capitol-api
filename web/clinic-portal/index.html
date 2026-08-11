@@ -14,7 +14,7 @@
   style-src 'self' https://fonts.googleapis.com;
   font-src https://fonts.gstatic.com;
   img-src 'self' data:;
-  frame-src 'self';
+  frame-src 'self' blob:;
   form-action 'self';
   base-uri 'none';
   object-src 'none'">
@@ -126,30 +126,60 @@
         <p class="proto-hero-sub">Evidence-based administration protocols developed by Dr. Hadley for MSC biologics, exosomes, and regenerative treatments.</p>
       </div>
 
-      <!-- Category cards. Counts are derived from the rendered protocol list in
-           portal.js rather than hard-coded, so the two can never disagree. -->
+      <!-- Admin toggle. Display-only in this static build: it flips which
+           controls are visible, but the SERVER is the authority on who may
+           manage documents (SECURITY-REVIEW.md §3). -->
+      <div class="proto-adminbar">
+        <label class="admin-switch">
+          <input type="checkbox" id="adminToggle">
+          <span class="admin-switch-track" aria-hidden="true"><span class="admin-switch-thumb"></span></span>
+          <span class="admin-switch-label">Admin mode</span>
+        </label>
+        <span class="proto-adminbar-hint" id="adminHint">Clinic view — protocols are read-only.</span>
+      </div>
+
+      <!-- Category cards. The "N PROTOCOLS" count is the number of documents in
+           each category, so it can never drift from the list. -->
       <div class="proto-cats" id="protoCats"></div>
 
-      <div class="proto-selector-wrap">
-        <div class="proto-selector-header">
-          <div class="proto-selector-label" id="protoSectionLabel">All Protocols</div>
-          <button type="button" class="proto-show-all-btn" data-action="filter" data-cat="all">Show All</button>
+      <!-- Category documents panel: opens when a category card is selected. -->
+      <section class="proto-docs" id="protoCatPanel" hidden aria-live="polite">
+        <div class="proto-docs-head">
+          <div>
+            <div class="proto-docs-eyebrow" id="docCatEyebrow">Category</div>
+            <h2 class="proto-docs-title" id="docCatTitle"></h2>
+            <p class="proto-docs-desc" id="docCatDesc"></p>
+          </div>
+          <button type="button" class="btn ghost sm" data-action="close-cat">Close</button>
         </div>
-        <div class="proto-buttons" id="protoButtons" role="tablist" aria-label="Protocols"></div>
-      </div>
 
-      <div class="proto-viewer open" id="protoViewer">
-        <!-- Sandboxed, and sized by an origin-checked postMessage rather than by
-             reaching into the frame's document. See SECURITY-REVIEW.md §5. -->
-        <iframe id="protoFrame"
-                class="proto-frame"
-                title="Protocol detail"
-                scrolling="no"
-                loading="lazy"
-                referrerpolicy="same-origin"
-                sandbox="allow-scripts allow-same-origin"
-                src="protocols/protocol.html?slug=general-wellness"></iframe>
-      </div>
+        <!-- Admin: attach an HTML or PDF document to this category. Hidden unless
+             admin mode is on. -->
+        <form class="doc-add" id="docAddForm" hidden novalidate>
+          <div class="doc-add-title">Add a protocol document</div>
+          <div class="doc-add-row">
+            <div class="field">
+              <label for="docTitle">Title</label>
+              <input type="text" id="docTitle" placeholder="e.g. Knee IA — MSC protocol" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="docFile">HTML or PDF file</label>
+              <input type="file" id="docFile" accept=".pdf,.html,.htm,application/pdf,text/html">
+            </div>
+          </div>
+          <div class="doc-add-row">
+            <div class="field" style="flex:1">
+              <label for="docUrl">…or paste a link (opens in a new tab)</label>
+              <input type="url" id="docUrl" placeholder="https://…/protocol.pdf" autocomplete="off">
+            </div>
+            <button type="submit" class="btn primary sm doc-add-btn">Add document</button>
+          </div>
+          <p class="doc-add-note">Static preview: uploaded files render locally and are not saved. In production this posts the file to the protocol-document endpoint.</p>
+          <p class="form-error" id="docAddError" role="alert" hidden></p>
+        </form>
+
+        <ul class="doc-list" id="docList"></ul>
+      </section>
 
       <div class="treatment-cta">
         <button type="button" class="treatment-cta-inner" data-action="open-scheduler">
@@ -214,6 +244,26 @@
         <button type="submit" class="btn primary">Submit Request</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ══ DOCUMENT VIEWER MODAL ═════════════════════════════════════════════
+     HTML documents render in an iframe with an EMPTY sandbox (no scripts, no
+     same-origin), so an uploaded protocol file can display but can never run
+     code or reach the portal. PDFs render via the browser's native viewer. -->
+<div id="docViewerModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="docViewerTitle" hidden>
+  <div class="modal-box modal-box-lg doc-viewer-box">
+    <div class="modal-head">
+      <div>
+        <h2 id="docViewerTitle">Document</h2>
+        <div class="modal-sub" id="docViewerSub"></div>
+      </div>
+      <div class="doc-viewer-actions">
+        <a class="btn ghost sm" id="docViewerOpen" href="#" target="_blank" rel="noopener noreferrer" hidden>Open in new tab</a>
+        <button type="button" class="modal-x" data-action="close-viewer" aria-label="Close">&times;</button>
+      </div>
+    </div>
+    <div class="modal-body doc-viewer-body" id="docViewerBody"></div>
   </div>
 </div>
 
