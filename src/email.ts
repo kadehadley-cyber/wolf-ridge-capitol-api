@@ -6,7 +6,7 @@
 //   MAIL_FROM           verified sender, e.g. "CelluNOVA <no-reply@cellsunova.com>"
 //   ADMIN_NOTIFY_EMAIL  where clinic applications go (defaults below)
 
-export const DEFAULT_ADMIN_EMAIL = "DrHadley@cellunova.bio";
+export const DEFAULT_ADMIN_EMAIL = "DrHadley@cellsunova.com";
 
 export interface SendResult {
 	ok: boolean;
