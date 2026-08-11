@@ -262,6 +262,25 @@
     var LEADS = PLACEHOLDER_LEADS;
     var LEAD_SOURCE = { kind: 'placeholder', label: '' };
 
+    /* Device-local persistence for imported lists, so a rep's working leads
+     * survive a reload. Data lives in this browser's localStorage only; it is
+     * never uploaded and never leaves the device. */
+    var SAVE_KEY = 'cn_crm_leads';
+    function saveLocalLeads(list, label) {
+        try { localStorage.setItem(SAVE_KEY, JSON.stringify({ label: label, leads: list, ts: Date.now() })); } catch (e) {}
+    }
+    function readLocalLeads() {
+        try {
+            var raw = localStorage.getItem(SAVE_KEY);
+            if (!raw) return null;
+            var j = JSON.parse(raw);
+            return (j && Array.isArray(j.leads) && j.leads.length) ? j : null;
+        } catch (e) { return null; }
+    }
+    function clearLocalLeads() {
+        try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+    }
+
     function toBool(v) {
         if (typeof v === 'boolean') return v;
         var s = String(v == null ? '' : v).trim().toLowerCase();
@@ -322,6 +341,7 @@
     function applyLeads(list, kind, label) {
         LEADS = list;
         LEAD_SOURCE = { kind: kind, label: label || '' };
+        if (kind === 'import') saveLocalLeads(list, label || '');
         activeId = null;
         detailEl.textContent = '';
         var empty = document.createElement('p');
@@ -540,6 +560,7 @@
         overlay.addEventListener('click', function (e) { if (e.target === overlay) close(false); });
         return {
             alert: function (t, b, fn) { open(t, b, false, fn); },
+            confirm: function (t, b, fn) { open(t, b, true, fn); },
             isOpen: function () { return !overlay.hidden; },
             close: function () { close(false); }
         };
@@ -601,12 +622,14 @@
             var note = document.createElement('div');
             note.className = 'crm-placeholder-note';
             note.textContent = LEAD_SOURCE.kind === 'import'
-                ? LEAD_SOURCE.label + ' Loaded locally on this device only; nothing was uploaded or saved.'
+                ? LEAD_SOURCE.label + ' Saved on this device only; nothing is uploaded. Clear saved removes it.'
                 : 'Placeholder leads. The real list is PII and stays server-side: it loads automatically '
                   + 'from the leads endpoint when available, or use Import leads to load your CSV or JSON '
                   + 'locally. Imported data stays on this device.';
             listEl.appendChild(note);
         }
+        var clearBtn = $('crmClearLocal');
+        if (clearBtn) clearBtn.hidden = LEAD_SOURCE.kind !== 'import';
 
         var shown = 0;
         sortLeads(LEADS.filter(function (l) { return matches(l, f); }), f.sort).forEach(function (l) {
@@ -1089,6 +1112,15 @@
             case 'open-lead':   openLead(Number(el.dataset.id)); break;
             case 'tab':         showTab(el.dataset.tab); break;
             case 'import-leads': $('crmImportFile').click(); break;
+            case 'clear-local':
+                cModal.confirm('Clear saved leads',
+                    'Remove the lead list saved on this device and go back to the placeholders?',
+                    function (ok) {
+                        if (!ok) return;
+                        clearLocalLeads();
+                        applyLeads(PLACEHOLDER_LEADS, 'placeholder', '');
+                    });
+                break;
             case 'save-note':
                 cModal.alert('Not wired', 'In production this posts the note to the CRM endpoint. '
                     + 'This static build does not send anything.');
@@ -1171,6 +1203,14 @@
         if (this.files && this.files[0]) importLeadFile(this.files[0]);
         this.value = '';
     });
+
+    /* Restore a lead list saved on this device (from a previous Import). */
+    var saved = readLocalLeads();
+    if (saved) {
+        LEADS = saved.leads;
+        LEAD_SOURCE = { kind: 'import', label: 'Restored ' + saved.leads.length
+            + (saved.leads.length === 1 ? ' lead' : ' leads') + ' saved on this device.' };
+    }
 
     /* Load the real list from the server when the endpoint exists; in this
      * static build the fetch fails quietly and the placeholders stay. */
