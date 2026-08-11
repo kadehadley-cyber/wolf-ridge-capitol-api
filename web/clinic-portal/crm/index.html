@@ -213,6 +213,10 @@
             <input type="checkbox" id="crmHotOnly"> Priority: Hot only
           </label>
         </div>
+        <div class="crm-import">
+          <input type="file" id="crmImportFile" accept=".csv,.json,text/csv,application/json" hidden data-no-log>
+          <button type="button" class="btn sm" data-action="import-leads" title="Load a CSV or JSON lead list; stays on this device">Import leads</button>
+        </div>
         <div class="crm-tabs" role="tablist" aria-label="CRM view">
           <button type="button" class="btn sm primary" id="crmTabLeads" data-action="tab" data-tab="leads" role="tab" aria-selected="true">Lead List</button>
           <button type="button" class="btn sm" id="crmTabQueue" data-action="tab" data-tab="queue" role="tab" aria-selected="false">Queue</button>

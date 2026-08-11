@@ -69,7 +69,7 @@
      * new lead schema, populate them server-side (self-reported, scraped by
      * the "intelligence" scan, or rep-entered). `website` on lead 2 is a
      * hostile value that must render inert (§2 demo). */
-    var LEADS = [
+    var PLACEHOLDER_LEADS = [
         {
             id: 1, name: 'Example Ortho Clinic', stage: 'new', tier: 'standard',
             phone: '+1 480 555 0101', email: 'front@example-ortho.test',
@@ -246,12 +246,143 @@
         8: { advertising_regen: true, website_mentions_regen: true, google_rating: 4.6, review_count: 260, decision_maker_is_owner: true, contract_status: 'expiring', supplier_risk: true, engagement: 'demo', competitors_nearby: 5 },
         9: { google_rating: 4.2, review_count: 60, decision_maker_is_owner: true, contract_status: 'none', engagement: 'none', competitors_nearby: 3 }
     };
-    LEADS.forEach(function (l) {
+    PLACEHOLDER_LEADS.forEach(function (l) {
         var s = SIGNALS[l.id] || {};
         Object.keys(SIGNAL_DEFAULTS).forEach(function (k) {
             if (l[k] === undefined) l[k] = (s[k] !== undefined ? s[k] : SIGNAL_DEFAULTS[k]);
         });
     });
+
+    /* ══ LEAD SOURCE ══════════════════════════════════════════════════════
+     * LEADS is whatever source is currently loaded:
+     *   placeholder  the sample rows above (no real PII in the repo)
+     *   server       fetched from the leads endpoint at load
+     *   import       a CSV/JSON file the rep loaded; stays on this device
+     * The real list is PII and lives server-side only. */
+    var LEADS = PLACEHOLDER_LEADS;
+    var LEAD_SOURCE = { kind: 'placeholder', label: '' };
+
+    function toBool(v) {
+        if (typeof v === 'boolean') return v;
+        var s = String(v == null ? '' : v).trim().toLowerCase();
+        return s === '1' || s === 'true' || s === 'yes' || s === 'y';
+    }
+    function toNum(v) {
+        if (v == null || v === '') return null;
+        var n = Number(String(v).replace(/[^0-9.\-]/g, ''));
+        return isNaN(n) ? null : n;
+    }
+
+    /* Normalize server/imported rows into the lead schema; missing intelligence
+     * signals fall back to SIGNAL_DEFAULTS. Rows without a name are dropped. */
+    function normalizeLeads(arr) {
+        var out = [];
+        (arr || []).forEach(function (r, i) {
+            if (!r || typeof r !== 'object') return;
+            var l = {
+                id: toNum(r.id) || (i + 1),
+                name: String(r.name || r.clinic || r.clinic_name || '').trim(),
+                stage: String(r.stage || 'new').trim().toLowerCase().replace(/\s+/g, '_'),
+                tier: String(r.tier || 'standard'),
+                phone: String(r.phone || ''), email: String(r.email || ''),
+                address: String(r.address || ''), city: String(r.city || ''),
+                state: String(r.state || '').trim().toUpperCase().slice(0, 2),
+                website: String(r.website || ''),
+                category: String(r.category || '').trim().toLowerCase().replace(/\s+/g, '_'),
+                source: String(r.source || 'import'),
+                score: toNum(r.score) || 0,
+                last_contacted: String(r.last_contacted || ''),
+                next_followup: String(r.next_followup || ''),
+                rep_first: String(r.rep_first || r.rep || ''), rep_last: String(r.rep_last || ''),
+                created_at: String(r.created_at || ''),
+                owner_name: String(r.owner_name || r.owner || ''),
+                doctor_name: String(r.doctor_name || r.doctor || ''),
+                is_provider: r.is_provider !== undefined ? toBool(r.is_provider) : true,
+                patients_per_day: toNum(r.patients_per_day) || 0,
+                offers_prp: toBool(r.offers_prp),
+                offers_exosomes: toBool(r.offers_exosomes),
+                offers_stem_cells: toBool(r.offers_stem_cells),
+                current_supplier: String(r.current_supplier || r.supplier || ''),
+                price_per_cc_current: toNum(r.price_per_cc_current != null ? r.price_per_cc_current : r.price_per_cc),
+                est_monthly_cc: toNum(r.est_monthly_cc) || 0,
+                switch_likelihood: toNum(r.switch_likelihood)
+            };
+            Object.keys(SIGNAL_DEFAULTS).forEach(function (k) {
+                var d = SIGNAL_DEFAULTS[k];
+                if (r[k] === undefined || r[k] === '') l[k] = d;
+                else if (typeof d === 'boolean') l[k] = toBool(r[k]);
+                else if (k === 'contract_status' || k === 'engagement') l[k] = String(r[k]).trim().toLowerCase().replace(/\s+/g, '_');
+                else l[k] = toNum(r[k]);
+            });
+            if (l.name) out.push(l);
+        });
+        return out;
+    }
+
+    function applyLeads(list, kind, label) {
+        LEADS = list;
+        LEAD_SOURCE = { kind: kind, label: label || '' };
+        activeId = null;
+        detailEl.textContent = '';
+        var empty = document.createElement('p');
+        empty.className = 'crm-empty';
+        empty.textContent = 'Select a lead to view details.';
+        detailEl.appendChild(empty);
+        renderList();
+    }
+
+    /* Minimal CSV parser: quoted fields, escaped quotes, CRLF. Header row maps
+     * to schema field names (lowercased, spaces to underscores). */
+    function parseCsv(text) {
+        var rows = [], row = [], cur = '', inQ = false;
+        for (var i = 0; i < text.length; i++) {
+            var c = text[i];
+            if (inQ) {
+                if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+                else cur += c;
+            }
+            else if (c === '"') inQ = true;
+            else if (c === ',') { row.push(cur); cur = ''; }
+            else if (c === '\n' || c === '\r') {
+                if (cur !== '' || row.length) { row.push(cur); rows.push(row); row = []; cur = ''; }
+                if (c === '\r' && text[i + 1] === '\n') i++;
+            }
+            else cur += c;
+        }
+        if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+        if (rows.length < 2) return [];
+        var head = rows[0].map(function (h) { return String(h).trim().toLowerCase().replace(/\s+/g, '_'); });
+        return rows.slice(1).map(function (r) {
+            var o = {};
+            head.forEach(function (h, idx) { if (h) o[h] = r[idx]; });
+            return o;
+        });
+    }
+
+    function importLeadFile(file) {
+        var reader = new FileReader();
+        reader.onload = function () {
+            var text = String(reader.result || '');
+            var list = [];
+            try {
+                if (/^\s*[\[{]/.test(text)) {
+                    var j = JSON.parse(text);
+                    list = normalizeLeads(Array.isArray(j) ? j : (j && j.leads) || []);
+                } else {
+                    list = normalizeLeads(parseCsv(text));
+                }
+            } catch (e) {
+                cModal.alert('Import failed', 'Could not parse that file. Use a CSV with a header row, or a JSON array of leads.');
+                return;
+            }
+            if (!list.length) {
+                cModal.alert('No leads found', 'The file parsed but had no usable rows. It needs at least a name column.');
+                return;
+            }
+            applyLeads(list, 'import', 'Imported ' + list.length + ' leads from ' + file.name + '.');
+        };
+        reader.readAsText(file);
+    }
 
     /* How naturally a specialty uses stem cells / exosomes (buy-side weight). */
     var SPECIALTY_FIT = {
@@ -466,11 +597,16 @@
         var f = currentFilters();
         listEl.textContent = '';
 
-        var note = document.createElement('div');
-        note.className = 'crm-placeholder-note';
-        note.textContent = 'Placeholder leads, real lead data is PII and was not captured. '
-            + 'Replace LEADS in crm.js with the server’s list.';
-        listEl.appendChild(note);
+        if (LEAD_SOURCE.kind !== 'server') {
+            var note = document.createElement('div');
+            note.className = 'crm-placeholder-note';
+            note.textContent = LEAD_SOURCE.kind === 'import'
+                ? LEAD_SOURCE.label + ' Loaded locally on this device only; nothing was uploaded or saved.'
+                : 'Placeholder leads. The real list is PII and stays server-side: it loads automatically '
+                  + 'from the leads endpoint when available, or use Import leads to load your CSV or JSON '
+                  + 'locally. Imported data stays on this device.';
+            listEl.appendChild(note);
+        }
 
         var shown = 0;
         sortLeads(LEADS.filter(function (l) { return matches(l, f); }), f.sort).forEach(function (l) {
@@ -952,6 +1088,7 @@
         switch (action) {
             case 'open-lead':   openLead(Number(el.dataset.id)); break;
             case 'tab':         showTab(el.dataset.tab); break;
+            case 'import-leads': $('crmImportFile').click(); break;
             case 'save-note':
                 cModal.alert('Not wired', 'In production this posts the note to the CRM endpoint. '
                     + 'This static build does not send anything.');
@@ -1029,6 +1166,24 @@
         if (pin) pin.checked = true;
     }
     updateStateUI();
+
+    $('crmImportFile').addEventListener('change', function () {
+        if (this.files && this.files[0]) importLeadFile(this.files[0]);
+        this.value = '';
+    });
+
+    /* Load the real list from the server when the endpoint exists; in this
+     * static build the fetch fails quietly and the placeholders stay. */
+    var leadsUrl = CONFIG.leadsUrl || '/portal/api/leads';
+    try {
+        fetch(leadsUrl, { credentials: 'same-origin' })
+            .then(function (res) { if (!res.ok) throw new Error('bad status'); return res.json(); })
+            .then(function (data) {
+                var list = normalizeLeads(Array.isArray(data) ? data : (data && data.leads) || []);
+                if (list.length) applyLeads(list, 'server', '');
+            })
+            .catch(function () { /* keep placeholders */ });
+    } catch (e) { /* keep placeholders */ }
 
     renderList();
     showTab('leads');
