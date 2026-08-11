@@ -19,14 +19,28 @@ function makeEnv() {
 	return { env, calls };
 }
 
-async function hit(path: string, host = "www.cellsunova.com", method = "GET") {
+async function hit(path: string, host = "www.cellsunova.com", method = "GET", cookie?: string) {
 	const { env, calls } = makeEnv();
+	const headers = cookie ? { cookie } : undefined;
 	const res = await worker.fetch!(
-		new Request(`https://${host}${path}`, { method }) as never,
+		new Request(`https://${host}${path}`, { method, headers }) as never,
 		env,
 		ctx,
 	);
 	return { res, calls };
+}
+
+async function login(username = "DrHadley", password = "Ghoster2024!") {
+	const { env } = makeEnv();
+	const body = new FormData();
+	body.set("username", username);
+	body.set("password", password);
+	const res = await worker.fetch!(
+		new Request("https://www.cellsunova.com/login", { method: "POST", body }) as never,
+		env,
+		ctx,
+	);
+	return { res, cookie: (res.headers.get("set-cookie") ?? "").split(";")[0] };
 }
 
 describe("cellsunova.com site routing", () => {
@@ -41,27 +55,70 @@ describe("cellsunova.com site routing", () => {
 		expect((await hit("/site.js")).calls).toEqual(["/clinic-portal/site/site.js"]);
 	});
 
-	it("serves the protocols page at /portal/", async () => {
-		const { calls } = await hit("/portal/");
+	it("requires sign-in for the portal", async () => {
+		const { res, calls } = await hit("/portal/crm/");
+		expect(res.status).toBe(302);
+		expect(res.headers.get("location")).toBe(
+			"https://www.cellsunova.com/login?next=%2Fportal%2Fcrm%2F",
+		);
+		expect(calls).toEqual([]);
+	});
+
+	it("serves the login page and rejects bad credentials", async () => {
+		const page = await hit("/login");
+		expect(page.res.status).toBe(200);
+		expect(await page.res.text()).toContain("Sign in");
+		const bad = await login("DrHadley", "wrong-password");
+		expect(bad.res.status).toBe(401);
+		expect(bad.cookie).toBe("");
+	});
+
+	it("signs in with the admin credentials and sets a session cookie", async () => {
+		const { res, cookie } = await login();
+		expect(res.status).toBe(303);
+		expect(res.headers.get("location")).toBe("/portal/");
+		expect(cookie.startsWith("cn_admin=")).toBe(true);
+		expect(res.headers.get("set-cookie")).toContain("HttpOnly");
+	});
+
+	it("serves the protocols page at /portal/ when signed in", async () => {
+		const { cookie } = await login();
+		const { calls } = await hit("/portal/", "www.cellsunova.com", "GET", cookie);
 		expect(calls).toEqual(["/clinic-portal/"]);
 	});
 
-	it("maps portal subpages and their assets", async () => {
-		expect((await hit("/portal/crm/")).calls).toEqual(["/clinic-portal/crm/"]);
-		expect((await hit("/portal/crm/crm.js")).calls).toEqual(["/clinic-portal/crm/crm.js"]);
-		expect((await hit("/portal/styles/portal.css")).calls).toEqual(["/clinic-portal/styles/portal.css"]);
+	it("maps portal subpages and their assets when signed in", async () => {
+		const { cookie } = await login();
+		expect((await hit("/portal/crm/", "www.cellsunova.com", "GET", cookie)).calls).toEqual(["/clinic-portal/crm/"]);
+		expect((await hit("/portal/crm/crm.js", "www.cellsunova.com", "GET", cookie)).calls).toEqual(["/clinic-portal/crm/crm.js"]);
+		expect((await hit("/portal/styles/portal.css", "www.cellsunova.com", "GET", cookie)).calls).toEqual(["/clinic-portal/styles/portal.css"]);
+	});
+
+	it("rejects a forged session cookie", async () => {
+		const forged = "cn_admin=" + (Date.now() + 3600000) + ".deadbeef";
+		const { res, calls } = await hit("/portal/", "www.cellsunova.com", "GET", forged);
+		expect(res.status).toBe(302);
+		expect(calls).toEqual([]);
+	});
+
+	it("logs out and clears the cookie", async () => {
+		const { res } = await hit("/logout");
+		expect(res.status).toBe(303);
+		expect(res.headers.get("set-cookie")).toContain("cn_admin=;");
 	});
 
 	it("adds trailing slashes to page directories", async () => {
-		const { res } = await hit("/portal/crm");
+		const { cookie } = await login();
+		const { res } = await hit("/portal/crm", "www.cellsunova.com", "GET", cookie);
 		expect(res.status).toBe(301);
 		expect(res.headers.get("location")).toBe("https://www.cellsunova.com/portal/crm/");
 	});
 
 	it("redirects legacy paths", async () => {
-		expect((await hit("/portal/protocols")).res.headers.get("location"))
+		const { cookie } = await login();
+		expect((await hit("/portal/protocols", "www.cellsunova.com", "GET", cookie)).res.headers.get("location"))
 			.toBe("https://www.cellsunova.com/portal/");
-		expect((await hit("/portal/support")).res.headers.get("location"))
+		expect((await hit("/portal/support", "www.cellsunova.com", "GET", cookie)).res.headers.get("location"))
 			.toBe("https://www.cellsunova.com/portal/tickets/");
 	});
 
