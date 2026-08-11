@@ -19,6 +19,7 @@ import {
 	verifyCredentials,
 } from "./auth";
 import { ask, type ImageAttachment } from "./jarvis";
+import { handleApprove, handleSignup } from "./signup";
 import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
 import { handleInbound, verifyWebhook } from "./whatsapp";
@@ -150,6 +151,15 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		});
 	}
 
+	// ── Clinic sign-up ──
+	if (p === "/signup") {
+		if (request.method === "POST") return handleSignup(request, env);
+		url.pathname = "/";
+		url.search = "";
+		url.hash = "";
+		return Response.redirect(url.toString() + "#clinic-signup", 302);
+	}
+
 	if (request.method !== "GET" && request.method !== "HEAD") {
 		return new Response("Method not allowed", { status: 405 });
 	}
@@ -163,9 +173,15 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 	if (p === "/portal" || p.startsWith("/portal/")) {
 		if (!(await hasValidSession(env, request))) {
 			url.pathname = "/login";
-			url.search = "?next=" + encodeURIComponent(p);
+			url.search = "?next=" + encodeURIComponent(p + url.search);
 			return Response.redirect(url.toString(), 302);
 		}
+	}
+
+	// Approve link from the clinic-application review email (session-gated
+	// above, plus its own per-application token).
+	if (p === "/portal/approve") {
+		return handleApprove(env, url);
 	}
 
 	// Redirects: legacy names, and page dirs get a trailing slash so their

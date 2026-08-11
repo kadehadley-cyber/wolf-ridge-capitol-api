@@ -172,6 +172,24 @@ p { margin: 0; }
 .cta-band p { font-size: 15.5px; color: var(--muted); max-width: 540px; margin: 0 auto 26px; }
 .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
 
+/* ── Clinic sign-up form ── */
+.signup-band { display: grid; grid-template-columns: 1fr 1.15fr; gap: 44px; align-items: start;
+  border-radius: 24px; border: 1px solid rgba(111,206,53,.22);
+  background: linear-gradient(135deg, rgba(111,206,53,.07), rgba(79,179,165,.04)); padding: 48px 44px; }
+.signup-copy h2 { font-size: clamp(26px, 3.6vw, 38px); font-weight: 800; margin: 12px 0 14px; }
+.signup-copy p { font-size: 15px; color: var(--muted); margin-bottom: 20px; }
+.signup-form { background: var(--panel); border: 1px solid var(--line2); border-radius: 18px; padding: 28px; }
+.sf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+.sf-grid .fld input { margin-bottom: 10px; }
+.sf-full { grid-column: 1 / -1; }
+.sf-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.sf-submit { width: 100%; margin-top: 8px; }
+.sf-note { font-size: 12px; color: var(--dim); margin: 12px 0 0; text-align: center; }
+@media (max-width: 860px) {
+  .signup-band { grid-template-columns: 1fr; padding: 32px 24px; gap: 26px; }
+  .sf-grid { grid-template-columns: 1fr; }
+}
+
 .footer { border-top: 1px solid var(--line); padding: 44px 0 32px; }
 .footer-top { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; }
 .footer-brand { max-width: 300px; } .footer-brand .logo { margin-bottom: 12px; } .footer-brand p { font-size: 13px; color: var(--dim); }

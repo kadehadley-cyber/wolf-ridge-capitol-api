@@ -5,8 +5,36 @@ import worker from "./index";
 
 const ctx = {} as ExecutionContext;
 
+/** Minimal in-memory D1 stand-in covering the SQL the signup flow uses. */
+function makeDb() {
+	const rows = new Map<string, Record<string, unknown>>();
+	const stmt = (sql: string, args: unknown[]) => ({
+		run: async () => {
+			if (sql.trimStart().startsWith("INSERT")) {
+				rows.set(String(args[0]), {
+					id: args[0], clinic_name: args[1], contact_name: args[2], email: args[3],
+					phone: args[4], npi: args[5], status: args[6], token: args[7],
+					created_at: args[8], approved_at: null,
+				});
+			} else if (sql.trimStart().startsWith("UPDATE")) {
+				const row = rows.get(String(args[1]));
+				if (row) { row.status = "approved"; row.approved_at = args[0]; }
+			}
+			return {};
+		},
+		first: async () => rows.get(String(args[0])) ?? null,
+	});
+	return {
+		rows,
+		prepare(sql: string) {
+			return { bind: (...args: unknown[]) => stmt(sql, args), ...stmt(sql, []) };
+		},
+	};
+}
+
 function makeEnv() {
 	const calls: string[] = [];
+	const db = makeDb();
 	const env = {
 		ASSETS: {
 			fetch: async (req: Request) => {
@@ -15,8 +43,9 @@ function makeEnv() {
 				return new Response("asset:" + path);
 			},
 		},
+		DB: db,
 	} as unknown as Env;
-	return { env, calls };
+	return { env, calls, db };
 }
 
 async function hit(path: string, host = "www.cellsunova.com", method = "GET", cookie?: string) {
@@ -136,6 +165,88 @@ describe("cellsunova.com site routing", () => {
 
 	it("rejects non-GET methods", async () => {
 		expect((await hit("/portal/crm/", "www.cellsunova.com", "POST")).res.status).toBe(405);
+	});
+
+	it("accepts a clinic application and stores it pending", async () => {
+		const { env, db } = makeEnv();
+		const body = new FormData();
+		body.set("clinic_name", "Test Clinic");
+		body.set("contact_name", "Dr. Test");
+		body.set("email", "owner@testclinic.test");
+		body.set("phone", "+1 555 000 1234");
+		body.set("npi", "1234567890");
+		const res = await worker.fetch!(
+			new Request("https://www.cellsunova.com/signup", { method: "POST", body }) as never,
+			env,
+			ctx,
+		);
+		expect(res.status).toBe(200);
+		expect(await res.text()).toContain("Application");
+		const row = [...db.rows.values()][0];
+		expect(row.clinic_name).toBe("Test Clinic");
+		expect(row.status).toBe("pending");
+	});
+
+	it("rejects an application without a valid email", async () => {
+		const { env, db } = makeEnv();
+		const body = new FormData();
+		body.set("clinic_name", "Test Clinic");
+		body.set("contact_name", "Dr. Test");
+		body.set("email", "not-an-email");
+		body.set("phone", "+1 555 000 1234");
+		const res = await worker.fetch!(
+			new Request("https://www.cellsunova.com/signup", { method: "POST", body }) as never,
+			env,
+			ctx,
+		);
+		expect(res.status).toBe(400);
+		expect(db.rows.size).toBe(0);
+	});
+
+	it("approves an application through the token link (session required)", async () => {
+		const { env, db } = makeEnv();
+		const body = new FormData();
+		body.set("clinic_name", "Approve Me Clinic");
+		body.set("contact_name", "Dr. A");
+		body.set("email", "a@clinic.test");
+		body.set("phone", "+1 555 1");
+		await worker.fetch!(
+			new Request("https://www.cellsunova.com/signup", { method: "POST", body }) as never,
+			env,
+			ctx,
+		);
+		const row = [...db.rows.values()][0];
+		const path = `/portal/approve?id=${row.id}&token=${row.token}`;
+
+		// Signed out: bounced to login with the full query preserved.
+		const anon = await worker.fetch!(
+			new Request(`https://www.cellsunova.com${path}`) as never,
+			env,
+			ctx,
+		);
+		expect(anon.status).toBe(302);
+		expect(anon.headers.get("location")).toContain("/login?next=");
+
+		// Signed in with a valid token: approved.
+		const { cookie } = await login();
+		const ok = await worker.fetch!(
+			new Request(`https://www.cellsunova.com${path}`, { headers: { cookie } }) as never,
+			env,
+			ctx,
+		);
+		expect(ok.status).toBe(200);
+		expect(await ok.text()).toContain("approved");
+		expect(row.status).toBe("approved");
+
+		// Wrong token: rejected.
+		const bad = await worker.fetch!(
+			new Request(`https://www.cellsunova.com/portal/approve?id=${row.id}&token=deadbeef`, {
+				headers: { cookie },
+			}) as never,
+			env,
+			ctx,
+		);
+		expect(bad.status).toBe(403);
 	});
 
 	it("leaves other hosts on the Jarvis routes", async () => {

@@ -179,16 +179,38 @@
   </div>
 </section>
 
-<!-- ══ CTA BAND ═════════════════════════════════════════════════════════ -->
+<!-- ══ CLINIC SIGN-UP ═══════════════════════════════════════════════════ -->
 <section class="section" id="clinic-signup">
   <div class="wrap">
-    <div class="cta-band">
-      <h2>Join the regenerative care movement</h2>
-      <p>Verified clinics get protocols, ordering, and physician-reviewed care in one portal.</p>
-      <div class="cta-row">
-        <a class="btn primary" href="/portal/protocols">Clinic Sign-up</a>
-        <a class="btn outline" href="#talk-to-an-expert">Talk to an Expert</a>
+    <div class="signup-band">
+      <div class="signup-copy">
+        <span class="eyebrow">Clinic Sign-up</span>
+        <h2>Join the regenerative care movement</h2>
+        <p>Tell us about your clinic. Our medical team reviews every application, and approved
+           clinics get portal access, clinical protocols, and physician-reviewed ordering.</p>
+        <div class="split-list">
+          <div><span class="tick">&#10003;</span> Reviewed by a physician, not a sales queue</div>
+          <div><span class="tick">&#10003;</span> Portal access after approval</div>
+          <div><span class="tick">&#10003;</span> A rep can place orders for you</div>
+        </div>
       </div>
+      <form class="signup-form" method="post" action="/signup">
+        <div class="sf-grid">
+          <div class="fld"><label for="scName">Clinic name</label>
+            <input id="scName" name="clinic_name" required maxlength="200" autocomplete="organization"></div>
+          <div class="fld"><label for="scOwner">Owner or physician name</label>
+            <input id="scOwner" name="contact_name" required maxlength="200" autocomplete="name"></div>
+          <div class="fld"><label for="scEmail">Email</label>
+            <input id="scEmail" name="email" type="email" required maxlength="320" autocomplete="email"></div>
+          <div class="fld"><label for="scPhone">Office number</label>
+            <input id="scPhone" name="phone" type="tel" required maxlength="40" autocomplete="tel"></div>
+          <div class="fld sf-full"><label for="scNpi">NPI number (optional)</label>
+            <input id="scNpi" name="npi" maxlength="20" inputmode="numeric"></div>
+          <input type="text" name="website" class="sf-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+        </div>
+        <button type="submit" class="btn primary sf-submit">Submit application</button>
+        <p class="sf-note">Your application goes straight to our medical team for review.</p>
+      </form>
     </div>
   </div>
 </section>
