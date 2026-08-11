@@ -647,8 +647,7 @@
                 ? LEAD_SOURCE.label + ' Leads now load automatically on any signed-in device.'
                 : LEAD_SOURCE.kind === 'import'
                     ? LEAD_SOURCE.label + ' Saved on this device only. It will upload automatically the next time the portal is reachable at import.'
-                    : 'Placeholder leads. Import a CSV or JSON once and it uploads to the portal, then loads '
-                      + 'automatically on every visit, along with clinic applications from the website.';
+                    : 'Demo data. On the live portal this page shows your real leads only.';
             listEl.appendChild(note);
         }
         var clearBtn = $('crmClearLocal');
@@ -688,7 +687,10 @@
             var empty = document.createElement('p');
             empty.className = 'crm-empty';
             empty.style.padding = '14px';
-            empty.textContent = 'No leads match these filters.';
+            empty.textContent = (LEAD_SOURCE.kind === 'server' && !LEADS.length)
+                ? 'No leads yet. Use Import leads above to upload your CSV or JSON list. '
+                  + 'Clinic applications from the website appear here automatically.'
+                : 'No leads match these filters.';
             listEl.appendChild(empty);
         }
     }
@@ -1227,7 +1229,8 @@
         this.value = '';
     });
 
-    /* Restore a lead list saved on this device (from a previous Import). */
+    /* Restore a lead list saved on this device (from a previous offline
+     * Import) so there is something to work with before the server answers. */
     var saved = readLocalLeads();
     if (saved) {
         LEADS = saved.leads;
@@ -1235,18 +1238,25 @@
             + (saved.leads.length === 1 ? ' lead' : ' leads') + ' saved on this device.' };
     }
 
-    /* Load the real list from the server when the endpoint exists; in this
-     * static build the fetch fails quietly and the placeholders stay. */
+    /* The server is the source of truth. When it answers, its list is shown
+     * even if empty: on the live portal the placeholders never appear. A list
+     * saved on this device from an earlier offline import is auto-uploaded.
+     * Only when the server is unreachable (the static demo build, offline)
+     * do the placeholders or the device-local list remain. */
     var leadsUrl = CONFIG.leadsUrl || '/portal/api/leads';
     try {
         fetch(leadsUrl, { credentials: 'same-origin' })
             .then(function (res) { if (!res.ok) throw new Error('bad status'); return res.json(); })
             .then(function (data) {
                 var list = normalizeLeads(Array.isArray(data) ? data : (data && data.leads) || []);
-                if (list.length) applyLeads(list, 'server', '');
+                if (!list.length && saved && saved.leads.length) {
+                    uploadLeads(saved.leads, 'this device');
+                    return;
+                }
+                applyLeads(list, 'server', '');
             })
-            .catch(function () { /* keep placeholders */ });
-    } catch (e) { /* keep placeholders */ }
+            .catch(function () { /* server unreachable: keep what we have */ });
+    } catch (e) { /* server unreachable: keep what we have */ }
 
     renderList();
     showTab('leads');
