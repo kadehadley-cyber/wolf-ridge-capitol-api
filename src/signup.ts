@@ -17,7 +17,7 @@ const SITE = "https://www.cellsunova.com";
 
 const ensured = new WeakMap<object, Promise<unknown>>();
 
-function ensureTable(env: Env): Promise<unknown> {
+export function ensureApplicationsTable(env: Env): Promise<unknown> {
 	let p = ensured.get(env.DB);
 	if (!p) {
 		p = env.DB.prepare(
@@ -196,7 +196,7 @@ export async function handleSignup(request: Request, env: Env): Promise<Response
 		);
 	}
 
-	await ensureTable(env);
+	await ensureApplicationsTable(env);
 	const id = crypto.randomUUID();
 	const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
 	const createdAt = new Date().toISOString();
@@ -238,7 +238,7 @@ export async function handleApprove(env: Env, url: URL): Promise<Response> {
 	const token = url.searchParams.get("token") ?? "";
 	if (!id || !token) return page("Approval", `<h1>Missing <span>link</span></h1><p>This approval link is incomplete. Open the link from the review email.</p>`, 400);
 
-	await ensureTable(env);
+	await ensureApplicationsTable(env);
 	const row = await env.DB.prepare(`SELECT * FROM clinic_applications WHERE id = ?1`).bind(id).first<Application>();
 	if (!row) return page("Approval", `<h1>Not <span>found</span></h1><p>No application matches this link.</p>`, 404);
 	if (!safeEqual(token, row.token)) return page("Approval", `<h1>Invalid <span>link</span></h1><p>This approval link is not valid.</p>`, 403);

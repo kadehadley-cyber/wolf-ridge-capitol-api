@@ -399,9 +399,31 @@
                 cModal.alert('No leads found', 'The file parsed but had no usable rows. It needs at least a name column.');
                 return;
             }
-            applyLeads(list, 'import', 'Imported ' + list.length + ' leads from ' + file.name + '.');
+            uploadLeads(list, file.name);
         };
         reader.readAsText(file);
+    }
+
+    /* Auto-upload an imported list to the portal so every device loads it
+     * automatically from then on. When the server is unreachable (offline, or
+     * the static demo build), fall back to keeping the list on this device. */
+    function uploadLeads(list, sourceName) {
+        fetch(CONFIG.leadsUrl || '/portal/api/leads', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ leads: list })
+        })
+            .then(function (res) { if (!res.ok) throw new Error('upload failed'); return res.json(); })
+            .then(function (data) {
+                var serverList = normalizeLeads((data && data.leads) || []);
+                clearLocalLeads();
+                applyLeads(serverList.length ? serverList : list, 'server',
+                    'Uploaded ' + list.length + (list.length === 1 ? ' lead' : ' leads') + ' from ' + sourceName + ' to the portal.');
+            })
+            .catch(function () {
+                applyLeads(list, 'import', 'Imported ' + list.length + (list.length === 1 ? ' lead' : ' leads') + ' from ' + sourceName + '.');
+            });
     }
 
     /* How naturally a specialty uses stem cells / exosomes (buy-side weight). */
@@ -618,14 +640,15 @@
         var f = currentFilters();
         listEl.textContent = '';
 
-        if (LEAD_SOURCE.kind !== 'server') {
+        if (LEAD_SOURCE.kind !== 'server' || LEAD_SOURCE.label) {
             var note = document.createElement('div');
             note.className = 'crm-placeholder-note';
-            note.textContent = LEAD_SOURCE.kind === 'import'
-                ? LEAD_SOURCE.label + ' Saved on this device only; nothing is uploaded. Clear saved removes it.'
-                : 'Placeholder leads. The real list is PII and stays server-side: it loads automatically '
-                  + 'from the leads endpoint when available, or use Import leads to load your CSV or JSON '
-                  + 'locally. Imported data stays on this device.';
+            note.textContent = LEAD_SOURCE.kind === 'server'
+                ? LEAD_SOURCE.label + ' Leads now load automatically on any signed-in device.'
+                : LEAD_SOURCE.kind === 'import'
+                    ? LEAD_SOURCE.label + ' Saved on this device only. It will upload automatically the next time the portal is reachable at import.'
+                    : 'Placeholder leads. Import a CSV or JSON once and it uploads to the portal, then loads '
+                      + 'automatically on every visit, along with clinic applications from the website.';
             listEl.appendChild(note);
         }
         var clearBtn = $('crmClearLocal');
