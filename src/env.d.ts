@@ -15,6 +15,14 @@ interface Env {
 	/** HMAC key for the session cookie; set this secret in production. */
 	PORTAL_SESSION_SECRET?: string;
 
+	// --- Clinic sign-up email (Resend) ---
+	/** Resend API key (secret). Without it, emails are skipped but applications still store in D1. */
+	RESEND_API_KEY?: string;
+	/** Verified sender, e.g. "CelluNOVA <no-reply@cellsunova.com>". */
+	MAIL_FROM?: string;
+	/** Where clinic applications are sent for review. Defaults to DrHadley@cellunova.bio. */
+	ADMIN_NOTIFY_EMAIL?: string;
+
 	// --- Access control ---
 	/**
 	 * Shared bearer token (secret) for the HTTP endpoints `/jarvis` and
