@@ -689,8 +689,8 @@
             empty.className = 'crm-empty';
             empty.style.padding = '14px';
             empty.textContent = (LEAD_SOURCE.kind === 'server' && !LEADS.length)
-                ? 'No leads yet. Use Import leads above to upload your CSV or JSON list. '
-                  + 'Clinic applications from the website appear here automatically.'
+                ? 'No leads yet. Click “Find leads” above to pull real clinics from the NPI Registry for your '
+                  + 'selected states and specialties. Clinic applications from your website appear here automatically.'
                 : 'No leads match these filters.';
             listEl.appendChild(empty);
         }
@@ -1105,6 +1105,21 @@
     }
     function openScan() {
         populateScanStates();
+        // Carry the toolbar's parameters into the scan, so "Find leads" searches
+        // the states and specialty the rep already set rather than starting blank.
+        var states = selectedStates();
+        var pinned = states[0] || CONFIG.defaultState || '';
+        if (pinned) $('scanState').value = pinned;
+        var f = currentFilters();
+        var scanCats = Array.prototype.slice.call(document.querySelectorAll('.scan-cat'));
+        if (!f.allTypes && f.category) {
+            // A single category is chosen in the toolbar: scan exactly that specialty.
+            scanCats.forEach(function (c) { c.checked = (c.value === f.category); });
+            // Toolbar categories without a registry mapping (e.g. aesthetic) fall back to all.
+            if (!scanCats.some(function (c) { return c.checked; })) scanCats.forEach(function (c) { c.checked = true; });
+        } else if (f.allTypes) {
+            scanCats.forEach(function (c) { c.checked = true; });
+        }
         $('scanError').hidden = true;
         $('scanStatus').textContent = '';
         scanLastFocus = document.activeElement;
@@ -1152,9 +1167,11 @@
                     scanModal.hidden = true;
                     applyLeads(list, 'server', 'Added ' + added + (added === 1 ? ' new lead' : ' new leads')
                         + ' from the registry scan.');
+                } else if (data.errors && data.errors.length) {
+                    $('scanStatus').textContent = 'The registry could not complete the search: ' + data.errors.join(' · ');
                 } else {
-                    $('scanStatus').textContent = 'No new clinics found; everything matched leads you already have. '
-                        + 'Try another state or specialty.';
+                    $('scanStatus').textContent = 'No new clinics found for that state and specialty; everything '
+                        + 'matched leads you already have. Try another state or specialty.';
                 }
             })
             .catch(function (e) {

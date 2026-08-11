@@ -91,18 +91,27 @@ async function currentLeads(env: Env): Promise<LeadRecord[]> {
  * against everything already stored (NPI, phone, name+city), and appends the
  * new ones to crm_leads. Nothing is ever imported manually. */
 
-const SCAN_TAXONOMY: Record<string, string> = {
-	ortho: "Orthopaedic Surgery",
-	pain_management: "Pain Medicine",
-	plastic_surgery: "Plastic Surgery",
-	podiatry: "Podiatrist",
-	med_spa: "Dermatology",
-	wellness: "Chiropractor",
+// Each CRM category maps to one or more NUCC taxonomy descriptions. The registry
+// is searched for every taxonomy in the list, so a category can span the way a
+// specialty is actually enumerated (e.g. pain medicine vs. interventional pain).
+const SCAN_TAXONOMY: Record<string, string[]> = {
+	ortho: ["Orthopaedic Surgery", "Sports Medicine"],
+	pain_management: ["Pain Medicine", "Interventional Pain Medicine"],
+	plastic_surgery: ["Plastic Surgery"],
+	podiatry: ["Podiatrist"],
+	med_spa: ["Dermatology"],
+	wellness: ["Chiropractor"],
 };
 
 interface NppesResult {
 	number?: number | string;
-	basic?: { organization_name?: string };
+	enumeration_type?: string;
+	basic?: {
+		organization_name?: string;
+		first_name?: string;
+		last_name?: string;
+		credential?: string;
+	};
 	addresses?: Array<{
 		address_purpose?: string;
 		address_1?: string;
@@ -112,13 +121,34 @@ interface NppesResult {
 	}>;
 }
 
+/** Build a display name from a provider record — an organization name, or an
+ *  individual physician's name with credential (e.g. "Jane Doe, MD"). */
+function nppesName(r: NppesResult): string {
+	const org = r.basic?.organization_name?.trim();
+	if (org) return org;
+	const person = [r.basic?.first_name, r.basic?.last_name]
+		.map((s) => (s ?? "").trim())
+		.filter(Boolean)
+		.join(" ");
+	if (!person) return "";
+	const cred = (r.basic?.credential ?? "").replace(/[,\s]+$/g, "").trim();
+	return cred ? `${person}, ${cred}` : person;
+}
+
 function nppesToLead(r: NppesResult, category: string): LeadRecord | null {
-	const name = r.basic?.organization_name?.trim();
+	const name = nppesName(r);
 	if (!name) return null;
+	const isOrg = r.enumeration_type === "NPI-2" || !!r.basic?.organization_name;
+	const person = !isOrg
+		? [r.basic?.first_name, r.basic?.last_name].map((s) => (s ?? "").trim()).filter(Boolean).join(" ")
+		: "";
 	const addr =
 		r.addresses?.find((a) => a.address_purpose === "LOCATION") ?? r.addresses?.[0] ?? {};
 	return {
 		name,
+		// Individual providers are physicians; surface the name in the doctor field too.
+		doctor_name: person,
+		owner_name: person,
 		phone: addr.telephone_number ?? "",
 		address: addr.address_1 ?? "",
 		city: addr.city ?? "",
@@ -150,7 +180,9 @@ export async function handleLeadScan(request: Request, env: Env): Promise<Respon
 	const categories = (body.categories ?? []).filter((c) => c in SCAN_TAXONOMY);
 	if (!categories.length) return json({ error: "Pick at least one specialty." }, 400);
 	const limit = Math.min(Math.max(Number(body.limit) || 40, 1), 100);
-	const perCategory = Math.min(50, Math.max(10, Math.ceil(limit / categories.length)));
+	// One registry query per (category, taxonomy) pair; size each to reach the target.
+	const taxa = categories.flatMap((c) => SCAN_TAXONOMY[c].map((t) => ({ category: c, taxonomy: t })));
+	const perQuery = Math.min(100, Math.max(20, Math.ceil(limit / categories.length)));
 
 	// Existing identities, for dedup.
 	const existing = await currentLeads(env);
@@ -160,23 +192,29 @@ export async function handleLeadScan(request: Request, env: Env): Promise<Respon
 
 	const found: LeadRecord[] = [];
 	const errors: string[] = [];
-	for (const category of categories) {
+	for (const { category, taxonomy } of taxa) {
+		// No enumeration_type filter: this returns both individual physicians
+		// (NPI-1) and practice organizations (NPI-2). Individuals are the bulk of
+		// regenerative-medicine providers, so org-only scans came back nearly empty.
 		const params = new URLSearchParams({
 			version: "2.1",
-			enumeration_type: "NPI-2",
 			state,
-			taxonomy_description: SCAN_TAXONOMY[category],
-			limit: String(perCategory),
+			taxonomy_description: taxonomy,
+			limit: String(perQuery),
 		});
 		try {
 			const res = await fetch(`https://npiregistry.cms.hhs.gov/api/?${params}`, {
 				headers: { accept: "application/json" },
 			});
 			if (!res.ok) {
-				errors.push(`${category}: registry returned ${res.status}`);
+				errors.push(`${taxonomy}: registry returned ${res.status}`);
 				continue;
 			}
-			const data = (await res.json()) as { results?: NppesResult[] };
+			const data = (await res.json()) as { results?: NppesResult[]; Errors?: Array<{ description?: string }> };
+			if (data.Errors?.length) {
+				errors.push(`${taxonomy}: ${data.Errors.map((e) => e.description).filter(Boolean).join("; ")}`);
+				continue;
+			}
 			for (const r of data.results ?? []) {
 				const lead = nppesToLead(r, category);
 				if (!lead) continue;
@@ -195,7 +233,7 @@ export async function handleLeadScan(request: Request, env: Env): Promise<Respon
 				if (found.length >= limit) break;
 			}
 		} catch (err) {
-			errors.push(`${category}: ${String(err).slice(0, 120)}`);
+			errors.push(`${taxonomy}: ${String(err).slice(0, 120)}`);
 		}
 		if (found.length >= limit) break;
 	}
