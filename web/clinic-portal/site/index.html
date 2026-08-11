@@ -60,7 +60,7 @@
   <h3>Welcome back, Dr</h3>
   <p>You&rsquo;re already logged in. Would you like to go to your portal?</p>
   <div class="welcome-actions">
-    <a class="btn primary" href="/portal/protocols" data-welcome="go">Go to Portal</a>
+    <a class="btn primary" href="/portal/" data-welcome="go">Go to Portal</a>
     <button type="button" class="btn welcome-stay" data-welcome="stay">Stay Here</button>
   </div>
 </aside>
@@ -230,26 +230,27 @@
 
 <!-- ══ SIGN-IN MODAL ════════════════════════════════════════════════════ -->
 <div class="modal-ov" id="signinModal" role="dialog" aria-modal="true" aria-labelledby="signinTitle" hidden>
-  <form class="modal-card" id="signinForm" novalidate>
+  <form class="modal-card" id="signinForm" method="post" action="/login" novalidate>
     <h2 id="signinTitle">Sign in</h2>
     <p class="sub">Clinic portal access for verified providers.</p>
     <div class="fld">
-      <label for="siEmail">Email</label>
-      <input type="email" id="siEmail" autocomplete="username" placeholder="you@clinic.com">
+      <label for="siEmail">Username</label>
+      <input type="text" id="siEmail" name="username" autocomplete="username" placeholder="Your username">
     </div>
     <div class="fld">
       <label for="siPass">Password</label>
-      <input type="password" id="siPass" autocomplete="current-password" placeholder="Your password">
+      <input type="password" id="siPass" name="password" autocomplete="current-password" placeholder="Your password">
     </div>
+    <input type="hidden" name="next" value="/portal/">
     <label class="remember">
       <input type="checkbox" id="siRemember">
-      Keep me signed in and autofill on this device
+      Remember me and autofill on this device
     </label>
     <div class="modal-actions">
       <button type="button" class="btn welcome-stay" data-action="close-signin">Cancel</button>
       <button type="submit" class="btn primary">Sign in</button>
     </div>
-    <p class="sub" style="margin:14px 0 0;font-size:11px;">Demo sign-in: no real authentication. Only a display flag and, if you tick the box, your email for autofill are stored on this device, never a password or token.</p>
+    <p class="sub" style="margin:14px 0 0;font-size:11px;">If you tick the box, only your username is stored on this device for autofill, never a password.</p>
   </form>
 </div>
 

@@ -124,14 +124,20 @@
         else if (el.dataset.action === 'close-signin') { closeSignin(); }
     });
     if (form) form.addEventListener('submit', function (e) {
-        e.preventDefault();
         var email = (document.getElementById('siEmail').value || '').trim();
         var remember = document.getElementById('siRemember').checked;
         // Only persist the "welcome back" preference when the box is ticked.
         if (remember && email) { writeRemember({ email: email }); clearDismissed(); }
         else { writeRemember(null); }
-        closeSignin();
-        refreshWelcome();
+        // With a real action (/login on the live site) the form submits to the
+        // server, which verifies credentials and sets the session cookie. In the
+        // static demo the action is neutralized, so we just close the modal.
+        var action = form.getAttribute('action') || '';
+        if (!action || action === '#') {
+            e.preventDefault();
+            closeSignin();
+            refreshWelcome();
+        }
     });
     if (modal) modal.addEventListener('click', function (e) { if (e.target === modal) closeSignin(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSignin(); });

@@ -7,6 +7,14 @@ interface Env {
 	/** Workers static assets binding; run_worker_first routes everything here first. */
 	ASSETS: { fetch(request: Request): Promise<Response> };
 
+	// --- Portal sign-in (defaults baked into src/auth.ts; override via secrets) ---
+	/** Portal admin username. */
+	PORTAL_ADMIN_USER?: string;
+	/** Portal admin password hash: pbkdf2$<iterations>$<salt hex>$<hash hex>. */
+	PORTAL_ADMIN_PASS_HASH?: string;
+	/** HMAC key for the session cookie; set this secret in production. */
+	PORTAL_SESSION_SECRET?: string;
+
 	// --- Access control ---
 	/**
 	 * Shared bearer token (secret) for the HTTP endpoints `/jarvis` and

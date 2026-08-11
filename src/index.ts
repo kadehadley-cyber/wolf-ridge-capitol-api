@@ -11,6 +11,13 @@
 // Plus a scheduled (cron) handler that pushes due reminders and the daily
 // briefing when a WhatsApp delivery channel is configured.
 
+import {
+	CLEAR_SESSION_COOKIE,
+	createSessionCookie,
+	hasValidSession,
+	loginPage,
+	verifyCredentials,
+} from "./auth";
 import { ask, type ImageAttachment } from "./jarvis";
 import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
@@ -108,15 +115,57 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		url.hostname = "www.cellsunova.com";
 		return Response.redirect(url.toString(), 301);
 	}
+
+	const p = url.pathname;
+
+	// ── Sign in / sign out ──
+	if (p === "/login") {
+		if (request.method === "POST") {
+			const form = await request.formData();
+			const username = String(form.get("username") ?? "");
+			const password = String(form.get("password") ?? "");
+			const nextRaw = String(form.get("next") ?? "/portal/");
+			const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/portal/";
+			if (await verifyCredentials(env, username, password)) {
+				return new Response(null, {
+					status: 303,
+					headers: { location: next, "set-cookie": await createSessionCookie(env) },
+				});
+			}
+			return loginPage(true, next);
+		}
+		if (await hasValidSession(env, request)) {
+			url.pathname = "/portal/";
+			url.search = "";
+			return Response.redirect(url.toString(), 302);
+		}
+		return loginPage(false, url.searchParams.get("next") ?? "/portal/");
+	}
+	if (p === "/logout") {
+		url.pathname = "/";
+		url.search = "";
+		return new Response(null, {
+			status: 303,
+			headers: { location: url.toString(), "set-cookie": CLEAR_SESSION_COOKIE },
+		});
+	}
+
 	if (request.method !== "GET" && request.method !== "HEAD") {
 		return new Response("Method not allowed", { status: 405 });
 	}
 
-	const p = url.pathname;
-
 	// Internal working docs never ship, whatever the path.
 	if (/\.md$/i.test(p) || p.includes("/hardening/")) {
 		return new Response("Not found", { status: 404 });
+	}
+
+	// ── Portal requires a signed session; everything else is public ──
+	if (p === "/portal" || p.startsWith("/portal/")) {
+		if (!(await hasValidSession(env, request))) {
+			url.pathname = "/login";
+			url.search = "?next=" + encodeURIComponent(p);
+			return Response.redirect(url.toString(), 302);
+		}
 	}
 
 	// Redirects: legacy names, and page dirs get a trailing slash so their
