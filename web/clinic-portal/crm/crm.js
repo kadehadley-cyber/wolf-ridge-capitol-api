@@ -746,6 +746,43 @@
         }, 1100);
     }
 
+    /* ══ QUEUE BUILDER ════════════════════════════════════════════════════
+     * Client-side call list: providers in the chosen territory/category, ranked
+     * by priority. In production this would page through the server's leads. */
+    function buildQueue() {
+        var terr = $('crmQueueTerritory').value, cat = $('crmQueueCategory').value;
+        var out = $('crmQueueList');
+        var list = LEADS.filter(function (l) {
+            if (terr && l.state !== terr) return false;
+            if (cat && l.category !== cat) return false;
+            return l.is_provider;
+        }).sort(function (a, b) { return priority(b).score - priority(a).score; });
+
+        out.textContent = '';
+        if (!list.length) {
+            var e = document.createElement('li'); e.className = 'doc-empty';
+            e.textContent = 'No provider leads match this territory and category.';
+            out.appendChild(e); return;
+        }
+        list.forEach(function (l, i) {
+            var pr = priority(l);
+            var li = document.createElement('li'); li.className = 'doc-row';
+            var num = document.createElement('span'); num.className = 'doc-badge html'; num.textContent = String(i + 1);
+            var main = document.createElement('div'); main.className = 'doc-row-main';
+            var nm = document.createElement('div'); nm.className = 'doc-row-title'; nm.textContent = l.name;
+            var sub = document.createElement('div'); sub.className = 'doc-row-sub';
+            sub.textContent = [l.city, l.state].filter(Boolean).join(', ') + (l.phone ? ', ' + l.phone : '');
+            main.append(nm, sub);
+            var badge = document.createElement('span'); badge.className = 'crm-fit crm-fit-' + pr.band;
+            badge.textContent = pr.band.toUpperCase() + ' ' + pr.score;
+            var call = document.createElement('a'); call.className = 'btn sm'; call.textContent = 'Call';
+            call.setAttribute('href', safeUrl('tel:' + (l.phone || ''), ['tel:']));
+            var acts = document.createElement('div'); acts.className = 'doc-row-actions'; acts.append(badge, call);
+            li.append(num, main, acts);
+            out.appendChild(li);
+        });
+    }
+
     /* ══ EVENTS ═══════════════════════════════════════════════════════════ */
     document.addEventListener('click', function (e) {
         var el = e.target.closest('[data-action]');
@@ -763,9 +800,7 @@
                 cModal.alert('Not wired', 'In production this posts the note to the CRM endpoint. '
                     + 'This static build does not send anything.');
                 break;
-            case 'build-queue':
-                cModal.alert('Not wired', 'Queue building calls the server; not implemented in this build.');
-                break;
+            case 'build-queue': buildQueue(); break;
             case 'run-intel':      runTool('Scanning website & ads, regen mentions, services, ad presence…', 'website/ads intelligence'); break;
             case 'tool-reviews':   runTool('Pulling reviews & rating, volume, recency, sentiment…', 'reviews / reputation'); break;
             case 'tool-supplier':  runTool('Checking supplier risk, recalls, backorders, FDA warnings for the current supplier…', 'supplier-risk'); break;
@@ -775,17 +810,24 @@
         }
     });
 
+    // Searching or filtering always shows the Lead List (otherwise, on the Queue
+    // tab, the list is hidden and search looks like it does nothing).
+    function applyFilters() {
+        if ($('crmView-leads').hidden) showTab('leads');
+        renderList();
+    }
+
     ['crmSearch', 'crmFilterStage', 'crmFilterSource', 'crmFilterCategory',
      'crmSort', 'crmOffersRegen', 'crmAdvertising', 'crmCashPay',
      'crmSwitchWindow', 'crmHotOnly'].forEach(function (id) {
         var el = $(id);
-        if (el) el.addEventListener(el.tagName === 'INPUT' && el.type !== 'checkbox' ? 'input' : 'change', renderList);
+        if (el) el.addEventListener(el.tagName === 'INPUT' && el.type !== 'checkbox' ? 'input' : 'change', applyFilters);
     });
 
     // "All clinic types" overrides the category dropdown; disable it while on.
     $('crmAllTypes').addEventListener('change', function () {
         $('crmFilterCategory').disabled = this.checked;
-        renderList();
+        applyFilters();
     });
 
     // States panel: the master box clears the individual boxes; any individual
@@ -795,7 +837,7 @@
             stateCbs().forEach(function (cb) { cb.checked = false; });
         }
         updateStateUI();
-        renderList();
+        applyFilters();
     });
 
     document.addEventListener('keydown', function (e) {
