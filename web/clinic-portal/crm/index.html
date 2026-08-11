@@ -360,6 +360,42 @@
   </div>
 </div>
 
+<!-- ══ OUTREACH DRAFT MODAL ══════════════════════════════════════════════
+     Filled by crm.js from the selected lead's intelligence signals. The draft
+     is editable; Copy and "Open in email app" are the only outputs. Nothing is
+     sent from this build. -->
+<div id="outreachModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="outreachTitle" hidden>
+  <div class="modal-box modal-box-lg">
+    <div class="modal-head">
+      <div>
+        <h2 id="outreachTitle">Outreach draft</h2>
+        <div class="modal-sub" id="outreachSub"></div>
+      </div>
+      <button type="button" class="modal-x" data-action="close-outreach" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field">
+          <label for="outreachSubject">Subject</label>
+          <input type="text" id="outreachSubject" autocomplete="off" data-no-log>
+        </div>
+        <div class="field">
+          <label for="outreachBody">Email <span class="field-hint">(edit before sending)</span></label>
+          <textarea id="outreachBody" rows="14" data-no-log></textarea>
+        </div>
+        <p class="muted outreach-note">Composed from this lead's signals: the angle, opener, and ask
+           change with supplier status, contract window, services offered, and engagement. In
+           production this calls the AI drafting endpoint; this build sends nothing.</p>
+        <div class="modal-actions">
+          <span class="muted" id="outreachCopied" aria-live="polite" hidden>Copied</span>
+          <button type="button" class="btn ghost" data-action="copy-outreach">Copy</button>
+          <a class="btn primary" id="outreachMailto" href="#" rel="noopener noreferrer">Open in email app</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ GENERIC MODAL ═════════════════════════════════════════════════════ -->
 <div id="cModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cModalTitle" hidden>
   <div class="modal-box modal-box-xs">

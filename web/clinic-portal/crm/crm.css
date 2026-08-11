@@ -150,6 +150,18 @@
 .crm-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .crm-tool-status { font-size: 12px; margin-top: 8px; min-height: 1.2em; line-height: 1.5; }
 
+/* Outreach draft modal */
+#outreachModal input[type="text"] {
+    font-family: inherit; font-size: 14px;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12);
+    color: var(--text); border-radius: 6px; padding: 9px 12px; width: 100%; outline: none;
+}
+#outreachModal input[type="text"]:focus { border-color: rgba(57,255,138,.4); background: rgba(57,255,138,.03); }
+#outreachModal textarea { min-height: 260px; font-size: 13.5px; line-height: 1.6; }
+.outreach-note { font-size: 11px; margin: 0; }
+#outreachModal .modal-actions { align-items: center; }
+#outreachCopied { font-size: 12px; color: var(--brand); }
+
 .crm-section-title {
     font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
     color: var(--muted); margin: 18px 0 8px;

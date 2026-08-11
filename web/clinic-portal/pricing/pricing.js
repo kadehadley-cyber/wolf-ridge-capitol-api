@@ -29,23 +29,26 @@
         { key: 'exo', label: 'Exosomes' },
         { key: 'lyo', label: 'Lyophilized' }
     ];
-    var PRODUCTS = [
-        { id: 'msc-umb', name: 'Umbilical MSC', cat: 'msc', popular: true,
-          variants: [{ vol: '1 cc', price: 0 }, { vol: '2 cc', price: 0 }, { vol: '5 cc', price: 0 }] },
-        { id: 'msc-wj', name: 'Wharton’s Jelly MSC', cat: 'msc',
-          variants: [{ vol: '1 cc', price: 0 }, { vol: '2 cc', price: 0 }] },
-        { id: 'exo-std', name: 'Exosomes — standard', cat: 'exo', popular: true,
-          variants: [{ vol: '1 cc', price: 0 }, { vol: '2 cc', price: 0 }, { vol: '5 cc', price: 0 }] },
-        { id: 'exo-hi',  name: 'Exosomes — high-count', cat: 'exo',
-          variants: [{ vol: '1 cc', price: 0 }, { vol: '2 cc', price: 0 }] },
-        { id: 'lyo-exo', name: 'Lyophilized exosomes', cat: 'lyo',
-          variants: [{ vol: '1 vial', price: 0 }, { vol: '3 vials', price: 0 }] }
-    ];
-    // PLACEHOLDER prices, filled here so the catalog above stays readable.
-    // Replace with the finalized $/unit. All zeros until then.
+    /* Pricing: $800 per cc across the line, except NOVA-EXO+ at $500 per cc.
+     * Lyophilized is priced per vial at the same $800 rate (adjust if the
+     * finalized vial price differs). Product names other than NOVA-EXO+ are
+     * still placeholders from the redone line. */
     var PRICING = {
-        note: 'Placeholder — set real prices when the redone line + cost is final.'
+        perCc: 800,
+        novaExoPlusPerCc: 500
     };
+    var PRODUCTS = [
+        { id: 'msc-umb', name: 'Umbilical MSC', cat: 'msc',
+          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }, { vol: '5 cc', price: 4000 }] },
+        { id: 'msc-wj', name: 'Wharton’s Jelly MSC', cat: 'msc',
+          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }] },
+        { id: 'exo-plus', name: 'NOVA-EXO+', cat: 'exo', popular: true,
+          variants: [{ vol: '1 cc', price: 500 }, { vol: '2 cc', price: 1000 }, { vol: '5 cc', price: 2500 }] },
+        { id: 'exo-hi',  name: 'Exosomes high-count', cat: 'exo',
+          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }] },
+        { id: 'lyo-exo', name: 'Lyophilized exosomes', cat: 'lyo',
+          variants: [{ vol: '1 vial', price: 800 }, { vol: '3 vials', price: 2400 }] }
+    ];
 
     var catLabel = {};
     CATEGORIES.forEach(function (c) { catLabel[c.key] = c.label; });

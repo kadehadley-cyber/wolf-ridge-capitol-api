@@ -208,7 +208,8 @@
      * ═════════════════════════════════════════════════════════════════════ */
     var PRICING = {
         parityCompetitor: 'platinum',
-        ourPricePerCc: null         // PLACEHOLDER: set when the finalized cost is known
+        ourPricePerCc: 800,         // $ per cc across the line
+        novaExoPlusPerCc: 500       // NOVA-EXO+ per cc
     };
 
     /* ══ INTELLIGENCE SIGNALS (PLACEHOLDER) ═══════════════════════════════
@@ -313,7 +314,9 @@
         if (!supplier) { reasons.push('No current biologics supplier, so this is a first-fit sale, not a switch'); }
         else if (supplier.toLowerCase() === parity) { s += 5; reasons.push(cap(parity) + ' incumbent at near price parity; win on physician-led sourcing and service'); }
         else { s += 20; reasons.push('On ' + supplier + ', not at price parity, so competitive pricing applies'); }
-        if (l.price_per_cc_current) reasons.push('Paying $' + l.price_per_cc_current + '/cc now, quantify savings against our price');
+        if (l.price_per_cc_current && l.price_per_cc_current > PRICING.ourPricePerCc)
+            reasons.push('Paying $' + l.price_per_cc_current + ' per cc against our $' + PRICING.ourPricePerCc
+                + ', a $' + (l.price_per_cc_current - PRICING.ourPricePerCc) + ' per cc gap');
         if (l.supplier_risk) { s += 20; reasons.push('Current supplier flagged (recall / backorder / warning), active switch trigger'); }
         if (l.contract_status === 'month_to_month') { s += 12; reasons.push('Month-to-month, no lock-in'); }
         else if (l.contract_status === 'expiring') { s += 15; reasons.push('Supplier contract expiring, switch window open'); }
@@ -347,12 +350,24 @@
 
     /* Estimated per-cc savings a rep can quote, given the lead's current price.
      * Reads the placeholder PRICING config, numbers change when it does. */
+    /* Concrete savings math from real prices: their reported price per cc vs
+     * our $800 (NOVA-EXO+ at $500 is the sharper opener when they buy exosomes). */
     function savingsLine(l) {
         var supplier = (l.current_supplier || '').trim();
         if (supplier.toLowerCase() === PRICING.parityCompetitor)
             return cap(PRICING.parityCompetitor) + ' incumbent at price parity; differentiate on physician-led sourcing and support.';
         if (!supplier) return 'Qualify current supplier and price per cc to size the opportunity.';
-        return 'Competitive pricing versus ' + supplier + '; quantify once our per-cc cost is set.';
+        if (l.price_per_cc_current && l.price_per_cc_current > PRICING.ourPricePerCc) {
+            var delta = l.price_per_cc_current - PRICING.ourPricePerCc;
+            var line = 'They pay $' + l.price_per_cc_current + ' per cc; ours is $' + PRICING.ourPricePerCc
+                + ', saving $' + delta + ' per cc';
+            if (l.est_monthly_cc) line += ' (about $' + (delta * l.est_monthly_cc).toLocaleString()
+                + ' per month at ' + l.est_monthly_cc + ' cc)';
+            if (l.offers_exosomes) line += '. NOVA-EXO+ at $' + PRICING.novaExoPlusPerCc + ' per cc widens it further';
+            return line + '.';
+        }
+        return 'Versus ' + supplier + ', lead with NOVA-EXO+ at $' + PRICING.novaExoPlusPerCc
+            + ' per cc and physician-led support.';
     }
 
     var listEl   = $('crmLeadList');
@@ -746,6 +761,147 @@
         }, 1100);
     }
 
+    /* ══ OUTREACH DRAFTING ════════════════════════════════════════════════
+     * Composes a personalized first-touch email from the lead's intelligence
+     * signals. The ANGLE is chosen by the strongest response driver we know:
+     *   1. supplier_risk        their supply is shaky; lead with reliability
+     *   2. contract expiring    the switch window is open; lead with timing
+     *   3. month_to_month       no lock-in; low-friction trial ask
+     *   4. PRP-only             natural upsell into exosomes/stem cells
+     *   5. no regen yet         education-first intro
+     *   6. parity incumbent     physician-led service, never price
+     *   7. default              physician-led sourcing intro
+     * Every draft stays short, names their practice specifics, and asks for one
+     * small step (an MD-to-MD call). No pricing figures are ever embedded; the
+     * rep quotes numbers live once the finalized cost is set.
+     * In production the same payload goes to the AI drafting endpoint. */
+    var CATEGORY_PHRASE = {
+        ortho: 'orthopedic practice', pain_management: 'pain management practice',
+        med_spa: 'med spa', aesthetic: 'aesthetic practice',
+        plastic_surgery: 'plastic surgery practice', podiatry: 'podiatry practice',
+        wellness: 'wellness practice'
+    };
+    function firstNameLine(l) {
+        var n = (l.doctor_name || l.owner_name || '').trim();
+        if (!n) return 'Hi there,';
+        return 'Hi ' + n + ',';
+    }
+    function composeOutreach(l) {
+        var clinic = l.name;
+        var catPhrase = CATEGORY_PHRASE[l.category] || 'practice';
+        var supplier = (l.current_supplier || '').trim();
+        var parity = supplier && supplier.toLowerCase() === PRICING.parityCompetitor;
+        var runsRegen = l.offers_prp || l.offers_exosomes || l.offers_stem_cells;
+        var prpOnly = l.offers_prp && !l.offers_exosomes && !l.offers_stem_cells;
+
+        var subject, hook;
+        if (l.supplier_risk && supplier) {
+            subject = 'A reliable biologics source for ' + clinic;
+            hook = 'I understand ' + supplier + ' has had supply disruptions recently. When a treatment day '
+                + 'depends on product arriving on time, that is a real problem, and it is the main reason '
+                + 'clinics start a conversation with us.';
+        } else if (l.contract_status === 'expiring') {
+            subject = 'Worth a look before your supplier agreement renews';
+            hook = 'If your current supplier agreement is coming up for renewal, this is the easiest moment '
+                + 'to compare options with zero switching pressure. A short call now means you renew, or not, '
+                + 'with full information.';
+        } else if (l.contract_status === 'month_to_month') {
+            subject = 'A low-risk look at physician-led biologics for ' + clinic;
+            hook = 'Since you are not locked into a supplier contract, trying us costs nothing but a '
+                + 'conversation. Many clinics start with a single order alongside their current source and '
+                + 'compare results directly.';
+        } else if (prpOnly) {
+            subject = 'Adding exosomes to the PRP program at ' + clinic;
+            hook = 'You already run PRP, which means your patients and workflows are ready for the next step. '
+                + 'Clinics like yours typically add exosomes first: same visit structure, familiar consent '
+                + 'conversation, and a natural fit with the ' + catPhrase + ' cases you already treat.';
+        } else if (!runsRegen) {
+            subject = 'Bringing regenerative medicine to ' + clinic;
+            hook = 'Many ' + catPhrase + 's are adding regenerative options, and the ones that do it well '
+                + 'start with protocols and physician support rather than product alone. That is exactly how '
+                + 'we onboard new clinics.';
+        } else if (parity) {
+            subject = 'Physician-led sourcing and support for ' + clinic;
+            hook = 'You clearly take sourcing seriously. Where we stand apart is that CelluNOVA is '
+                + 'physician-led end to end: protocols, physician-reviewed ordering, and direct MD-to-MD '
+                + 'support for your clinical team.';
+        } else {
+            subject = 'Physician-led biologics for ' + clinic;
+            hook = 'CelluNOVA is a physician-led distributor of MSC biologics and exosomes, with competitive '
+                + 'per-cc pricing and clinical protocols included. Clinics come for the pricing and stay for '
+                + 'the physician support.';
+        }
+
+        // Engagement-aware opener: reference the step they already took.
+        var opener;
+        if (l.engagement === 'sample_requested') {
+            opener = 'Following up on the sample you requested. I wanted to make sure it arrived and answer '
+                + 'anything that came up.';
+        } else if (l.engagement === 'demo') {
+            opener = 'Thanks for taking the time on the demo. Following up with the next step while it is fresh.';
+        } else if (l.engagement === 'visited_pricing') {
+            opener = 'I wanted to follow up while you are evaluating options for the practice.';
+        } else {
+            opener = 'I will keep this short.';
+        }
+
+        // Practice-specific proof point: use what we know, never invent.
+        var specifics = [];
+        if (l.patients_per_day >= 20) specifics.push('At ' + l.patients_per_day + ' patients a day, even a small per-treatment improvement compounds fast.');
+        if (l.offers_exosomes && l.offers_stem_cells) specifics.push('Since you already run a full regenerative line, the fit conversation is mostly about sourcing quality and support.');
+
+        var cta = 'Would you be open to a 15-minute call with one of the physicians on our medical board? '
+            + 'Not a sales call: an MD-to-MD conversation about your cases, protocols, and what has worked '
+            + 'in practices like yours.';
+
+        var body = [
+            firstNameLine(l),
+            '',
+            opener + ' ' + hook,
+            specifics.length ? specifics.join(' ') : null,
+            cta,
+            '',
+            'Best,',
+            (CONFIG.repName || '{Rep name}'),
+            'CelluNOVA',
+            (CONFIG.repPhone || '{Rep phone}')
+        ].filter(function (x) { return x !== null; }).join('\n');
+
+        return { subject: subject, body: body };
+    }
+
+    var outreachModal = $('outreachModal'), outreachLastFocus = null;
+    function openOutreach(lead) {
+        if (!lead) return;
+        var d = composeOutreach(lead);
+        $('outreachSub').textContent = 'To ' + (lead.email || 'the lead') + ' · composed from '
+            + lead.name + '’s signals';
+        $('outreachSubject').value = d.subject;
+        $('outreachBody').value = d.body;
+        $('outreachCopied').hidden = true;
+        var mailto = 'mailto:' + encodeURIComponent(lead.email || '')
+            + '?subject=' + encodeURIComponent(d.subject)
+            + '&body=' + encodeURIComponent(d.body);
+        $('outreachMailto').setAttribute('href', safeUrl(mailto, ['mailto:']));
+        outreachLastFocus = document.activeElement;
+        outreachModal.hidden = false;
+        $('outreachSubject').focus();
+    }
+    function closeOutreach() {
+        outreachModal.hidden = true;
+        if (outreachLastFocus && outreachLastFocus.focus) outreachLastFocus.focus();
+    }
+    function copyOutreach() {
+        var text = 'Subject: ' + $('outreachSubject').value + '\n\n' + $('outreachBody').value;
+        function done() { var c = $('outreachCopied'); c.hidden = false; setTimeout(function () { c.hidden = true; }, 1800); }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function () { $('outreachBody').select(); });
+        } else {
+            $('outreachBody').select();
+            try { document.execCommand('copy'); done(); } catch (e) {}
+        }
+    }
+
     /* ══ QUEUE BUILDER ════════════════════════════════════════════════════
      * Client-side call list: providers in the chosen territory/category, ranked
      * by priority. In production this would page through the server's leads. */
@@ -805,7 +961,15 @@
             case 'tool-reviews':   runTool('Pulling reviews & rating, volume, recency, sentiment…', 'reviews / reputation'); break;
             case 'tool-supplier':  runTool('Checking supplier risk, recalls, backorders, FDA warnings for the current supplier…', 'supplier-risk'); break;
             case 'tool-lookalike': runTool('Finding look-alikes, clinics similar to your best customers in this territory…', 'look-alike'); break;
-            case 'tool-outreach':  runTool('Drafting outreach, a first email built from this lead’s buy / switch reasons…', 'outreach drafting'); break;
+            case 'tool-outreach': {
+                var lead = LEADS.filter(function (l) { return l.id === activeId; })[0];
+                var st = $('crmIntelStatus');
+                if (st) st.textContent = 'Drafting outreach from this lead’s signals…';
+                setTimeout(function () { if (st) st.textContent = ''; openOutreach(lead); }, 500);
+                break;
+            }
+            case 'close-outreach': closeOutreach(); break;
+            case 'copy-outreach':  copyOutreach(); break;
             case 'close-replay': $('replayOverlay').hidden = true; break;
         }
     });
@@ -840,9 +1004,12 @@
         applyFilters();
     });
 
+    outreachModal.addEventListener('click', function (e) { if (e.target === outreachModal) closeOutreach(); });
+
     document.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape') return;
         if (cModal.isOpen()) { cModal.close(); return; }
+        if (!outreachModal.hidden) { closeOutreach(); return; }
         if (!$('replayOverlay').hidden) $('replayOverlay').hidden = true;
     });
 
