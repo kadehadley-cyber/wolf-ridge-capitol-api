@@ -460,14 +460,62 @@ describe("cellsunova.com site routing", () => {
 		}
 	});
 
-	it("rejects a scan without a state or specialties", async () => {
+	it("scans nationwide when state is ALL (no state filter)", async () => {
+		const { env, db } = makeEnv();
+		const { cookie } = await login();
+
+		const realFetch = globalThis.fetch;
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			const u = String(input);
+			if (u.startsWith("https://npiregistry.cms.hhs.gov/")) {
+				// All-states scan must not constrain by state.
+				expect(u).not.toContain("state=");
+				return new Response(
+					JSON.stringify({
+						results: [
+							{
+								number: 4444444444,
+								enumeration_type: "NPI-2",
+								basic: { organization_name: "Nationwide Ortho" },
+								addresses: [
+									{ address_purpose: "LOCATION", address_1: "5 Center St", city: "Reno", state: "NV", telephone_number: "775-555-0400" },
+								],
+							},
+						],
+					}),
+					{ headers: { "content-type": "application/json" } },
+				);
+			}
+			return realFetch(input as never);
+		}) as typeof fetch;
+
+		try {
+			const scan = await worker.fetch!(
+				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+					method: "POST",
+					headers: { cookie, "content-type": "application/json" },
+					body: JSON.stringify({ state: "ALL", categories: ["ortho"], limit: 25 }),
+				}) as never,
+				env,
+				ctx,
+			);
+			expect(scan.status).toBe(200);
+			const data = (await scan.json()) as { added: number };
+			expect(data.added).toBe(1);
+			expect(db.leads.size).toBe(1);
+		} finally {
+			globalThis.fetch = realFetch;
+		}
+	});
+
+	it("rejects a scan without any specialties", async () => {
 		const { env } = makeEnv();
 		const { cookie } = await login();
 		const res = await worker.fetch!(
 			new Request("https://www.cellsunova.com/portal/api/leads/scan", {
 				method: "POST",
 				headers: { cookie, "content-type": "application/json" },
-				body: JSON.stringify({ categories: ["ortho"] }),
+				body: JSON.stringify({ state: "AZ", categories: [] }),
 			}) as never,
 			env,
 			ctx,

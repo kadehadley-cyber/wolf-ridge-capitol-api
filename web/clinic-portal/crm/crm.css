@@ -153,6 +153,10 @@
 /* Find-leads scan modal */
 .scan-cats { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 4px 0; }
 .scan-cats .crm-check { color: var(--text); }
+.scan-all-cats {
+    width: 100%; font-weight: 600;
+    border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 2px;
+}
 #scanStatus { font-size: 12px; margin-right: auto; text-align: left; line-height: 1.5; }
 #scanModal .modal-actions { align-items: center; }
 
