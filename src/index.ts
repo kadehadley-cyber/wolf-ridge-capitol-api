@@ -22,6 +22,13 @@ export default {
 	async fetch(request, env, ctx) {
 		const url = new URL(request.url);
 
+		// The public CelluNOVA site lives on its own domain; everything else
+		// (workers.dev, previews) keeps serving the Jarvis API below.
+		const host = url.hostname.toLowerCase();
+		if (host === "cellsunova.com" || host === "www.cellsunova.com") {
+			return serveCelluNova(request, env, url);
+		}
+
 		switch (`${request.method} ${url.pathname}`) {
 			case "GET /":
 				return new Response(renderHtml(env), {
@@ -82,6 +89,67 @@ export default {
 		ctx.waitUntil(runScheduled(env, new Date()));
 	},
 } satisfies ExportedHandler<Env>;
+
+/**
+ * cellsunova.com: serve the static CelluNOVA site from the assets binding.
+ *
+ * URL scheme (public URLs on the left, files under web/ on the right):
+ *   /                    -> clinic-portal/site/            (homepage)
+ *   /site.css, /site.js  -> clinic-portal/site/...         (homepage assets)
+ *   /portal/             -> clinic-portal/                 (Protocols page)
+ *   /portal/<page>/      -> clinic-portal/<page>/          (crm, pricing, ...)
+ *
+ * run_worker_first is on, so nothing under web/ is reachable except through
+ * these mappings; internal docs (*.md, hardening/) are never served.
+ */
+async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Response> {
+	// Canonical host: apex redirects to www.
+	if (url.hostname.toLowerCase() === "cellsunova.com") {
+		url.hostname = "www.cellsunova.com";
+		return Response.redirect(url.toString(), 301);
+	}
+	if (request.method !== "GET" && request.method !== "HEAD") {
+		return new Response("Method not allowed", { status: 405 });
+	}
+
+	const p = url.pathname;
+
+	// Internal working docs never ship, whatever the path.
+	if (/\.md$/i.test(p) || p.includes("/hardening/")) {
+		return new Response("Not found", { status: 404 });
+	}
+
+	// Redirects: legacy names, and page dirs get a trailing slash so their
+	// relative asset URLs (crm.css, pricing.js, ...) resolve correctly.
+	const redirects = new Map<string, string>([
+		["/portal", "/portal/"],
+		["/portal/protocols", "/portal/"],
+		["/portal/support", "/portal/tickets/"],
+		["/portal/marketing-resources", "/portal/marketing/"],
+	]);
+	for (const dir of ["crm", "pricing", "orders", "tickets", "treatment-schedule", "welcome", "admin", "marketing"]) {
+		redirects.set(`/portal/${dir}`, `/portal/${dir}/`);
+	}
+	const target = redirects.get(p);
+	if (target) {
+		url.pathname = target;
+		return Response.redirect(url.toString(), 301);
+	}
+
+	// Map the public path to its location under web/.
+	let assetPath: string;
+	if (p === "/" || p === "/index.html") {
+		assetPath = "/clinic-portal/site/";
+	} else if (p.startsWith("/portal/")) {
+		assetPath = "/clinic-portal/" + p.slice("/portal/".length);
+	} else {
+		// Homepage-relative assets (/site.css, /site.js) and anything else.
+		assetPath = "/clinic-portal/site" + p;
+	}
+
+	const assetUrl = new URL(assetPath, url.origin);
+	return env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+}
 
 /**
  * Channel-agnostic voice endpoint. Point any speech-to-text / text-to-speech

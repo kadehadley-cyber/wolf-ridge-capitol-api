@@ -1,0 +1,87 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Order History — reconstructed from the captured portal.css order spec
+   (.order-card, .order-timeline, .order-body-layout, .order-msg,
+   .order-item-row). Real captured values; tokens from ../styles/portal.css.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.crm-placeholder-note {
+    font-size: 11.5px; color: var(--muted);
+    padding: 10px 14px; border-radius: 8px;
+    border: 1px dashed var(--line2); background: rgba(255,255,255,.02);
+}
+.crm-placeholder-note code { background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+.shop-note { margin-bottom: 20px; }
+
+/* ── Order card ── */
+.order-card {
+    background: rgba(255,255,255,.02); border: 1px solid var(--line2);
+    border-radius: 14px; padding: 20px 24px; margin-bottom: 12px;
+    cursor: pointer; transition: border-color .2s;
+}
+.order-card:hover { border-color: rgba(255,255,255,.12); }
+.order-card.cancelled { opacity: .5; }
+
+/* ── Timeline ── */
+.order-timeline { display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+.order-timeline-step { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.order-timeline-dot {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(255,255,255,.04); border: 2px solid rgba(255,255,255,.1);
+    color: var(--dim); font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; transition: all .3s;
+}
+.order-timeline-step.done .order-timeline-dot { background: rgba(125,211,64,.1); border-color: var(--brand); color: var(--brand); }
+.order-timeline-step.active .order-timeline-dot { background: var(--brand); border-color: var(--brand); color: #07070a; box-shadow: 0 0 16px rgba(125,211,64,.3); }
+.order-timeline-label { font-size: 10px; color: var(--dim); font-weight: 600; }
+.order-timeline-step.done .order-timeline-label,
+.order-timeline-step.active .order-timeline-label { color: var(--brand); }
+.order-timeline-step.active .order-timeline-label { font-weight: 700; }
+.order-timeline-line { width: 40px; height: 2px; background: rgba(255,255,255,.08); margin: 0 6px 18px; }
+.order-timeline-line.done { background: var(--brand); }
+
+/* ── Header ── */
+.order-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.order-num { font-size: 15px; font-weight: 700; color: #f0f4ff; }
+.order-date { font-size: 12px; color: var(--muted); margin-left: 10px; }
+.order-header-right { display: flex; align-items: center; gap: 10px; }
+.order-total { font-size: 18px; font-weight: 800; color: var(--brand); font-variant-numeric: tabular-nums; }
+.order-msg-badge { font-size: 10px; font-weight: 600; color: var(--brand2); background: rgba(79,179,165,.08); padding: 2px 8px; border-radius: 999px; }
+.order-expand { color: var(--muted); font-size: 10px; transition: transform .2s; }
+.order-card.open .order-expand { transform: rotate(180deg); }
+
+/* ── Body ── */
+.order-body {
+    background: rgba(255,255,255,.015); border: 1px solid var(--line);
+    border-radius: 0 0 14px 14px; margin: -12px -24px -20px; margin-top: 16px;
+    padding: 20px 24px;
+}
+.order-body[hidden] { display: none; }
+.order-body-layout { display: grid; grid-template-columns: 1fr 280px; gap: 24px; }
+.order-section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+
+/* ── Conversation ── */
+.order-msg { padding: 10px 14px; border-radius: 10px; margin-bottom: 8px; font-size: 13px; line-height: 1.6; }
+.order-msg-you { background: rgba(255,255,255,.03); border: 1px solid var(--line); }
+.order-msg-team { background: rgba(125,211,64,.04); border: 1px solid rgba(125,211,64,.1); }
+.order-msg-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.order-msg-header .who { font-size: 11px; font-weight: 600; }
+.order-msg-you .order-msg-header .who { color: var(--muted); }
+.order-msg-team .order-msg-header .who { color: var(--brand); }
+.order-msg-header .when { font-size: 10px; color: var(--muted); }
+.order-msg-body { color: #b8c4d0; }
+.order-reply-form { display: flex; gap: 8px; margin-top: 12px; }
+.order-reply-input { flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.03); color: var(--text); font: inherit; font-size: 13px; }
+
+/* ── Items sidebar ── */
+.order-item-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+.order-item-name { font-size: 13px; font-weight: 600; color: #f0f4ff; }
+.order-item-meta { font-size: 11px; color: var(--muted); }
+.order-item-price { font-size: 13px; font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; }
+.order-items-total { display: flex; justify-content: space-between; padding: 10px 0; font-size: 15px; font-weight: 700; color: var(--brand); border-top: 2px solid rgba(125,211,64,.15); margin-top: 4px; }
+
+.order-empty { color: var(--muted); font-size: 13px; padding: 20px 0; }
+
+@media (max-width: 720px) {
+    .order-body-layout { grid-template-columns: 1fr; }
+    .order-timeline-line { width: 24px; }
+}

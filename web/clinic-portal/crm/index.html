@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Strict CSP. Same rationale as the protocols page: all behaviour lives in
+     crm.js so no inline handlers or inline <script> are needed, and the policy
+     can stay tight. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  style-src 'self' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  connect-src 'self';
+  form-action 'self';
+  base-uri 'none';
+  object-src 'none'">
+<!-- frame-ancestors belongs in a response header; browsers ignore it in <meta>. -->
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="robots" content="noindex, nofollow">
+
+<title>CRM, CelluNOVA</title>
+
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles/portal.css">
+<link rel="stylesheet" href="crm.css">
+</head>
+<body class="portal-page">
+
+<div class="portal-layout">
+
+  <!-- ══ SIDEBAR (shared shell; nav reflects the captured REP view) ═════════ -->
+  <aside class="portal-sidebar">
+    <div class="sidebar-brand">
+      <a href="/" aria-label="CelluNOVA home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-word">Cellu<strong>NOVA</strong></span>
+      </a>
+    </div>
+
+    <div class="sidebar-welcome">
+      <strong>Welcome, Dr!</strong>
+      <!-- Server-rendered in production; placeholder so no real address is committed. -->
+      <span id="sidebarEmail">rep@example.com</span>
+      <span class="role-badge rep">REP</span>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Portal sections">
+      <a href="/portal/crm" class="active" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        CRM
+      </a>
+      <a href="/portal/tickets">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Tickets
+      </a>
+      <a href="/portal/protocols">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Protocols
+      </a>
+      <a href="/portal/pricing">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Pricing
+      </a>
+    </nav>
+
+    <form class="sidebar-signout" method="post" action="/portal/logout">
+      <input type="hidden" name="csrf" value="">
+      <button type="submit" class="btn ghost sm">Sign out</button>
+    </form>
+  </aside>
+
+  <!-- ══ CONTENT ═══════════════════════════════════════════════════════════ -->
+  <div class="portal-content-wrap">
+
+    <header class="portal-topbar">
+      <button class="topbar-menu" id="sidebarToggle" aria-label="Toggle navigation" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <h2 class="topbar-title">CRM</h2>
+    </header>
+
+    <main class="portal-main crm-main">
+
+      <div class="status-banner demo" id="viewAsBanner" hidden>
+        Viewing portal as <strong>Clinic</strong>
+        <form method="post" action="/portal/" class="inline-form">
+          <input type="hidden" name="csrf" value="">
+          <button type="submit" name="admin_view_as" value="admin" class="btn sm">Back to Admin</button>
+        </form>
+      </div>
+
+      <!-- ── Toolbar: the captured filter IDs, wired for real ── -->
+      <div class="crm-toolbar">
+        <div class="crm-search">
+          <input type="text" id="crmSearch" placeholder="Search name, email, phone, city..."
+                 autocomplete="off" data-no-log>
+        </div>
+        <div class="crm-filters">
+          <select id="crmFilterStage" aria-label="Stage">
+            <option value="">All stages</option>
+            <!-- Sample list, replace with the server's stage vocabulary. -->
+            <option value="new">New</option>
+            <option value="contacted">Contacted</option>
+            <option value="qualified">Qualified</option>
+            <option value="sold">Sold</option>
+            <option value="not_interested">Not interested</option>
+          </select>
+          <div class="crm-multi" id="crmStateMulti">
+            <button type="button" class="crm-multi-btn" id="crmStateBtn" data-action="toggle-states" aria-haspopup="listbox" aria-expanded="false">All states</button>
+            <div class="crm-multi-panel" id="crmStatePanel" hidden role="group" aria-label="Filter by state">
+              <label class="crm-multi-opt crm-multi-all"><input type="checkbox" id="crmStateAll" checked> All states</label>
+              <div class="crm-multi-list">
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="AL"> Alabama</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="AK"> Alaska</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="AZ"> Arizona</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="AR"> Arkansas</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="CA"> California</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="CO"> Colorado</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="CT"> Connecticut</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="DE"> Delaware</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="DC"> District of Columbia</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="FL"> Florida</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="GA"> Georgia</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="HI"> Hawaii</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="ID"> Idaho</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="IL"> Illinois</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="IN"> Indiana</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="IA"> Iowa</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="KS"> Kansas</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="KY"> Kentucky</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="LA"> Louisiana</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="ME"> Maine</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MD"> Maryland</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MA"> Massachusetts</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MI"> Michigan</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MN"> Minnesota</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MS"> Mississippi</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MO"> Missouri</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="MT"> Montana</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NE"> Nebraska</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NV"> Nevada</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NH"> New Hampshire</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NJ"> New Jersey</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NM"> New Mexico</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NY"> New York</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="NC"> North Carolina</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="ND"> North Dakota</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="OH"> Ohio</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="OK"> Oklahoma</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="OR"> Oregon</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="PA"> Pennsylvania</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="RI"> Rhode Island</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="SC"> South Carolina</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="SD"> South Dakota</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="TN"> Tennessee</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="TX"> Texas</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="UT"> Utah</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="VT"> Vermont</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="VA"> Virginia</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="WA"> Washington</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="WV"> West Virginia</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="WI"> Wisconsin</label>
+                <label class="crm-multi-opt"><input type="checkbox" class="crm-state-cb" value="WY"> Wyoming</label>
+              </div>
+            </div>
+          </div>
+          <select id="crmFilterSource" aria-label="Source">
+            <option value="">All sources</option>
+            <option value="intelligence">Intelligence scan</option>
+            <option value="referral">Referral</option>
+            <option value="inbound">Inbound</option>
+          </select>
+          <select id="crmFilterCategory" aria-label="Category">
+            <option value="">All categories</option>
+            <option value="med_spa">Med spa</option>
+            <option value="aesthetic">Aesthetic clinic</option>
+            <option value="plastic_surgery">Plastic surgery</option>
+            <option value="ortho">Orthopedics</option>
+            <option value="podiatry">Podiatry clinic</option>
+            <option value="pain_management">Pain management clinic</option>
+            <option value="wellness">Wellness</option>
+          </select>
+          <select id="crmSort" aria-label="Sort">
+            <option value="score" selected>Sort: Lead score</option>
+            <option value="priority">Sort: Priority (buy + switch)</option>
+            <option value="buy">Sort: Buy propensity</option>
+            <option value="switch">Sort: Switch likelihood</option>
+            <option value="patients">Sort: Patients/day</option>
+            <option value="newest">Sort: Newest</option>
+          </select>
+          <label class="crm-check">
+            <input type="checkbox" id="crmAllTypes"> All clinic types
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmOffersRegen"> Already runs regen
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmAdvertising"> Advertising regen
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmCashPay"> Cash-pay
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmSwitchWindow"> Switch window
+          </label>
+          <label class="crm-check">
+            <input type="checkbox" id="crmHotOnly"> Priority: Hot only
+          </label>
+        </div>
+        <div class="crm-import">
+          <input type="file" id="crmImportFile" accept=".csv,.json,text/csv,application/json" hidden data-no-log>
+          <button type="button" class="btn sm" data-action="import-leads" title="Load a CSV or JSON lead list; stays on this device">Import leads</button>
+        </div>
+        <div class="crm-tabs" role="tablist" aria-label="CRM view">
+          <button type="button" class="btn sm primary" id="crmTabLeads" data-action="tab" data-tab="leads" role="tab" aria-selected="true">Lead List</button>
+          <button type="button" class="btn sm" id="crmTabQueue" data-action="tab" data-tab="queue" role="tab" aria-selected="false">Queue</button>
+        </div>
+      </div>
+
+      <!-- ── Lead List view ── -->
+      <div class="crm-view" id="crmView-leads">
+        <div class="crm-split">
+          <!-- Lead list. Rows here are PLACEHOLDER sample data, real leads are
+               PII and were not captured. Rendered by crm.js. -->
+          <div class="crm-list" id="crmLeadList" role="listbox" aria-label="Leads"></div>
+
+          <!-- Lead detail. Fields match exactly what portal-crm.js renders. -->
+          <div class="crm-detail" id="crmLeadDetail">
+            <p class="crm-empty">Select a lead to view details.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Queue builder view ── -->
+      <div class="crm-view" id="crmView-queue" hidden>
+        <div class="crm-panel">
+          <h3>Build a call queue</h3>
+          <p class="muted">Build a prioritized call list from your current territory and category.</p>
+          <div class="form-grid crm-queue-form">
+            <div class="field">
+              <label for="crmQueueTerritory">Territory</label>
+              <select id="crmQueueTerritory">
+                <option value="" selected>All states</option>
+                <option value="AL">Alabama</option>
+                <option value="AK">Alaska</option>
+                <option value="AZ">Arizona</option>
+                <option value="AR">Arkansas</option>
+                <option value="CA">California</option>
+                <option value="CO">Colorado</option>
+                <option value="CT">Connecticut</option>
+                <option value="DE">Delaware</option>
+                <option value="DC">District of Columbia</option>
+                <option value="FL">Florida</option>
+                <option value="GA">Georgia</option>
+                <option value="HI">Hawaii</option>
+                <option value="ID">Idaho</option>
+                <option value="IL">Illinois</option>
+                <option value="IN">Indiana</option>
+                <option value="IA">Iowa</option>
+                <option value="KS">Kansas</option>
+                <option value="KY">Kentucky</option>
+                <option value="LA">Louisiana</option>
+                <option value="ME">Maine</option>
+                <option value="MD">Maryland</option>
+                <option value="MA">Massachusetts</option>
+                <option value="MI">Michigan</option>
+                <option value="MN">Minnesota</option>
+                <option value="MS">Mississippi</option>
+                <option value="MO">Missouri</option>
+                <option value="MT">Montana</option>
+                <option value="NE">Nebraska</option>
+                <option value="NV">Nevada</option>
+                <option value="NH">New Hampshire</option>
+                <option value="NJ">New Jersey</option>
+                <option value="NM">New Mexico</option>
+                <option value="NY">New York</option>
+                <option value="NC">North Carolina</option>
+                <option value="ND">North Dakota</option>
+                <option value="OH">Ohio</option>
+                <option value="OK">Oklahoma</option>
+                <option value="OR">Oregon</option>
+                <option value="PA">Pennsylvania</option>
+                <option value="RI">Rhode Island</option>
+                <option value="SC">South Carolina</option>
+                <option value="SD">South Dakota</option>
+                <option value="TN">Tennessee</option>
+                <option value="TX">Texas</option>
+                <option value="UT">Utah</option>
+                <option value="VT">Vermont</option>
+                <option value="VA">Virginia</option>
+                <option value="WA">Washington</option>
+                <option value="WV">West Virginia</option>
+                <option value="WI">Wisconsin</option>
+                <option value="WY">Wyoming</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="crmQueueCategory">Category</label>
+              <select id="crmQueueCategory">
+                <option value="">Any</option>
+                <option value="med_spa">Med spa</option>
+                <option value="aesthetic">Aesthetic clinic</option>
+                <option value="plastic_surgery">Plastic surgery</option>
+                <option value="ortho">Orthopedics</option>
+                <option value="podiatry">Podiatry clinic</option>
+                <option value="pain_management">Pain management clinic</option>
+                <option value="wellness">Wellness</option>
+              </select>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn primary" data-action="build-queue">Build queue</button>
+            </div>
+          </div>
+        </div>
+        <ul class="doc-list" id="crmQueueList" style="margin-top:18px;max-width:720px"></ul>
+      </div>
+
+      <footer class="portal-footer">
+        <span>&copy; CelluNOVA</span> ·
+        <a href="/terms">Terms</a> ·
+        <a href="/privacy">Privacy</a> ·
+        <a href="/portal/support">Support</a>
+      </footer>
+    </main>
+  </div>
+</div>
+
+<!-- ══ REPLAY OVERLAY ════════════════════════════════════════════════════
+     Present in markup but INERT. In the original this plays back recorded
+     clinic sessions (see SECURITY-REVIEW.md §1). Here it does nothing unless
+     the server marks the session as replay-authorized (PORTAL_CONFIG.canReplay)
+    , and even then this rebuild ships no player, since replaying captured
+     keystrokes is the exact behaviour the review flags. -->
+<div id="replayOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="replayTitle" hidden>
+  <div class="modal-box modal-box-sm">
+    <div class="modal-head">
+      <div>
+        <h2 id="replayTitle">Session Replay</h2>
+        <div class="modal-sub">Replay is disabled in this build.</div>
+      </div>
+      <button type="button" class="modal-x" data-action="close-replay" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="replaySessionSel">Session</label>
+        <select id="replaySessionSel" disabled><option value="">, </option></select>
+      </div>
+      <div class="field">
+        <label for="replaySpeed">Speed</label>
+        <select id="replaySpeed" disabled>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </div>
+      <p class="form-error" hidden></p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ OUTREACH DRAFT MODAL ══════════════════════════════════════════════
+     Filled by crm.js from the selected lead's intelligence signals. The draft
+     is editable; Copy and "Open in email app" are the only outputs. Nothing is
+     sent from this build. -->
+<div id="outreachModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="outreachTitle" hidden>
+  <div class="modal-box modal-box-lg">
+    <div class="modal-head">
+      <div>
+        <h2 id="outreachTitle">Outreach draft</h2>
+        <div class="modal-sub" id="outreachSub"></div>
+      </div>
+      <button type="button" class="modal-x" data-action="close-outreach" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field">
+          <label for="outreachSubject">Subject</label>
+          <input type="text" id="outreachSubject" autocomplete="off" data-no-log>
+        </div>
+        <div class="field">
+          <label for="outreachBody">Email <span class="field-hint">(edit before sending)</span></label>
+          <textarea id="outreachBody" rows="14" data-no-log></textarea>
+        </div>
+        <p class="muted outreach-note">Composed from this lead's signals: the angle, opener, and ask
+           change with supplier status, contract window, services offered, and engagement. In
+           production this calls the AI drafting endpoint; this build sends nothing.</p>
+        <div class="modal-actions">
+          <span class="muted" id="outreachCopied" aria-live="polite" hidden>Copied</span>
+          <button type="button" class="btn ghost" data-action="copy-outreach">Copy</button>
+          <a class="btn primary" id="outreachMailto" href="#" rel="noopener noreferrer">Open in email app</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ GENERIC MODAL ═════════════════════════════════════════════════════ -->
+<div id="cModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cModalTitle" hidden>
+  <div class="modal-box modal-box-xs">
+    <h2 id="cModalTitle"></h2>
+    <p class="modal-sub" id="cModalBody"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="cModalCancel" hidden>Cancel</button>
+      <button type="button" class="btn primary" id="cModalOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="crm.js"></script>
+</body>
+</html>

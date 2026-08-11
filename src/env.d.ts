@@ -3,6 +3,10 @@
 // only knows about the `DB` binding declared in wrangler.json).
 
 interface Env {
+	// --- Static assets (the CelluNOVA site under web/, served on cellsunova.com) ---
+	/** Workers static assets binding; run_worker_first routes everything here first. */
+	ASSETS: { fetch(request: Request): Promise<Response> };
+
 	// --- Access control ---
 	/**
 	 * Shared bearer token (secret) for the HTTP endpoints `/jarvis` and

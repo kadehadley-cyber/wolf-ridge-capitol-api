@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com; img-src 'self' data:; base-uri 'none';
+  form-action 'self'; object-src 'none'">
+<!-- frame-ancestors belongs in a response header (ignored in a <meta> policy). -->
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="description" content="CelluNOVA: physician-led distribution of MSC biologics, exosomes, and regenerative products for clinics.">
+<meta property="og:title" content="CelluNOVA">
+<meta property="og:description" content="Decades of expertise advancing regenerative solutions.">
+<title>CelluNOVA</title>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+</head>
+<body class="site">
+
+<!-- ══ NAV ══════════════════════════════════════════════════════════════ -->
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="logo" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="wordmark">CelluNOVA</span></a>
+    <nav class="nav-menu" aria-label="Primary">
+      <a href="/portal/protocols" data-action="signin">Portal</a>
+      <a href="/portal/protocols">Protocols</a>
+      <a href="#become-a-rep">Become a Rep</a>
+      <a href="#im-first">About Us</a>
+    </nav>
+    <div class="nav-actions">
+      <a class="nav-order" href="/portal/pricing">Order Products</a>
+      <a class="nav-signup" href="#clinic-signup">Clinic Signup</a>
+    </div>
+    <button class="nav-burger" id="navBurger" aria-label="Menu" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- ══ HERO ═════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <canvas id="cellField" aria-hidden="true"></canvas>
+  <div class="wrap hero-inner">
+    <h1 class="hero-rot" id="heroRot"
+        data-lines='["Join the regenerative care movement.","Decades of expertise advancing regenerative solutions.","Regenerative biologics, sourced by physicians."]'>Join the regenerative care movement.</h1>
+    <div class="hero-cta">
+      <a class="btn primary" href="#clinic-signup">Clinic Sign-up</a>
+      <a class="btn outline" href="#talk-to-an-expert">Talk to an Expert</a>
+    </div>
+  </div>
+</section>
+
+<!-- Floating welcome card. Hidden by default: it appears only for a returning
+     user who signed in and ticked "keep me signed in" (see site.js). -->
+<aside class="welcome-card" id="welcomeCard" hidden>
+  <h3>Welcome back, Dr</h3>
+  <p>You&rsquo;re already logged in. Would you like to go to your portal?</p>
+  <div class="welcome-actions">
+    <a class="btn primary" href="/portal/protocols" data-welcome="go">Go to Portal</a>
+    <button type="button" class="btn welcome-stay" data-welcome="stay">Stay Here</button>
+  </div>
+</aside>
+
+<!-- Sticky schedule-a-call button -->
+<a class="call-md" href="#talk-to-an-expert">Schedule a Call with an MD</a>
+
+<!-- ══ IM FIRST FRAMEWORK ═══════════════════════════════════════════════ -->
+<section class="imfirst" id="im-first">
+  <div class="wrap imfirst-grid">
+    <div class="imfirst-body">
+      <span class="eyebrow">Clinical Innovation</span>
+      <h2>IM First Framework</h2>
+      <p>Our own Dr. Hadley was among the earliest clinicians in the regenerative medicine space to formalize and systematize an intramuscular-focused biologic administration model, developed with the objective of optimizing clinical response patterns observed in practice.</p>
+      <p>While many early biologic implementations relied heavily on intravenous infusion models, Dr. Hadley explored alternative administration strategies based on tissue targeting principles, absorption dynamics, and repeatable application within real-world clinical settings. Over time, this IM-centered framework demonstrated consistent treatment response patterns in his practice.</p>
+      <p>Clinics implementing this model often find that the structured IM approach not only supports therapeutic consistency but also integrates smoothly into existing practice workflows.</p>
+      <p>Partner clinics receive access to these proprietary implementation frameworks and treatment structures developed through years of clinical refinement.</p>
+      <hr class="imfirst-rule">
+      <div class="imfirst-stats">
+        <div><div class="imstat-v">IM First</div><div class="imstat-l">Framework Pioneer</div></div>
+        <div><div class="imstat-v">ABRM</div><div class="imstat-l">Board Diplomate</div></div>
+      </div>
+    </div>
+    <div class="orb-wrap" aria-hidden="true">
+      <div class="orb-ring r3"></div>
+      <div class="orb-ring r2"></div>
+      <div class="orb-ring r1"></div>
+      <div class="orb"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ WHAT WE OFFER ════════════════════════════════════════════════════ -->
+<section class="section" id="offer">
+  <div class="wrap">
+    <div class="section-head center">
+      <span class="eyebrow">What partner clinics get</span>
+      <h2>Everything you need to run regenerative care</h2>
+      <p>More than product. Partner clinics get the protocols, materials, and physician support to make regenerative medicine work in practice.</p>
+    </div>
+    <div class="offer-grid">
+      <div class="offer-card">
+        <div class="offer-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+        <h3>Clinical protocols</h3>
+        <p>Evidence-based administration protocols for IA, IM, IV and specialized routes, organized by category and ready in the portal.</p>
+      </div>
+      <div class="offer-card">
+        <div class="offer-ic c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l15-6v14L3 13z"/><path d="M18 8a3 3 0 010 6"/><path d="M7 13v4a2 2 0 002 2h1"/></svg></div>
+        <h3>Marketing material</h3>
+        <p>Ready-to-use marketing assets and local market intelligence, so your team can bring regenerative care to the right patients.</p>
+      </div>
+      <div class="offer-card">
+        <div class="offer-ic p"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M4 20l1-4L16 5a2 2 0 013 3L8 19z"/></svg></div>
+        <h3>Template notes</h3>
+        <p>Clinical documentation and chart-note templates that keep treatment records consistent and audit-ready across your team.</p>
+      </div>
+      <div class="offer-card feature">
+        <span class="offer-tag">MD to MD</span>
+        <div class="offer-body">
+          <div class="offer-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg></div>
+          <h3>MD-to-MD clinical support</h3>
+          <p>Book appointments to speak directly with a physician from CelluNOVA&rsquo;s medical board. Talk through complex cases, how to integrate regenerative medicine into your clinic, and what has worked best in real-world practice.</p>
+          <a class="btn primary" href="#talk-to-an-expert">Book an MD-to-MD call</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ PRODUCT LINES ════════════════════════════════════════════════════ -->
+<section class="section alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The NOVA Product Family</span>
+      <h2>Products plus the platform around them</h2>
+      <p>The CelluNOVA platform combines NOVA-FLOW, NOVA-FLEX, NOVA-ELITE, and NOVA-EXO+ with
+         physician education, direct MD access, proprietary protocols, and AI-enabled growth tools.</p>
+    </div>
+    <div class="lines">
+      <div class="line msc">
+        <span class="line-tag">NOVA line</span>
+        <h3>NOVA-FLOW</h3>
+        <p>$800 per cc. Composition, volumes, and matched protocols in the clinic portal.</p>
+      </div>
+      <div class="line exo">
+        <span class="line-tag">NOVA line</span>
+        <h3>NOVA-FLEX</h3>
+        <p>$800 per cc. Composition, volumes, and matched protocols in the clinic portal.</p>
+      </div>
+      <div class="line lyo">
+        <span class="line-tag">NOVA line</span>
+        <h3>NOVA-ELITE</h3>
+        <p>$800 per cc. Composition, volumes, and matched protocols in the clinic portal.</p>
+      </div>
+      <div class="line msc">
+        <span class="line-tag">Exosomes</span>
+        <h3>NOVA-EXO+</h3>
+        <p>$500 per cc. Exosome product of the NOVA line, with protocol-matched dosing.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ HOW IT WORKS ═════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-head center">
+      <span class="eyebrow">How it works</span>
+      <h2>From portal access to shipment</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="step-n">1</div><h3>Get portal access</h3><p>Verified clinics unlock protocols and ordering in the CelluNOVA portal.</p></div>
+      <div class="step"><div class="step-n">2</div><h3>Build &amp; submit an order</h3><p>Add products and case notes. A physician reviews every order before any payment is taken.</p></div>
+      <div class="step"><div class="step-n">3</div><h3>We ship, you treat</h3><p>Approved orders ship cold-chain with tracking, plus ongoing protocol and clinical support.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ CTA BAND ═════════════════════════════════════════════════════════ -->
+<section class="section" id="clinic-signup">
+  <div class="wrap">
+    <div class="cta-band">
+      <h2>Join the regenerative care movement</h2>
+      <p>Verified clinics get protocols, ordering, and physician-reviewed care in one portal.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="/portal/protocols">Clinic Sign-up</a>
+        <a class="btn outline" href="#talk-to-an-expert">Talk to an Expert</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ FOOTER ═══════════════════════════════════════════════════════════ -->
+<footer class="footer" id="become-a-rep">
+  <div class="wrap">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="logo" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="wordmark">CelluNOVA</span></a>
+        <p>Physician-led distribution of MSC biologics, exosomes, and regenerative products for licensed clinics.</p>
+      </div>
+      <div class="footer-cols">
+        <div class="footer-col">
+          <h4>Product</h4>
+          <a href="/portal/protocols">Protocols</a>
+          <a href="/portal/pricing">Order Products</a>
+          <a href="/portal/protocols">Portal</a>
+        </div>
+        <div class="footer-col">
+          <h4>Company</h4>
+          <a href="#im-first">About Us</a>
+          <a href="#become-a-rep">Become a Rep</a>
+          <a href="/portal/support">Support</a>
+        </div>
+        <div class="footer-col">
+          <h4>Legal</h4>
+          <a href="/terms">Terms</a>
+          <a href="/privacy">Privacy</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-legal">
+      <span>&copy; CelluNOVA. Physician-led biologics distribution.</span>
+      <span>For licensed clinics only. Not medical advice. Regenerative claims subject to applicable regulations.</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ══ SIGN-IN MODAL ════════════════════════════════════════════════════ -->
+<div class="modal-ov" id="signinModal" role="dialog" aria-modal="true" aria-labelledby="signinTitle" hidden>
+  <form class="modal-card" id="signinForm" novalidate>
+    <h2 id="signinTitle">Sign in</h2>
+    <p class="sub">Clinic portal access for verified providers.</p>
+    <div class="fld">
+      <label for="siEmail">Email</label>
+      <input type="email" id="siEmail" autocomplete="username" placeholder="you@clinic.com">
+    </div>
+    <div class="fld">
+      <label for="siPass">Password</label>
+      <input type="password" id="siPass" autocomplete="current-password" placeholder="Your password">
+    </div>
+    <label class="remember">
+      <input type="checkbox" id="siRemember">
+      Keep me signed in and autofill on this device
+    </label>
+    <div class="modal-actions">
+      <button type="button" class="btn welcome-stay" data-action="close-signin">Cancel</button>
+      <button type="submit" class="btn primary">Sign in</button>
+    </div>
+    <p class="sub" style="margin:14px 0 0;font-size:11px;">Demo sign-in: no real authentication. Only a display flag and, if you tick the box, your email for autofill are stored on this device, never a password or token.</p>
+  </form>
+</div>
+
+<script src="site.js"></script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'self';
+  style-src 'self';
+  base-uri 'none';
+  form-action 'none'">
+<title>Protocol detail</title>
+<link rel="stylesheet" href="frame.css">
+</head>
+<body>
+<article class="proto-doc">
+  <div class="proto-doc-eyebrow" id="protoRoute">Protocol</div>
+  <h1 class="proto-doc-title" id="protoTitle">Select a protocol</h1>
+
+  <div class="proto-doc-notice">
+    <strong>Content not included in this rebuild.</strong>
+    In production this frame is server-rendered by
+    <code>/portal.php?action=proto_render</code>. The clinical content — indications,
+    dosing, dilution, administration sequence and post-treatment instructions —
+    was never captured in the DevTools export, and inventing dosing guidance for
+    a clinical portal would be worse than leaving it blank. Point this frame at
+    the real endpoint to restore it.
+  </div>
+
+  <div class="proto-doc-grid">
+    <section class="proto-doc-card">
+      <h2>Indications</h2>
+      <p class="ph"></p><p class="ph short"></p>
+    </section>
+    <section class="proto-doc-card">
+      <h2>Preparation</h2>
+      <p class="ph"></p><p class="ph short"></p>
+    </section>
+    <section class="proto-doc-card">
+      <h2>Administration</h2>
+      <p class="ph"></p><p class="ph"></p><p class="ph short"></p>
+    </section>
+    <section class="proto-doc-card">
+      <h2>Post-Treatment</h2>
+      <p class="ph"></p><p class="ph short"></p>
+    </section>
+  </div>
+</article>
+
+<script src="frame.js"></script>
+</body>
+</html>
