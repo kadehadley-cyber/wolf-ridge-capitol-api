@@ -217,7 +217,6 @@
      * populate. Kept in a compact per-id map so the LEADS array above stays
      * readable; missing fields fall back to SIGNAL_DEFAULTS. Replace with the
      * server's enriched values.
-     *   cash_pay_focus        , predominantly cash-pay / elective practice
      *   advertising_regen     , actively running ads for PRP / regen / etc.
      *   website_mentions_regen, site already markets regenerative therapies
      *   google_rating / review_count, reputation + demand proxy
@@ -230,19 +229,19 @@
      *   buy_likelihood        , server override for the buy score (else null)
      * ═════════════════════════════════════════════════════════════════════ */
     var SIGNAL_DEFAULTS = {
-        cash_pay_focus: false, advertising_regen: false, website_mentions_regen: false,
+        advertising_regen: false, website_mentions_regen: false,
         google_rating: null, review_count: null, decision_maker_is_owner: false,
         contract_status: 'none', supplier_risk: false, engagement: 'none',
         competitors_nearby: null, buy_likelihood: null
     };
     var SIGNALS = {
-        1: { cash_pay_focus: true, website_mentions_regen: true, google_rating: 4.6, review_count: 180, decision_maker_is_owner: true, contract_status: 'none', engagement: 'visited_pricing', competitors_nearby: 5 },
-        2: { cash_pay_focus: true, advertising_regen: true, website_mentions_regen: true, google_rating: 4.8, review_count: 320, decision_maker_is_owner: false, contract_status: 'month_to_month', engagement: 'sample_requested', competitors_nearby: 9 },
-        3: { cash_pay_focus: true, advertising_regen: true, website_mentions_regen: true, google_rating: 4.9, review_count: 410, decision_maker_is_owner: true, contract_status: 'in_contract', engagement: 'demo', competitors_nearby: 4 },
+        1: { website_mentions_regen: true, google_rating: 4.6, review_count: 180, decision_maker_is_owner: true, contract_status: 'none', engagement: 'visited_pricing', competitors_nearby: 5 },
+        2: { advertising_regen: true, website_mentions_regen: true, google_rating: 4.8, review_count: 320, decision_maker_is_owner: false, contract_status: 'month_to_month', engagement: 'sample_requested', competitors_nearby: 9 },
+        3: { advertising_regen: true, website_mentions_regen: true, google_rating: 4.9, review_count: 410, decision_maker_is_owner: true, contract_status: 'in_contract', engagement: 'demo', competitors_nearby: 4 },
         4: { google_rating: 4.3, review_count: 75, decision_maker_is_owner: true, contract_status: 'expiring', supplier_risk: true, engagement: 'email_open', competitors_nearby: 6 },
         5: { google_rating: null, review_count: null, contract_status: 'none', engagement: 'none', competitors_nearby: 0 },
-        6: { cash_pay_focus: true, advertising_regen: true, google_rating: 4.7, review_count: 210, decision_maker_is_owner: true, contract_status: 'month_to_month', engagement: 'visited_pricing', competitors_nearby: 7 },
-        7: { cash_pay_focus: true, advertising_regen: true, website_mentions_regen: true, google_rating: 4.5, review_count: 150, decision_maker_is_owner: true, contract_status: 'none', engagement: 'sample_requested', competitors_nearby: 8 },
+        6: { advertising_regen: true, google_rating: 4.7, review_count: 210, decision_maker_is_owner: true, contract_status: 'month_to_month', engagement: 'visited_pricing', competitors_nearby: 7 },
+        7: { advertising_regen: true, website_mentions_regen: true, google_rating: 4.5, review_count: 150, decision_maker_is_owner: true, contract_status: 'none', engagement: 'sample_requested', competitors_nearby: 8 },
         8: { advertising_regen: true, website_mentions_regen: true, google_rating: 4.6, review_count: 260, decision_maker_is_owner: true, contract_status: 'expiring', supplier_risk: true, engagement: 'demo', competitors_nearby: 5 },
         9: { google_rating: 4.2, review_count: 60, decision_maker_is_owner: true, contract_status: 'none', engagement: 'none', competitors_nearby: 3 }
     };
@@ -463,7 +462,6 @@
         if (l.offers_prp && !l.offers_exosomes && !l.offers_stem_cells) { s += 8; reasons.push('Runs PRP only, natural step up to exosomes/stem cells'); }
         if (l.website_mentions_regen) { s += 7; reasons.push('Website already markets regenerative therapies'); }
         if (l.advertising_regen) { s += 12; reasons.push('Actively advertising regenerative treatments, demand in place'); }
-        if (l.cash_pay_focus) { s += 8; reasons.push('Cash-pay / elective focus, margin fits biologics'); }
         var sf = SPECIALTY_FIT[l.category] || 5; s += sf;
         if (sf >= 9) reasons.push(cap(String(l.category).replace(/_/g, ' ')) + ', high-use specialty for biologics');
         if (l.patients_per_day >= 40) { s += 8; reasons.push('High patient volume (' + l.patients_per_day + '/day)'); }
@@ -600,8 +598,6 @@
             sort: $('crmSort').value,
             allTypes: $('crmAllTypes').checked,
             offersRegen: $('crmOffersRegen').checked,
-            advertising: $('crmAdvertising').checked,
-            cashPay: $('crmCashPay').checked,
             switchWindow: $('crmSwitchWindow').checked,
             hotOnly: $('crmHotOnly').checked
         };
@@ -613,8 +609,6 @@
         if (f.source && lead.source !== f.source) return false;
         if (!f.allTypes && f.category && lead.category !== f.category) return false;
         if (f.offersRegen && !(lead.offers_prp || lead.offers_exosomes || lead.offers_stem_cells)) return false;
-        if (f.advertising && !lead.advertising_regen) return false;
-        if (f.cashPay && !lead.cash_pay_focus) return false;
         if (f.switchWindow && !(lead.supplier_risk || lead.contract_status === 'month_to_month' || lead.contract_status === 'expiring')) return false;
         if (f.hotOnly && priority(lead).band !== 'hot') return false;
         if (f.q) {
@@ -828,7 +822,6 @@
         var sig = document.createElement('div');
         sig.className = 'crm-chips';
         sig.append(
-            yesNoChip(lead.cash_pay_focus, 'Cash-pay focus'),
             yesNoChip(lead.advertising_regen, 'Advertising regen'),
             yesNoChip(lead.website_mentions_regen, 'Markets regen'),
             yesNoChip(lead.decision_maker_is_owner, 'Owner decides')
@@ -1276,8 +1269,7 @@
     }
 
     ['crmSearch', 'crmFilterStage', 'crmFilterSource', 'crmFilterCategory',
-     'crmSort', 'crmOffersRegen', 'crmAdvertising', 'crmCashPay',
-     'crmSwitchWindow', 'crmHotOnly'].forEach(function (id) {
+     'crmSort', 'crmOffersRegen', 'crmSwitchWindow', 'crmHotOnly'].forEach(function (id) {
         var el = $(id);
         if (el) el.addEventListener(el.tagName === 'INPUT' && el.type !== 'checkbox' ? 'input' : 'change', applyFilters);
     });
