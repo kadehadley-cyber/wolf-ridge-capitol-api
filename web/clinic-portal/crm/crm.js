@@ -309,6 +309,7 @@
                 category: String(r.category || '').trim().toLowerCase().replace(/\s+/g, '_'),
                 source: String(r.source || 'import'),
                 score: toNum(r.score) || 0,
+                scan_score: toNum(r.scan_score),
                 last_contacted: String(r.last_contacted || ''),
                 next_followup: String(r.next_followup || ''),
                 rep_first: String(r.rep_first || r.rep || ''), rep_last: String(r.rep_last || ''),
@@ -477,6 +478,13 @@
         if (l.engagement === 'sample_requested' || l.engagement === 'demo') { s += 10; reasons.push(engagementLabel(l.engagement) + ', active buying signal'); }
         else if (l.engagement === 'visited_pricing') { s += 6; reasons.push('Visited pricing, evaluating'); }
         if (l.decision_maker_is_owner) { s += 4; reasons.push('Physician-owner decides, faster close'); }
+
+        // Registry-fit score from the scan (primary specialty, regenerative
+        // sub-specialty, organization, reachability) nudges the buy propensity.
+        if (l.scan_score != null) {
+            s = Math.round(s * 0.7 + l.scan_score * 0.3);
+            if (l.scan_score >= 75) reasons.push('Top registry match, primary specialty and/or regenerative sub-specialty');
+        }
 
         if (l.buy_likelihood != null) return band(Number(l.buy_likelihood), reasons);
         return band(s, reasons);
