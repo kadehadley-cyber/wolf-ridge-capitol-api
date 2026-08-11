@@ -20,7 +20,7 @@ interface Env {
 	RESEND_API_KEY?: string;
 	/** Verified sender, e.g. "CelluNOVA <no-reply@cellsunova.com>". */
 	MAIL_FROM?: string;
-	/** Where clinic applications are sent for review. Defaults to DrHadley@cellunova.bio. */
+	/** Where clinic applications are sent for review. Defaults to DrHadley@cellsunova.com. */
 	ADMIN_NOTIFY_EMAIL?: string;
 
 	// --- Access control ---
