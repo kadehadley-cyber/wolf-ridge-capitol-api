@@ -321,6 +321,7 @@
                 offers_prp: toBool(r.offers_prp),
                 offers_exosomes: toBool(r.offers_exosomes),
                 offers_stem_cells: toBool(r.offers_stem_cells),
+                npi: String(r.npi || ''),
                 current_supplier: String(r.current_supplier || r.supplier || ''),
                 price_per_cc_current: toNum(r.price_per_cc_current != null ? r.price_per_cc_current : r.price_per_cc),
                 est_monthly_cc: toNum(r.est_monthly_cc) || 0,
@@ -858,6 +859,7 @@
             kv(grid, 'Website', safe === '#' ? textNode(lead.website + '  (blocked: unsafe URL)')
                                               : linkNode(lead.website, lead.website), true);
         }
+        if (lead.npi) kv(grid, 'NPI', textNode(lead.npi));
         if (lead.category) kv(grid, 'Category', textNode(String(lead.category).replace(/_/g, ' ')));
         if (lead.source)   kv(grid, 'Source', textNode(lead.source));
         if (lead.last_contacted) kv(grid, 'Last Contacted', textNode(fmt(lead.last_contacted)));
@@ -1086,6 +1088,84 @@
         }
     }
 
+    /* ══ FIND LEADS (SCAN) ════════════════════════════════════════════════
+     * Posts to the scan endpoint, which searches the NPI Registry by state
+     * and specialty server-side, dedupes, and appends. Nothing manual. */
+    var scanModal = $('scanModal'), scanLastFocus = null, scanning = false;
+
+    function populateScanStates() {
+        var sel = $('scanState');
+        if (!sel || sel.options.length) return;
+        stateCbs().forEach(function (cb) {
+            var o = document.createElement('option');
+            o.value = cb.value;
+            o.textContent = cb.parentNode.textContent.trim();
+            sel.appendChild(o);
+        });
+    }
+    function openScan() {
+        populateScanStates();
+        $('scanError').hidden = true;
+        $('scanStatus').textContent = '';
+        scanLastFocus = document.activeElement;
+        scanModal.hidden = false;
+        $('scanState').focus();
+    }
+    function closeScan() {
+        if (scanning) return;
+        scanModal.hidden = true;
+        if (scanLastFocus && scanLastFocus.focus) scanLastFocus.focus();
+    }
+    function runScan() {
+        if (scanning) return;
+        var cats = Array.prototype.slice.call(document.querySelectorAll('.scan-cat'))
+            .filter(function (c) { return c.checked; })
+            .map(function (c) { return c.value; });
+        var err = $('scanError');
+        if (!cats.length) { err.textContent = 'Pick at least one specialty.'; err.hidden = false; return; }
+        err.hidden = true;
+        scanning = true;
+        $('scanRun').disabled = true;
+        $('scanStatus').textContent = 'Searching the registry…';
+        fetch('/portal/api/leads/scan', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                state: $('scanState').value,
+                categories: cats,
+                limit: Number($('scanLimit').value) || 50
+            })
+        })
+            .then(function (res) {
+                return res.json().then(function (data) {
+                    if (!res.ok) throw new Error(data && data.error ? data.error : 'Scan failed.');
+                    return data;
+                });
+            })
+            .then(function (data) {
+                scanning = false;
+                $('scanRun').disabled = false;
+                var added = data.added || 0;
+                if (added > 0) {
+                    var list = normalizeLeads((data && data.leads) || []);
+                    scanModal.hidden = true;
+                    applyLeads(list, 'server', 'Added ' + added + (added === 1 ? ' new lead' : ' new leads')
+                        + ' from the registry scan.');
+                } else {
+                    $('scanStatus').textContent = 'No new clinics found; everything matched leads you already have. '
+                        + 'Try another state or specialty.';
+                }
+            })
+            .catch(function (e) {
+                scanning = false;
+                $('scanRun').disabled = false;
+                $('scanStatus').textContent = '';
+                err.textContent = (e && e.message) ? e.message : 'The scan could not reach the registry. Try again.';
+                err.hidden = false;
+            });
+    }
+
     /* ══ QUEUE BUILDER ════════════════════════════════════════════════════
      * Client-side call list: providers in the chosen territory/category, ranked
      * by priority. In production this would page through the server's leads. */
@@ -1137,6 +1217,9 @@
             case 'open-lead':   openLead(Number(el.dataset.id)); break;
             case 'tab':         showTab(el.dataset.tab); break;
             case 'import-leads': $('crmImportFile').click(); break;
+            case 'open-scan':  openScan(); break;
+            case 'close-scan': closeScan(); break;
+            case 'run-scan':   runScan(); break;
             case 'clear-local':
                 cModal.confirm('Clear saved leads',
                     'Remove the lead list saved on this device and go back to the placeholders?',
@@ -1200,9 +1283,12 @@
 
     outreachModal.addEventListener('click', function (e) { if (e.target === outreachModal) closeOutreach(); });
 
+    scanModal.addEventListener('click', function (e) { if (e.target === scanModal) closeScan(); });
+
     document.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape') return;
         if (cModal.isOpen()) { cModal.close(); return; }
+        if (!scanModal.hidden) { closeScan(); return; }
         if (!outreachModal.hidden) { closeOutreach(); return; }
         if (!$('replayOverlay').hidden) $('replayOverlay').hidden = true;
     });

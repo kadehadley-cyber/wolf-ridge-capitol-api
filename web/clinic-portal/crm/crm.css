@@ -150,6 +150,12 @@
 .crm-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .crm-tool-status { font-size: 12px; margin-top: 8px; min-height: 1.2em; line-height: 1.5; }
 
+/* Find-leads scan modal */
+.scan-cats { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 4px 0; }
+.scan-cats .crm-check { color: var(--text); }
+#scanStatus { font-size: 12px; margin-right: auto; text-align: left; line-height: 1.5; }
+#scanModal .modal-actions { align-items: center; }
+
 /* Outreach draft modal */
 #outreachModal input[type="text"] {
     font-family: inherit; font-size: 14px;

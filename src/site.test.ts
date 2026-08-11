@@ -342,6 +342,89 @@ describe("cellsunova.com site routing", () => {
 		expect(againData.leads).toHaveLength(2);
 	});
 
+	it("scans the NPI registry, appends new clinics, and dedupes on rescan", async () => {
+		const { env, db } = makeEnv();
+		const { cookie } = await login();
+
+		const realFetch = globalThis.fetch;
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			const u = String(input);
+			if (u.startsWith("https://npiregistry.cms.hhs.gov/")) {
+				return new Response(
+					JSON.stringify({
+						results: [
+							{
+								number: 1111111111,
+								basic: { organization_name: "Registry Ortho Group" },
+								addresses: [
+									{ address_purpose: "LOCATION", address_1: "1 Main St", city: "Boise", state: "ID", telephone_number: "208-555-0100" },
+								],
+							},
+							{
+								number: 2222222222,
+								basic: { organization_name: "Registry Pain Clinic" },
+								addresses: [
+									{ address_purpose: "LOCATION", address_1: "2 Oak Ave", city: "Nampa", state: "ID", telephone_number: "208-555-0200" },
+								],
+							},
+						],
+					}),
+					{ headers: { "content-type": "application/json" } },
+				);
+			}
+			return realFetch(input as never);
+		}) as typeof fetch;
+
+		try {
+			const scan = await worker.fetch!(
+				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+					method: "POST",
+					headers: { cookie, "content-type": "application/json" },
+					body: JSON.stringify({ state: "ID", categories: ["ortho"], limit: 50 }),
+				}) as never,
+				env,
+				ctx,
+			);
+			expect(scan.status).toBe(200);
+			const data = (await scan.json()) as { added: number; leads: Array<Record<string, unknown>> };
+			expect(data.added).toBe(2);
+			expect(data.leads.map((l) => l.name)).toEqual(["Registry Ortho Group", "Registry Pain Clinic"]);
+			expect(data.leads[0].source).toBe("intelligence");
+			expect(db.leads.size).toBe(2);
+
+			// Rescan with identical registry data: everything dedupes, nothing added.
+			const again = await worker.fetch!(
+				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+					method: "POST",
+					headers: { cookie, "content-type": "application/json" },
+					body: JSON.stringify({ state: "ID", categories: ["ortho"], limit: 50 }),
+				}) as never,
+				env,
+				ctx,
+			);
+			const againData = (await again.json()) as { added: number };
+			expect(againData.added).toBe(0);
+			expect(db.leads.size).toBe(2);
+		} finally {
+			globalThis.fetch = realFetch;
+		}
+	});
+
+	it("rejects a scan without a state or specialties", async () => {
+		const { env } = makeEnv();
+		const { cookie } = await login();
+		const res = await worker.fetch!(
+			new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+				method: "POST",
+				headers: { cookie, "content-type": "application/json" },
+				body: JSON.stringify({ categories: ["ortho"] }),
+			}) as never,
+			env,
+			ctx,
+		);
+		expect(res.status).toBe(400);
+	});
+
 	it("leaves other hosts on the Jarvis routes", async () => {
 		const { res, calls } = await hit("/portal/crm/", "example.workers.dev");
 		expect(calls).toEqual([]);           // assets never touched
