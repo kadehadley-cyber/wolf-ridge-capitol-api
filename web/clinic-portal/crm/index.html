@@ -219,6 +219,7 @@
           <button type="button" class="btn sm primary" data-action="open-scan" title="Search the NPI Registry for clinics and add them automatically">Find leads</button>
           <input type="file" id="crmImportFile" accept=".csv,.json,text/csv,application/json" hidden data-no-log>
           <button type="button" class="btn sm" data-action="import-leads" title="Load a CSV or JSON lead list">Import</button>
+          <button type="button" class="btn sm" data-action="export-pdf" title="Export the current lead list to PDF (Save as PDF in the print dialog)">Export PDF</button>
           <button type="button" class="btn sm ghost" id="crmClearLocal" data-action="clear-local" hidden title="Remove the lead list saved on this device">Clear saved</button>
         </div>
         <div class="crm-tabs" role="tablist" aria-label="CRM view">
@@ -466,6 +467,11 @@
     </div>
   </div>
 </div>
+
+<!-- ══ PRINT / PDF EXPORT ════════════════════════════════════════════════
+     Hidden on screen; crm.js fills it with the current lead list and the
+     print stylesheet (crm.css) reveals only this for "Save as PDF". -->
+<div id="crmPrintArea" aria-hidden="true"></div>
 
 <script src="crm.js"></script>
 </body>

@@ -258,3 +258,38 @@
     .crm-list { max-height: none; }
     .crm-tabs { margin-left: 0; }
 }
+
+/* ── PDF export (print view) ──────────────────────────────────────────────
+   #crmPrintArea is a direct child of <body>, hidden on screen. When crm.js
+   adds .crm-printing to <body>, the print stylesheet hides everything else and
+   shows only this, so the browser's "Save as PDF" produces a clean lead sheet. */
+#crmPrintArea { display: none; }
+
+@media print {
+    @page { margin: 14mm; }
+    body.crm-printing > *:not(#crmPrintArea) { display: none !important; }
+    body.crm-printing #crmPrintArea { display: block !important; }
+
+    .crm-print-head { margin-bottom: 14px; border-bottom: 2px solid #111; padding-bottom: 10px; }
+    .crm-print-title { font-size: 18px; font-weight: 700; margin: 0 0 4px; color: #111; }
+    .crm-print-title span { color: #2f8f2f; }
+    .crm-print-meta { font-size: 10px; color: #444; }
+
+    .crm-print-table { width: 100%; border-collapse: collapse; font-size: 10px; color: #111; }
+    .crm-print-table thead th {
+        text-align: left; font-size: 8.5px; text-transform: uppercase; letter-spacing: .04em;
+        color: #555; border-bottom: 1px solid #999; padding: 4px 6px;
+    }
+    .crm-print-table td { padding: 5px 6px; border-bottom: 1px solid #ddd; vertical-align: top; }
+    .crm-print-table tr { break-inside: avoid; }
+    .crm-print-name { font-weight: 700; }
+    .crm-print-sub { color: #666; font-size: 8.5px; }
+    .crm-print-band {
+        font-weight: 700; font-size: 9px; white-space: nowrap;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .crm-print-band.hot  { color: #1f7a1f; }
+    .crm-print-band.warm { color: #a06a00; }
+    .crm-print-band.cold { color: #777; }
+    .crm-print-empty { font-size: 11px; color: #444; }
+}

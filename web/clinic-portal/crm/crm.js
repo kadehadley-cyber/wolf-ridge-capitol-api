@@ -1252,6 +1252,113 @@
         });
     }
 
+    /* ══ PDF EXPORT ═══════════════════════════════════════════════════════
+     * Builds a print-only sheet of the current (filtered, sorted) leads and
+     * opens the browser print dialog so the rep can "Save as PDF". The CSP
+     * forbids inline styles and external PDF libraries, so all styling lives in
+     * crm.css (@media print) and print-to-PDF is the compliant path. */
+    function filterSummary(f) {
+        var parts = [];
+        parts.push(f.states.length ? f.states.join(', ') : 'All states');
+        parts.push(f.allTypes || !f.category ? 'All clinic types' : cap(f.category.replace(/_/g, ' ')));
+        if (f.stage) parts.push(stageLabel(f.stage));
+        if (f.source) parts.push('Source: ' + f.source);
+        if (f.offersRegen) parts.push('Runs regen');
+        if (f.switchWindow) parts.push('Switch window');
+        if (f.hotOnly) parts.push('Hot only');
+        if (f.q) parts.push('“' + f.q + '”');
+        return parts.join(' · ');
+    }
+
+    function printTd(text) {
+        var c = document.createElement('td');
+        c.textContent = String(text == null ? '' : text);
+        return c;
+    }
+
+    function exportPdf() {
+        var f = currentFilters();
+        var list = sortLeads(LEADS.filter(function (l) { return matches(l, f); }), f.sort);
+        var area = $('crmPrintArea');
+        area.textContent = '';
+
+        var head = document.createElement('div');
+        head.className = 'crm-print-head';
+        var h1 = document.createElement('h1');
+        h1.className = 'crm-print-title';
+        var mark = document.createElement('span'); mark.textContent = 'NOVA';
+        h1.appendChild(document.createTextNode('Cellu'));
+        h1.appendChild(mark);
+        h1.appendChild(document.createTextNode(' — Lead List'));
+        var meta = document.createElement('div');
+        meta.className = 'crm-print-meta';
+        meta.textContent = list.length + (list.length === 1 ? ' lead' : ' leads') + '  ·  '
+            + filterSummary(f) + '  ·  Generated ' + new Date().toLocaleDateString();
+        head.append(h1, meta);
+        area.appendChild(head);
+
+        if (!list.length) {
+            var empty = document.createElement('p');
+            empty.className = 'crm-print-empty';
+            empty.textContent = 'No leads match the current filters.';
+            area.appendChild(empty);
+        } else {
+            var table = document.createElement('table');
+            table.className = 'crm-print-table';
+            var thead = document.createElement('thead');
+            var hr = document.createElement('tr');
+            ['#', 'Practice', 'Specialty', 'Location', 'Phone', 'Email', 'Priority'].forEach(function (t) {
+                var th = document.createElement('th'); th.textContent = t; hr.appendChild(th);
+            });
+            thead.appendChild(hr);
+            table.appendChild(thead);
+
+            var tbody = document.createElement('tbody');
+            list.forEach(function (l, i) {
+                var pr = priority(l);
+                var tr = document.createElement('tr');
+                tr.appendChild(printTd(String(i + 1)));
+
+                var nameTd = document.createElement('td');
+                var nm = document.createElement('div'); nm.className = 'crm-print-name'; nm.textContent = l.name;
+                nameTd.appendChild(nm);
+                var bits = [];
+                if (l.doctor_name && l.doctor_name !== l.name) bits.push(l.doctor_name);
+                if (l.npi) bits.push('NPI ' + l.npi);
+                if (l.regen_specialty) bits.push('Runs regen');
+                if (l.decision_maker_is_owner) bits.push('Owner');
+                if (bits.length) {
+                    var sub = document.createElement('div'); sub.className = 'crm-print-sub'; sub.textContent = bits.join(' · ');
+                    nameTd.appendChild(sub);
+                }
+                tr.appendChild(nameTd);
+
+                tr.appendChild(printTd(l.category ? cap(String(l.category).replace(/_/g, ' ')) : ''));
+                tr.appendChild(printTd([l.city, l.state].filter(Boolean).join(', ')));
+                tr.appendChild(printTd(l.phone || ''));
+                tr.appendChild(printTd(l.email || ''));
+
+                var pTd = document.createElement('td');
+                var pspan = document.createElement('span');
+                pspan.className = 'crm-print-band ' + pr.band;
+                pspan.textContent = pr.band.toUpperCase() + ' ' + pr.score;
+                pTd.appendChild(pspan);
+                tr.appendChild(pTd);
+
+                tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+            area.appendChild(table);
+        }
+
+        // The @media print rules only apply while printing, so leaving the class
+        // on has no on-screen effect; still, clean it up after the dialog closes.
+        function done() { document.body.classList.remove('crm-printing'); window.removeEventListener('afterprint', done); }
+        window.addEventListener('afterprint', done);
+        document.body.classList.add('crm-printing');
+        window.print();
+    }
+
     /* ══ EVENTS ═══════════════════════════════════════════════════════════ */
     document.addEventListener('click', function (e) {
         var el = e.target.closest('[data-action]');
@@ -1266,6 +1373,7 @@
             case 'open-lead':   openLead(Number(el.dataset.id)); break;
             case 'tab':         showTab(el.dataset.tab); break;
             case 'import-leads': $('crmImportFile').click(); break;
+            case 'export-pdf':  exportPdf(); break;
             case 'open-scan':  openScan(); break;
             case 'close-scan': closeScan(); break;
             case 'run-scan':   runScan(); break;
