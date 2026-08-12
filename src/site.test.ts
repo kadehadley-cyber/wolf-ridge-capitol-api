@@ -578,6 +578,7 @@ describe("cellsunova.com site routing", () => {
 			expect(data.added).toBe(2); // capped at 2 of the 3 candidates
 			const names = data.leads.map((l) => l.name);
 			expect(names[0]).toBe("Elite Ortho & Sports"); // highest registry fit ranks first
+			expect(data.leads[0].regen_specialty).toBe(true); // sports-medicine taxonomy flags regen
 			expect(names).not.toContain("Low Fit, MD"); // weakest match dropped
 		} finally {
 			globalThis.fetch = realFetch;
