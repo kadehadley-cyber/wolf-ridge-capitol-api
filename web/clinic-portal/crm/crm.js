@@ -229,6 +229,7 @@
      *   buy_likelihood        , server override for the buy score (else null)
      * ═════════════════════════════════════════════════════════════════════ */
     var SIGNAL_DEFAULTS = {
+        regen_specialty: false,
         advertising_regen: false, website_mentions_regen: false,
         google_rating: null, review_count: null, decision_maker_is_owner: false,
         contract_status: 'none', supplier_risk: false, engagement: 'none',
@@ -466,8 +467,8 @@
         if (sf >= 9) reasons.push(catName + ', high-use specialty for stem cells and exosomes');
         else if (l.category) reasons.push(catName + ', a fit for regenerative protocols');
 
-        var runsRegen = l.offers_prp || l.offers_exosomes || l.offers_stem_cells;
-        if (runsRegen) { s += 15; reasons.push('Already offers regenerative medicine, in-market'); }
+        if (l.offers_prp || l.offers_exosomes || l.offers_stem_cells) { s += 15; reasons.push('Already offers regenerative medicine, in-market'); }
+        else if (l.regen_specialty) { s += 12; reasons.push('Registry sub-specialty indicates an active regenerative practice'); }
         if (l.offers_prp && !l.offers_exosomes && !l.offers_stem_cells) { s += 8; reasons.push('Runs PRP only, natural step up to exosomes/stem cells'); }
         if (l.website_mentions_regen) { s += 6; reasons.push('Website already markets regenerative therapies'); }
         if (l.advertising_regen) { s += 10; reasons.push('Actively advertising regenerative treatments, demand in place'); }
@@ -625,7 +626,7 @@
         if (f.states.length && f.states.indexOf(lead.state) === -1) return false;
         if (f.source && lead.source !== f.source) return false;
         if (!f.allTypes && f.category && lead.category !== f.category) return false;
-        if (f.offersRegen && !(lead.offers_prp || lead.offers_exosomes || lead.offers_stem_cells)) return false;
+        if (f.offersRegen && !(lead.offers_prp || lead.offers_exosomes || lead.offers_stem_cells || lead.regen_specialty)) return false;
         if (f.switchWindow && !(lead.supplier_risk || lead.contract_status === 'month_to_month' || lead.contract_status === 'expiring')) return false;
         if (f.hotOnly && priority(lead).band !== 'hot') return false;
         if (f.q) {
@@ -822,6 +823,7 @@
             yesNoChip(lead.offers_exosomes, 'Exosomes'),
             yesNoChip(lead.offers_stem_cells, 'Stem cells')
         );
+        if (lead.regen_specialty) chips.append(yesNoChip(true, 'Regen sub-specialty (registry)'));
         detailEl.appendChild(chips);
 
         /* ── Buying ── */

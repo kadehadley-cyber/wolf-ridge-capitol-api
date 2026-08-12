@@ -216,6 +216,10 @@ function nppesToLead(r: NppesResult, category: string): LeadRecord | null {
 		// A solo individual who is the sole proprietor is the physician-owner —
 		// the decision maker, so a faster close. Real NPPES field, not inferred.
 		decision_maker_is_owner: !isOrg && r.basic?.sole_proprietor === "YES",
+		// The registry can't confirm PRP/exosomes/stem cells, but a regenerative
+		// sub-specialty (sports medicine, interventional pain, PM&R, etc.) is a
+		// strong signal the practice is already doing regenerative work.
+		regen_specialty: (r.taxonomies ?? []).some((t) => HIGH_VALUE_SUBSPECIALTIES.has((t.desc ?? "").toLowerCase())),
 		created_at: new Date().toISOString(),
 	};
 }
