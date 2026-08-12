@@ -147,6 +147,8 @@ describe("cellsunova.com site routing", () => {
 		// Hosted protocol-library pages serve as static assets behind the portal auth.
 		expect((await hit("/portal/protocols/library/knee.html", "www.cellsunova.com", "GET", cookie)).calls)
 			.toEqual(["/clinic-portal/protocols/library/knee.html"]);
+		expect((await hit("/portal/protocols/library/injury-recovery.pdf", "www.cellsunova.com", "GET", cookie)).calls)
+			.toEqual(["/clinic-portal/protocols/library/injury-recovery.pdf"]);
 	});
 
 	it("rejects a forged session cookie", async () => {
