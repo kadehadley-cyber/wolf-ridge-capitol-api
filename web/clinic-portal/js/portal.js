@@ -76,10 +76,13 @@
      * templates) or official PDFs. Each opens in the sandboxed viewer. Sorted
      * into the category that matches its administration route. */
     var LIBRARY = [
-        { cat: 'ia',    slug: 'knee',                         title: 'Knee — intra-articular' },
-        { cat: 'ia',    slug: 'hip',                          title: 'Hip — intra-articular + IM' },
+        { cat: 'ia',    slug: 'knee',                         title: 'Knee — intra-articular — chart notes' },
+        { cat: 'ia',    slug: 'knee-protocol', type: 'pdf',   title: 'Intra-articular knee (official PDF)' },
+        { cat: 'ia',    slug: 'hip',                          title: 'Hip — IA + IM — chart notes' },
         { cat: 'ia',    slug: 'hip-protocol', type: 'pdf',    title: 'Hip — IA + IM (official PDF)' },
-        { cat: 'ia',    slug: 'shoulder',                     title: 'Shoulder — IA / peritendinous' },
+        { cat: 'ia',    slug: 'shoulder',                     title: 'Shoulder — IA / peritendinous — chart notes' },
+        { cat: 'ia',    slug: 'shoulder-ultrasound-ia', type: 'pdf', title: 'Shoulder — ultrasound-guided IA (official PDF)' },
+        { cat: 'im',    slug: 'shoulder-im', type: 'pdf',     title: 'Shoulder — IM (official PDF)' },
         { cat: 'im',    slug: 'cervical-spine',               title: 'Cervical spine (neck) — chart notes' },
         { cat: 'im',    slug: 'cervical-neck-im', type: 'pdf', title: 'Neck pain — cervical spine (official PDF)' },
         { cat: 'im',    slug: 'injury-recovery', type: 'pdf', title: 'Injury recovery — return to work (official PDF)' },
@@ -93,7 +96,8 @@
         { cat: 'other', slug: 'cognitive-dementia-support', type: 'pdf', title: 'Cognitive decline & dementia support (official PDF)' },
         { cat: 'other', slug: 'hair-mesotherapy',             title: 'Hair & scalp mesotherapy — chart notes' },
         { cat: 'other', slug: 'hair-mesotherapy', type: 'pdf', title: 'Hair & mesotherapy (official PDF)' },
-        { cat: 'other', slug: 'neuro-intranasal',             title: 'Neuro — intranasal' },
+        { cat: 'other', slug: 'neuro-intranasal',             title: 'Neuro — intranasal — chart notes' },
+        { cat: 'other', slug: 'intranasal-tbi-cognitive', type: 'pdf', title: 'Intranasal neural — TBI & cognitive (official PDF)' },
         { cat: 'pre',   slug: 'patient-screening',            title: 'Patient screening' },
         { cat: 'pre',   slug: 'informed-consent',             title: 'Informed consent' },
         { cat: 'pre',   slug: 'treatment-planning-worksheet', title: 'Treatment planning worksheet' },
