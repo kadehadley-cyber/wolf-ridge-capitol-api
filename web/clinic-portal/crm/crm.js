@@ -435,19 +435,19 @@
     };
 
     /* Specialties whose core practice centers on PRP / exosomes / stem cells /
-     * regenerative injections. Used so "Mentions regenerative therapies" can flag
-     * a clinic even when the registry gives no explicit signal — podiatry and
-     * plastic surgery are left out here and qualify only via a regenerative
-     * sub-specialty (regen_specialty) or entered/advertised data. */
+     * regenerative injections. Used only to nudge the buy score and label the
+     * lead detail — NOT to gate the filter (podiatry / plastic surgery aren't
+     * here, so they get the score nudge only via a registry sub-specialty). */
     var REGEN_CATEGORIES = { ortho: 1, pain_management: 1, med_spa: 1, wellness: 1, aesthetic: 1 };
 
-    /* Best-evidence test for "this clinic does regenerative therapies": explicit
-     * offerings, advertising, a website mention, a regenerative sub-specialty from
-     * the registry, or a specialty whose practice centers on these therapies. */
+    /* The "Mentions regenerative therapies" filter is inclusive of EVERY kind of
+     * clinic: any provider, any clinic category, or any explicit/known regen
+     * signal qualifies. Only non-clinic vendor rows (is_provider false, no
+     * category, no regen signal) fall out. */
     function mentionsRegen(l) {
-        return !!(l.offers_prp || l.offers_exosomes || l.offers_stem_cells
-            || l.advertising_regen || l.website_mentions_regen || l.regen_specialty
-            || REGEN_CATEGORIES[l.category]);
+        return !!(l.is_provider || l.category
+            || l.offers_prp || l.offers_exosomes || l.offers_stem_cells
+            || l.advertising_regen || l.website_mentions_regen || l.regen_specialty);
     }
     var ENGAGEMENT_LABELS = {
         none: 'No engagement yet', email_open: 'Opened outreach email',
@@ -493,7 +493,7 @@
 
         if (l.offers_prp || l.offers_exosomes || l.offers_stem_cells) { s += 15; reasons.push('Already offers regenerative medicine, in-market'); }
         else if (l.regen_specialty) { s += 12; reasons.push('Registry sub-specialty indicates an active regenerative practice'); }
-        else if (mentionsRegen(l)) { s += 8; reasons.push('Specialty centers on regenerative therapies, likely in-market'); }
+        else if (REGEN_CATEGORIES[l.category]) { s += 8; reasons.push('Specialty centers on regenerative therapies, likely in-market'); }
         if (l.offers_prp && !l.offers_exosomes && !l.offers_stem_cells) { s += 8; reasons.push('Runs PRP only, natural step up to exosomes/stem cells'); }
         if (l.website_mentions_regen) { s += 6; reasons.push('Website already markets regenerative therapies'); }
         if (l.advertising_regen) { s += 10; reasons.push('Actively advertising regenerative treatments, demand in place'); }
@@ -849,7 +849,7 @@
             yesNoChip(lead.offers_stem_cells, 'Stem cells')
         );
         if (lead.regen_specialty) chips.append(yesNoChip(true, 'Regen sub-specialty (registry)'));
-        else if (mentionsRegen(lead)) chips.append(yesNoChip(true, 'Regenerative-therapy specialty'));
+        else if (REGEN_CATEGORIES[lead.category]) chips.append(yesNoChip(true, 'Regenerative-therapy specialty'));
         detailEl.appendChild(chips);
 
         /* ── Buying ── */
