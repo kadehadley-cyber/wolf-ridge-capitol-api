@@ -806,28 +806,37 @@
             detailEl.appendChild(tier);
         }
 
-        /* ── AI screening scores: priority + buy propensity + switch likelihood ── */
-        var pr = priority(lead);
-        var buyRes = computeBuy(lead), swRes = computeSwitch(lead);
+        /* ── AI screening scores: priority + buy propensity + switch likelihood ──
+         * Wrapped so a data quirk in one lead can never silently remove the AI
+         * breakdown (or abort the rest of the detail view). */
+        try {
+            var pr = priority(lead);
+            var buyRes = computeBuy(lead), swRes = computeSwitch(lead);
 
-        var prBox = document.createElement('div');
-        prBox.className = 'crm-fitbox crm-fit-' + pr.band;
-        var prHead = document.createElement('div');
-        prHead.className = 'crm-fitbox-head';
-        var prLabel = document.createElement('span');
-        prLabel.className = 'crm-fit crm-fit-' + pr.band;
-        prLabel.textContent = pr.band.toUpperCase() + ' · Priority ' + pr.score + '/100 (buy and/or switch)';
-        prHead.appendChild(prLabel);
-        prBox.appendChild(prHead);
-        var save = document.createElement('div');
-        save.className = 'crm-fit-save';
-        save.textContent = savingsLine(lead);
-        prBox.appendChild(save);
-        var meters = document.createElement('div');
-        meters.className = 'crm-meters';
-        meters.append(meterEl('Buy propensity', buyRes), meterEl('Switch likelihood', swRes));
-        prBox.appendChild(meters);
-        detailEl.appendChild(prBox);
+            var prBox = document.createElement('div');
+            prBox.className = 'crm-fitbox crm-fit-' + pr.band;
+            var prHead = document.createElement('div');
+            prHead.className = 'crm-fitbox-head';
+            var prLabel = document.createElement('span');
+            prLabel.className = 'crm-fit crm-fit-' + pr.band;
+            prLabel.textContent = pr.band.toUpperCase() + ' · Priority ' + pr.score + '/100 (buy and/or switch)';
+            prHead.appendChild(prLabel);
+            prBox.appendChild(prHead);
+            var save = document.createElement('div');
+            save.className = 'crm-fit-save';
+            save.textContent = savingsLine(lead);
+            prBox.appendChild(save);
+            var meters = document.createElement('div');
+            meters.className = 'crm-meters';
+            meters.append(meterEl('Buy propensity', buyRes), meterEl('Switch likelihood', swRes));
+            prBox.appendChild(meters);
+            detailEl.appendChild(prBox);
+        } catch (e) {
+            var scoreErr = document.createElement('div');
+            scoreErr.className = 'crm-fitbox crm-fit-cold';
+            scoreErr.textContent = 'AI screening could not score this lead: ' + (e && e.message ? e.message : e);
+            detailEl.appendChild(scoreErr);
+        }
 
         /* ── Practice profile ── */
         detailEl.appendChild(sectionTitle('Practice profile'));
