@@ -71,22 +71,28 @@
     /* ══ DOCUMENT STORE ═══════════════════════════════════════════════════
      * kind: 'seed' (placeholder, HTML generated on view) | 'file' (uploaded,
      * blob URL) | 'link' (external URL, opened in a new tab). type: html|pdf|link. */
-    /* Real physician protocols from Dr. Hadley's Protocol Library, split into
-     * self-contained pages hosted under /portal/protocols/library/. Each opens
-     * in the sandboxed viewer. Sorted into the category that matches its route. */
+    /* Real physician protocols from Dr. Hadley's Protocol Library, hosted under
+     * /portal/protocols/library/ as self-contained HTML pages (with chart-note
+     * templates) or official PDFs. Each opens in the sandboxed viewer. Sorted
+     * into the category that matches its administration route. */
     var LIBRARY = [
         { cat: 'ia',    slug: 'knee',                         title: 'Knee — intra-articular' },
         { cat: 'ia',    slug: 'hip',                          title: 'Hip — intra-articular + IM' },
+        { cat: 'ia',    slug: 'hip-protocol', type: 'pdf',    title: 'Hip — IA + IM (official PDF)' },
         { cat: 'ia',    slug: 'shoulder',                     title: 'Shoulder — IA / peritendinous' },
+        { cat: 'im',    slug: 'cervical-spine',               title: 'Cervical spine (neck) — chart notes' },
+        { cat: 'im',    slug: 'cervical-neck-im', type: 'pdf', title: 'Neck pain — cervical spine (official PDF)' },
+        { cat: 'im',    slug: 'injury-recovery', type: 'pdf', title: 'Injury recovery — return to work (official PDF)' },
         { cat: 'im',    slug: 'spina-bifida',                 title: 'Spina bifida — IM support' },
         { cat: 'im',    slug: 'rheumatoid-arthritis',         title: 'Rheumatoid arthritis (RA)' },
         { cat: 'im',    slug: 'ankylosing-spondylitis',       title: 'Ankylosing spondylitis' },
         { cat: 'im',    slug: 'psoriatic-arthritis',          title: 'Psoriatic arthritis' },
         { cat: 'im',    slug: 'ibd-associated-arthritis',     title: 'IBD-associated arthritis' },
-        { cat: 'iv',    slug: 'dementia',                     title: 'Cognitive — dementia & MCI' },
         { cat: 'iv',    slug: 'general-wellness-longevity',   title: 'General wellness & longevity' },
-        { cat: 'other', slug: 'cervical-spine',               title: 'Cervical spine (neck)' },
-        { cat: 'other', slug: 'hair-mesotherapy',             title: 'Hair & scalp mesotherapy' },
+        { cat: 'other', slug: 'dementia',                     title: 'Cognitive — dementia & MCI — chart notes' },
+        { cat: 'other', slug: 'cognitive-dementia-support', type: 'pdf', title: 'Cognitive decline & dementia support (official PDF)' },
+        { cat: 'other', slug: 'hair-mesotherapy',             title: 'Hair & scalp mesotherapy — chart notes' },
+        { cat: 'other', slug: 'hair-mesotherapy', type: 'pdf', title: 'Hair & mesotherapy (official PDF)' },
         { cat: 'other', slug: 'neuro-intranasal',             title: 'Neuro — intranasal' },
         { cat: 'pre',   slug: 'patient-screening',            title: 'Patient screening' },
         { cat: 'pre',   slug: 'informed-consent',             title: 'Informed consent' },
@@ -101,8 +107,9 @@
     var DOCS = [];
     var docId = 0;
     LIBRARY.forEach(function (d) {
-        DOCS.push({ id: ++docId, cat: d.cat, kind: 'asset', type: 'html',
-                    title: d.title, url: '/portal/protocols/library/' + d.slug + '.html' });
+        var type = d.type || 'html';
+        DOCS.push({ id: ++docId, cat: d.cat, kind: 'asset', type: type,
+                    title: d.title, url: '/portal/protocols/library/' + d.slug + '.' + type });
     });
 
     function catOf(key) { return CATEGORIES.filter(function (c) { return c.key === key; })[0]; }
@@ -314,13 +321,20 @@
             // Fetch the hosted protocol (same-origin, credentialed) and render it as
             // a blob, so it displays in the sandboxed frame exactly like the other
             // document kinds — a sandboxed frame can't navigate to it directly.
+            // PDFs are fetched as binary and shown in the native viewer.
             if (doc._blobUrl) { mountFrame(doc, doc._blobUrl); return; }
             viewerMessage('Loading protocol…');
             viewerOpen.hidden = true; viewerOpen.removeAttribute('href');
             fetch(doc.url, { credentials: 'same-origin' })
-                .then(function (r) { if (!r.ok) throw new Error('status ' + r.status); return r.text(); })
-                .then(function (htmlText) {
-                    doc._blobUrl = URL.createObjectURL(new Blob([htmlText], { type: 'text/html' }));
+                .then(function (r) {
+                    if (!r.ok) throw new Error('status ' + r.status);
+                    return doc.type === 'pdf' ? r.blob() : r.text();
+                })
+                .then(function (data) {
+                    var blob = doc.type === 'pdf'
+                        ? new Blob([data], { type: 'application/pdf' })
+                        : new Blob([data], { type: 'text/html' });
+                    doc._blobUrl = URL.createObjectURL(blob);
                     if (!viewer.hidden) mountFrame(doc, doc._blobUrl);
                 })
                 .catch(function () { viewerMessage('Could not load this protocol. Please try again.'); });
