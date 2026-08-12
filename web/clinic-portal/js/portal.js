@@ -49,7 +49,8 @@
         im:   '<path d="M3 12h4l3 8 4-16 3 8h4"/>',
         iv:   '<path d="M12 2v6"/><circle cx="12" cy="15" r="6"/><path d="M12 12v6"/>',
         other:'<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 00-4 12c1 1 1 2 1 3h6c0-1 0-2 1-3a7 7 0 00-4-12z"/>',
-        pre:  '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 13l2 2 4-4"/>'
+        pre:  '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 13l2 2 4-4"/>',
+        ref:  '<path d="M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2z"/><path d="M4 19a2 2 0 012-2h13"/>'
     };
     var CATEGORIES = [
         { key: 'ia',    label: 'Intra-Articular',      seed: 4,
@@ -61,20 +62,42 @@
         { key: 'other', label: 'Other / Specialized',  seed: 5,
           desc: 'Subcutaneous, intradermal, topical, and intranasal methods for specialized clinical applications.' },
         { key: 'pre',   label: 'Patient Pre-Treatment', seed: 3,
-          desc: 'Pre-treatment preparation protocols to optimize patient readiness and outcomes.' }
+          desc: 'Screening, consent, and treatment-planning documents to prepare a patient for care.' },
+        { key: 'ref',   label: 'Reference & Operations', seed: 0,
+          desc: 'Storage, dosing, documentation, and safety references for administering biologics.' }
     ];
-    var CAT_CLASS = { ia: 'cat-ia', im: 'cat-im', iv: 'cat-iv', other: 'cat-other', pre: 'cat-pre' };
+    var CAT_CLASS = { ia: 'cat-ia', im: 'cat-im', iv: 'cat-iv', other: 'cat-other', pre: 'cat-pre', ref: 'cat-ref' };
 
     /* ══ DOCUMENT STORE ═══════════════════════════════════════════════════
      * kind: 'seed' (placeholder, HTML generated on view) | 'file' (uploaded,
      * blob URL) | 'link' (external URL, opened in a new tab). type: html|pdf|link. */
+    /* Real physician protocols from Dr. Hadley's Protocol Library, split into
+     * self-contained pages hosted under /portal/protocols/library/. Each opens
+     * in the sandboxed viewer. Sorted into the category that matches its route. */
+    var LIBRARY = [
+        { cat: 'ia',    slug: 'knee',                         title: 'Knee — intra-articular' },
+        { cat: 'ia',    slug: 'hip',                          title: 'Hip — intra-articular + IM' },
+        { cat: 'ia',    slug: 'shoulder',                     title: 'Shoulder — IA / peritendinous' },
+        { cat: 'im',    slug: 'spina-bifida',                 title: 'Spina bifida — IM support' },
+        { cat: 'iv',    slug: 'dementia',                     title: 'Cognitive — dementia & MCI' },
+        { cat: 'other', slug: 'cervical-spine',               title: 'Cervical spine (neck)' },
+        { cat: 'other', slug: 'hair-mesotherapy',             title: 'Hair & scalp mesotherapy' },
+        { cat: 'other', slug: 'neuro-intranasal',             title: 'Neuro — intranasal' },
+        { cat: 'pre',   slug: 'patient-screening',            title: 'Patient screening' },
+        { cat: 'pre',   slug: 'informed-consent',             title: 'Informed consent' },
+        { cat: 'pre',   slug: 'treatment-planning-worksheet', title: 'Treatment planning worksheet' },
+        { cat: 'ref',   slug: 'storage-cold-chain',           title: 'Storage & cold chain' },
+        { cat: 'ref',   slug: 'thaw-reconstitution',          title: 'Thaw & reconstitution' },
+        { cat: 'ref',   slug: 'dosing-quick-reference',       title: 'Dosing quick reference' },
+        { cat: 'ref',   slug: 'adverse-event-response',       title: 'Adverse-event response' },
+        { cat: 'ref',   slug: 'chain-of-custody',             title: 'Chain of custody' },
+        { cat: 'ref',   slug: 'reading-a-coa',                title: 'Reading a COA' }
+    ];
     var DOCS = [];
     var docId = 0;
-    CATEGORIES.forEach(function (c) {
-        for (var i = 1; i <= c.seed; i++) {
-            DOCS.push({ id: ++docId, cat: c.key, kind: 'seed', type: 'html',
-                        title: c.label + ' — Protocol ' + i });
-        }
+    LIBRARY.forEach(function (d) {
+        DOCS.push({ id: ++docId, cat: d.cat, kind: 'asset', type: 'html',
+                    title: d.title, url: '/portal/protocols/library/' + d.slug + '.html' });
     });
 
     function catOf(key) { return CATEGORIES.filter(function (c) { return c.key === key; })[0]; }
@@ -157,7 +180,8 @@
             var main = document.createElement('div'); main.className = 'doc-row-main';
             var title = document.createElement('div'); title.className = 'doc-row-title'; title.textContent = d.title;
             var sub = document.createElement('div'); sub.className = 'doc-row-sub';
-            sub.textContent = d.kind === 'seed' ? 'Placeholder — replace with the real file'
+            sub.textContent = d.kind === 'asset' ? 'CelluNOVA protocol library'
+                           : d.kind === 'seed' ? 'Placeholder — replace with the real file'
                            : d.kind === 'link' ? 'External link' : 'Uploaded (preview only, not saved)';
             main.append(title, sub);
 
@@ -253,6 +277,8 @@
         if (doc.kind === 'seed') {
             if (!doc._blobUrl) doc._blobUrl = URL.createObjectURL(new Blob([seedHtml(doc)], { type: 'text/html' }));
             url = doc._blobUrl;
+        } else if (doc.kind === 'asset') {
+            url = doc.url;                 // same-origin hosted protocol page
         } else {
             url = doc._blobUrl;
         }
@@ -321,6 +347,7 @@
         var sel = $('treatProtocol');
         if (!sel) return;
         CATEGORIES.forEach(function (c) {
+            if (c.key === 'ref') return;   // references aren't a schedulable treatment route
             var o = document.createElement('option'); o.value = c.key; o.textContent = c.label; sel.appendChild(o);
         });
     }

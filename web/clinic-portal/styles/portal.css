@@ -393,6 +393,13 @@ h1, h2, h3 { margin: 0; }
 .cat-pre.active .proto-cat-label, .cat-pre:hover .proto-cat-label { color: #ff6b8a; }
 .cat-pre .proto-cat-count { color: #ff6b8a; border-color: rgba(255,107,138,.15); }
 
+.cat-ref .proto-cat-strip { background: #8b93a7; }
+.cat-ref .proto-cat-icon  { background: rgba(139,147,167,.08); color: #a3aabb; }
+.cat-ref.active, .cat-ref:hover { box-shadow: 0 8px 30px rgba(139,147,167,.10); }
+.cat-ref.active { border-color: rgba(139,147,167,.24); background: rgba(139,147,167,.04); }
+.cat-ref.active .proto-cat-label, .cat-ref:hover .proto-cat-label { color: #a3aabb; }
+.cat-ref .proto-cat-count { color: #a3aabb; border-color: rgba(139,147,167,.18); }
+
 /* ── Protocol selector ── */
 
 .proto-selector-wrap {
