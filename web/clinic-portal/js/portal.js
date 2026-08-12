@@ -265,24 +265,8 @@
             + 'and uploading the real HTML or PDF for this category.</div></body></html>';
     }
 
-    function viewDoc(id) {
-        var doc = DOCS.filter(function (d) { return d.id === id; })[0];
-        if (!doc) return;
-
-        // External links never embed — open in a new tab after a scheme check.
-        if (doc.kind === 'link') { window.open(doc.url, '_blank', 'noopener,noreferrer'); return; }
-
-        // Resolve the source URL (generate + cache the seed blob lazily).
-        var url;
-        if (doc.kind === 'seed') {
-            if (!doc._blobUrl) doc._blobUrl = URL.createObjectURL(new Blob([seedHtml(doc)], { type: 'text/html' }));
-            url = doc._blobUrl;
-        } else if (doc.kind === 'asset') {
-            url = doc.url;                 // same-origin hosted protocol page
-        } else {
-            url = doc._blobUrl;
-        }
-
+    /* Render a resolved source URL in the sandboxed viewer frame. */
+    function mountFrame(doc, url) {
         viewerBody.textContent = '';
         var frame = document.createElement('iframe');
         frame.className = 'doc-frame';
@@ -292,16 +276,52 @@
         if (doc.type === 'html') frame.setAttribute('sandbox', '');
         frame.src = url;
         viewerBody.appendChild(frame);
-
-        $('docViewerTitle').textContent = doc.title;
-        $('docViewerSub').textContent = (doc.type === 'pdf' ? 'PDF' : 'HTML') + ' document';
         // "Open in new tab" only for PDFs — an uploaded HTML must stay sandboxed.
         if (doc.type === 'pdf') { viewerOpen.hidden = false; viewerOpen.setAttribute('href', url); }
         else { viewerOpen.hidden = true; viewerOpen.removeAttribute('href'); }
+    }
 
+    function viewerMessage(text) {
+        viewerBody.textContent = '';
+        var p = document.createElement('p');
+        p.className = 'doc-empty'; p.style.padding = '24px';
+        p.textContent = text;
+        viewerBody.appendChild(p);
+    }
+
+    function viewDoc(id) {
+        var doc = DOCS.filter(function (d) { return d.id === id; })[0];
+        if (!doc) return;
+
+        // External links never embed — open in a new tab after a scheme check.
+        if (doc.kind === 'link') { window.open(doc.url, '_blank', 'noopener,noreferrer'); return; }
+
+        $('docViewerTitle').textContent = doc.title;
+        $('docViewerSub').textContent = (doc.type === 'pdf' ? 'PDF' : 'HTML') + ' document';
         viewerLastFocus = document.activeElement;
         viewer.hidden = false;
         $('docViewerTitle').focus && $('docViewerTitle').focus();
+
+        if (doc.kind === 'seed') {
+            if (!doc._blobUrl) doc._blobUrl = URL.createObjectURL(new Blob([seedHtml(doc)], { type: 'text/html' }));
+            mountFrame(doc, doc._blobUrl);
+        } else if (doc.kind === 'asset') {
+            // Fetch the hosted protocol (same-origin, credentialed) and render it as
+            // a blob, so it displays in the sandboxed frame exactly like the other
+            // document kinds — a sandboxed frame can't navigate to it directly.
+            if (doc._blobUrl) { mountFrame(doc, doc._blobUrl); return; }
+            viewerMessage('Loading protocol…');
+            viewerOpen.hidden = true; viewerOpen.removeAttribute('href');
+            fetch(doc.url, { credentials: 'same-origin' })
+                .then(function (r) { if (!r.ok) throw new Error('status ' + r.status); return r.text(); })
+                .then(function (htmlText) {
+                    doc._blobUrl = URL.createObjectURL(new Blob([htmlText], { type: 'text/html' }));
+                    if (!viewer.hidden) mountFrame(doc, doc._blobUrl);
+                })
+                .catch(function () { viewerMessage('Could not load this protocol. Please try again.'); });
+        } else {
+            mountFrame(doc, doc._blobUrl);
+        }
     }
     function closeViewer() {
         viewer.hidden = true;
