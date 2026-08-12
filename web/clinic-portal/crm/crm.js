@@ -445,9 +445,17 @@
     function engagementLabel(e) { return ENGAGEMENT_LABELS[e] || ', '; }
     function contractLabel(c) { return CONTRACT_LABELS[c] || ', '; }
 
+    /* ══ SCORE BANDS (tunable) ════════════════════════════════════════════
+     * The cut points for hot / warm / cold. Registry-sourced leads carry less
+     * signal than fully-enriched ones, so the ceiling is lower — these are set
+     * so the strongest scanned clinics read hot, solid providers warm, and only
+     * thin/low-fit records cold. Lower `hot`/`warm` to grade more generously. */
+    var BANDS = { hot: 58, warm: 40 };
+    function bandName(s) { return s >= BANDS.hot ? 'hot' : s >= BANDS.warm ? 'warm' : 'cold'; }
+
     function band(s, reasons) {
         s = Math.max(0, Math.min(100, Math.round(s)));
-        return { score: s, band: s >= 70 ? 'hot' : s >= 45 ? 'warm' : 'cold', reasons: reasons };
+        return { score: s, band: bandName(s), reasons: reasons };
     }
 
     /* ══ BUY PROPENSITY ═══════════════════════════════════════════════════
@@ -524,7 +532,7 @@
     function priority(l) {
         var buy = computeBuy(l).score, sw = computeSwitch(l).score;
         var blended = Math.max(0, Math.min(100, Math.round(0.6 * Math.max(buy, sw) + 0.4 * ((buy + sw) / 2))));
-        return { score: blended, band: blended >= 70 ? 'hot' : blended >= 45 ? 'warm' : 'cold', buy: buy, switch: sw };
+        return { score: blended, band: bandName(blended), buy: buy, switch: sw };
     }
 
     function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
