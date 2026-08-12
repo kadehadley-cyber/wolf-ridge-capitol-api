@@ -322,11 +322,15 @@
         if (doc.kind === 'seed') {
             if (!doc._blobUrl) doc._blobUrl = URL.createObjectURL(new Blob([seedHtml(doc)], { type: 'text/html' }));
             mountFrame(doc, doc._blobUrl);
+        } else if (doc.kind === 'asset' && doc.type === 'pdf') {
+            // Hosted PDFs load straight from their same-origin URL: the session
+            // cookie rides along, the native viewer streams the file, and
+            // Open-in-new-tab gets a real URL with the proper filename.
+            mountFrame(doc, doc.url);
         } else if (doc.kind === 'asset') {
             // Fetch the hosted protocol (same-origin, credentialed) and render it as
             // a blob, so it displays in the sandboxed frame exactly like the other
             // document kinds — a sandboxed frame can't navigate to it directly.
-            // PDFs are fetched as binary and shown in the native viewer.
             if (doc._blobUrl) { mountFrame(doc, doc._blobUrl); return; }
             viewerMessage('Loading protocol…');
             viewerOpen.hidden = true; viewerOpen.removeAttribute('href');

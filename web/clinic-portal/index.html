@@ -17,7 +17,7 @@
   frame-src 'self' blob:;
   form-action 'self';
   base-uri 'none';
-  object-src 'none'">
+  object-src 'self' blob:">
 <!-- frame-ancestors is deliberately absent: browsers ignore it in a <meta>
      policy. Send it as a response header alongside the rest of this policy. -->
 <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -328,6 +328,6 @@
   </div>
 </div>
 
-<script src="js/portal.js?v=20260813"></script>
+<script src="js/portal.js?v=20260813b"></script>
 </body>
 </html>
