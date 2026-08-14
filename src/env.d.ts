@@ -3,7 +3,7 @@
 // only knows about the `DB` binding declared in wrangler.json).
 
 interface Env {
-	// --- Static assets (the CelluNOVA site under web/, served on cellsunova.com) ---
+	// --- Static assets (the CelluNOVA site under web/, served on cellunovabiologics.com) ---
 	/** Workers static assets binding; run_worker_first routes everything here first. */
 	ASSETS: { fetch(request: Request): Promise<Response> };
 
@@ -18,9 +18,9 @@ interface Env {
 	// --- Clinic sign-up email (Resend) ---
 	/** Resend API key (secret). Without it, emails are skipped but applications still store in D1. */
 	RESEND_API_KEY?: string;
-	/** Verified sender, e.g. "CelluNOVA <no-reply@cellsunova.com>". */
+	/** Verified sender, e.g. "CelluNOVA <no-reply@cellunovabiologics.com>". */
 	MAIL_FROM?: string;
-	/** Where clinic applications are sent for review. Defaults to DrHadley@cellsunova.com. */
+	/** Where clinic applications are sent for review. Defaults to DrHadley@cellunovabiologics.com. */
 	ADMIN_NOTIFY_EMAIL?: string;
 
 	// --- Access control ---

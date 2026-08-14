@@ -3,10 +3,10 @@
 // Configuration (Worker secrets / vars):
 //   RESEND_API_KEY      required for real sending; without it sends are skipped
 //                       (applications are still stored in D1, nothing is lost)
-//   MAIL_FROM           verified sender, e.g. "CelluNOVA <no-reply@cellsunova.com>"
+//   MAIL_FROM           verified sender, e.g. "CelluNOVA <no-reply@cellunovabiologics.com>"
 //   ADMIN_NOTIFY_EMAIL  where clinic applications go (defaults below)
 
-export const DEFAULT_ADMIN_EMAIL = "DrHadley@cellsunova.com";
+export const DEFAULT_ADMIN_EMAIL = "DrHadley@cellunovabiologics.com";
 
 export interface SendResult {
 	ok: boolean;
@@ -31,7 +31,7 @@ export async function sendEmail(env: Env, to: string, subject: string, html: str
 				"content-type": "application/json",
 			},
 			body: JSON.stringify({
-				from: env.MAIL_FROM || "CelluNOVA <no-reply@cellsunova.com>",
+				from: env.MAIL_FROM || "CelluNOVA <no-reply@cellunovabiologics.com>",
 				to: [to],
 				subject,
 				html,

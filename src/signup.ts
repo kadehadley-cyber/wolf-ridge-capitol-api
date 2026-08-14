@@ -1,4 +1,4 @@
-// Clinic sign-up flow for cellsunova.com.
+// Clinic sign-up flow for cellunovabiologics.com.
 //
 //   POST /signup           public application form (homepage #clinic-signup)
 //   GET  /portal/approve   approve link from the review email; session-gated by
@@ -11,7 +11,7 @@
 
 import { adminEmail, esc, sendEmail } from "./email";
 
-const SITE = "https://www.cellsunova.com";
+const SITE = "https://www.cellunovabiologics.com";
 
 /* ── D1 ─────────────────────────────────────────────────────────────────── */
 
@@ -153,7 +153,7 @@ function welcomeEmail(app: Application, contactRep: string): string {
 has been approved. Welcome to the CelluNOVA team.</p>
 <p style="margin:0 0 8px;font-size:13px;font-weight:bold;color:#2e7d74;text-transform:uppercase;letter-spacing:1px;">How to order from your portal</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;">
-${step(1, 'Sign in to the clinic portal at <a href="' + SITE + '/portal/" style="color:#2e7d74;">www.cellsunova.com/portal</a>. Your sign-in credentials arrive separately from our team.')}
+${step(1, 'Sign in to the clinic portal at <a href="' + SITE + '/portal/" style="color:#2e7d74;">www.cellunovabiologics.com/portal</a>. Your sign-in credentials arrive separately from our team.')}
 ${step(2, "Open <strong>Pricing &amp; Ordering</strong> and build your order from the NOVA product line, adding case notes for our physicians.")}
 ${step(3, "A CelluNOVA physician reviews every order before any payment is processed.")}
 ${step(4, "Approved orders ship cold-chain with tracking, with protocols matched to what you ordered.")}
@@ -219,7 +219,7 @@ export async function handleSignup(request: Request, env: Env): Promise<Response
 		`<h1>Application <span>received</span></h1>
 		<p>Thanks, <strong>${esc(contact)}</strong>. Our medical team reviews every clinic application.</p>
 		<p>We will follow up at <strong>${esc(email)}</strong> once <strong>${esc(clinic)}</strong> has been reviewed.</p>
-		<a class="btn" href="/">Back to cellsunova.com</a>`,
+		<a class="btn" href="/">Back to cellunovabiologics.com</a>`,
 	);
 }
 
