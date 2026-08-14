@@ -1,4 +1,4 @@
-// Authentication for the CelluNOVA portal on cellsunova.com.
+// Authentication for the CelluNOVA portal on cellunovabiologics.com.
 //
 // No plaintext credential lives in this repository: the password is stored as
 // a PBKDF2-SHA256 hash (100k iterations, random salt), and every default below
@@ -167,7 +167,7 @@ a.back:hover { color:#7dd340; }
   <input id="p" name="password" type="password" autocomplete="current-password">
   <input type="hidden" name="next" value="${esc(safeNext)}">
   <button type="submit">Sign in</button>
-  <a class="back" href="/">Back to cellsunova.com</a>
+  <a class="back" href="/">Back to cellunovabiologics.com</a>
 </form>
 </body>
 </html>`;

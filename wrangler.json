@@ -10,6 +10,8 @@
 		"run_worker_first": true
 	},
 	"routes": [
+		{ "pattern": "www.cellunovabiologics.com", "custom_domain": true },
+		{ "pattern": "cellunovabiologics.com", "custom_domain": true },
 		{ "pattern": "www.cellsunova.com", "custom_domain": true },
 		{ "pattern": "cellsunova.com", "custom_domain": true }
 	],

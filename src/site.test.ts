@@ -1,5 +1,6 @@
-// Routing tests for the public CelluNOVA site (cellsunova.com), which is
-// served from the ASSETS binding by serveCelluNova in index.ts.
+// Routing tests for the public CelluNOVA site (cellunovabiologics.com), which
+// is served from the ASSETS binding by serveCelluNova in index.ts. The
+// previous domain (cellsunova.com) permanently redirects here.
 import { describe, expect, it } from "vitest";
 import worker from "./index";
 
@@ -62,7 +63,7 @@ function makeEnv() {
 	return { env, calls, db };
 }
 
-async function hit(path: string, host = "www.cellsunova.com", method = "GET", cookie?: string) {
+async function hit(path: string, host = "www.cellunovabiologics.com", method = "GET", cookie?: string) {
 	const { env, calls } = makeEnv();
 	const headers = cookie ? { cookie } : undefined;
 	const res = await worker.fetch!(
@@ -79,14 +80,14 @@ async function login(username = "DrHadley", password = "Ghoster2024!") {
 	body.set("username", username);
 	body.set("password", password);
 	const res = await worker.fetch!(
-		new Request("https://www.cellsunova.com/login", { method: "POST", body }) as never,
+		new Request("https://www.cellunovabiologics.com/login", { method: "POST", body }) as never,
 		env,
 		ctx,
 	);
 	return { res, cookie: (res.headers.get("set-cookie") ?? "").split(";")[0] };
 }
 
-describe("cellsunova.com site routing", () => {
+describe("cellunovabiologics.com site routing", () => {
 	it("serves the homepage from clinic-portal/site/", async () => {
 		const { res, calls } = await hit("/");
 		expect(res.status).toBe(200);
@@ -102,7 +103,7 @@ describe("cellsunova.com site routing", () => {
 		const { res, calls } = await hit("/portal/crm/");
 		expect(res.status).toBe(302);
 		expect(res.headers.get("location")).toBe(
-			"https://www.cellsunova.com/login?next=%2Fportal%2Fcrm%2F",
+			"https://www.cellunovabiologics.com/login?next=%2Fportal%2Fcrm%2F",
 		);
 		expect(calls).toEqual([]);
 	});
@@ -135,25 +136,25 @@ describe("cellsunova.com site routing", () => {
 
 	it("serves the protocols page at /portal/ when signed in", async () => {
 		const { cookie } = await login();
-		const { calls } = await hit("/portal/", "www.cellsunova.com", "GET", cookie);
+		const { calls } = await hit("/portal/", "www.cellunovabiologics.com", "GET", cookie);
 		expect(calls).toEqual(["/clinic-portal/"]);
 	});
 
 	it("maps portal subpages and their assets when signed in", async () => {
 		const { cookie } = await login();
-		expect((await hit("/portal/crm/", "www.cellsunova.com", "GET", cookie)).calls).toEqual(["/clinic-portal/crm/"]);
-		expect((await hit("/portal/crm/crm.js", "www.cellsunova.com", "GET", cookie)).calls).toEqual(["/clinic-portal/crm/crm.js"]);
-		expect((await hit("/portal/styles/portal.css", "www.cellsunova.com", "GET", cookie)).calls).toEqual(["/clinic-portal/styles/portal.css"]);
+		expect((await hit("/portal/crm/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual(["/clinic-portal/crm/"]);
+		expect((await hit("/portal/crm/crm.js", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual(["/clinic-portal/crm/crm.js"]);
+		expect((await hit("/portal/styles/portal.css", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual(["/clinic-portal/styles/portal.css"]);
 		// Hosted protocol-library pages serve as static assets behind the portal auth.
-		expect((await hit("/portal/protocols/library/knee.html", "www.cellsunova.com", "GET", cookie)).calls)
+		expect((await hit("/portal/protocols/library/knee.html", "www.cellunovabiologics.com", "GET", cookie)).calls)
 			.toEqual(["/clinic-portal/protocols/library/knee.html"]);
-		expect((await hit("/portal/protocols/library/injury-recovery.pdf", "www.cellsunova.com", "GET", cookie)).calls)
+		expect((await hit("/portal/protocols/library/injury-recovery.pdf", "www.cellunovabiologics.com", "GET", cookie)).calls)
 			.toEqual(["/clinic-portal/protocols/library/injury-recovery.pdf"]);
 	});
 
 	it("rejects a forged session cookie", async () => {
 		const forged = "cn_admin=" + (Date.now() + 3600000) + ".deadbeef";
-		const { res, calls } = await hit("/portal/", "www.cellsunova.com", "GET", forged);
+		const { res, calls } = await hit("/portal/", "www.cellunovabiologics.com", "GET", forged);
 		expect(res.status).toBe(302);
 		expect(calls).toEqual([]);
 	});
@@ -166,23 +167,32 @@ describe("cellsunova.com site routing", () => {
 
 	it("adds trailing slashes to page directories", async () => {
 		const { cookie } = await login();
-		const { res } = await hit("/portal/crm", "www.cellsunova.com", "GET", cookie);
+		const { res } = await hit("/portal/crm", "www.cellunovabiologics.com", "GET", cookie);
 		expect(res.status).toBe(301);
-		expect(res.headers.get("location")).toBe("https://www.cellsunova.com/portal/crm/");
+		expect(res.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/crm/");
 	});
 
 	it("redirects legacy paths", async () => {
 		const { cookie } = await login();
-		expect((await hit("/portal/protocols", "www.cellsunova.com", "GET", cookie)).res.headers.get("location"))
-			.toBe("https://www.cellsunova.com/portal/");
-		expect((await hit("/portal/support", "www.cellsunova.com", "GET", cookie)).res.headers.get("location"))
-			.toBe("https://www.cellsunova.com/portal/tickets/");
+		expect((await hit("/portal/protocols", "www.cellunovabiologics.com", "GET", cookie)).res.headers.get("location"))
+			.toBe("https://www.cellunovabiologics.com/portal/");
+		expect((await hit("/portal/support", "www.cellunovabiologics.com", "GET", cookie)).res.headers.get("location"))
+			.toBe("https://www.cellunovabiologics.com/portal/tickets/");
 	});
 
 	it("redirects the apex to www", async () => {
-		const { res } = await hit("/portal/crm/", "cellsunova.com");
+		const { res } = await hit("/portal/crm/", "cellunovabiologics.com");
 		expect(res.status).toBe(301);
-		expect(res.headers.get("location")).toBe("https://www.cellsunova.com/portal/crm/");
+		expect(res.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/crm/");
+	});
+
+	it("permanently redirects the old domain to the new one, keeping the path", async () => {
+		for (const host of ["www.cellsunova.com", "cellsunova.com"]) {
+			const { res, calls } = await hit("/portal/crm/?tab=leads", host);
+			expect(res.status).toBe(301);
+			expect(res.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/crm/?tab=leads");
+			expect(calls).toEqual([]); // nothing served from the old host
+		}
 	});
 
 	it("never serves internal docs", async () => {
@@ -192,7 +202,7 @@ describe("cellsunova.com site routing", () => {
 	});
 
 	it("rejects non-GET methods", async () => {
-		expect((await hit("/portal/crm/", "www.cellsunova.com", "POST")).res.status).toBe(405);
+		expect((await hit("/portal/crm/", "www.cellunovabiologics.com", "POST")).res.status).toBe(405);
 	});
 
 	it("accepts a clinic application and stores it pending", async () => {
@@ -204,7 +214,7 @@ describe("cellsunova.com site routing", () => {
 		body.set("phone", "+1 555 000 1234");
 		body.set("npi", "1234567890");
 		const res = await worker.fetch!(
-			new Request("https://www.cellsunova.com/signup", { method: "POST", body }) as never,
+			new Request("https://www.cellunovabiologics.com/signup", { method: "POST", body }) as never,
 			env,
 			ctx,
 		);
@@ -223,7 +233,7 @@ describe("cellsunova.com site routing", () => {
 		body.set("email", "not-an-email");
 		body.set("phone", "+1 555 000 1234");
 		const res = await worker.fetch!(
-			new Request("https://www.cellsunova.com/signup", { method: "POST", body }) as never,
+			new Request("https://www.cellunovabiologics.com/signup", { method: "POST", body }) as never,
 			env,
 			ctx,
 		);
@@ -239,7 +249,7 @@ describe("cellsunova.com site routing", () => {
 		body.set("email", "a@clinic.test");
 		body.set("phone", "+1 555 1");
 		await worker.fetch!(
-			new Request("https://www.cellsunova.com/signup", { method: "POST", body }) as never,
+			new Request("https://www.cellunovabiologics.com/signup", { method: "POST", body }) as never,
 			env,
 			ctx,
 		);
@@ -248,7 +258,7 @@ describe("cellsunova.com site routing", () => {
 
 		// Signed out: bounced to login with the full query preserved.
 		const anon = await worker.fetch!(
-			new Request(`https://www.cellsunova.com${path}`) as never,
+			new Request(`https://www.cellunovabiologics.com${path}`) as never,
 			env,
 			ctx,
 		);
@@ -258,7 +268,7 @@ describe("cellsunova.com site routing", () => {
 		// Signed in with a valid token: approved.
 		const { cookie } = await login();
 		const ok = await worker.fetch!(
-			new Request(`https://www.cellsunova.com${path}`, { headers: { cookie } }) as never,
+			new Request(`https://www.cellunovabiologics.com${path}`, { headers: { cookie } }) as never,
 			env,
 			ctx,
 		);
@@ -268,7 +278,7 @@ describe("cellsunova.com site routing", () => {
 
 		// Wrong token: rejected.
 		const bad = await worker.fetch!(
-			new Request(`https://www.cellsunova.com/portal/approve?id=${row.id}&token=deadbeef`, {
+			new Request(`https://www.cellunovabiologics.com/portal/approve?id=${row.id}&token=deadbeef`, {
 				headers: { cookie },
 			}) as never,
 			env,
@@ -280,7 +290,7 @@ describe("cellsunova.com site routing", () => {
 	it("requires a session for the leads API and returns JSON, not a redirect", async () => {
 		const { env } = makeEnv();
 		const res = await worker.fetch!(
-			new Request("https://www.cellsunova.com/portal/api/leads") as never,
+			new Request("https://www.cellunovabiologics.com/portal/api/leads") as never,
 			env,
 			ctx,
 		);
@@ -296,13 +306,13 @@ describe("cellsunova.com site routing", () => {
 		body.set("email", "lead@inbound.test");
 		body.set("phone", "+1 555 2");
 		await worker.fetch!(
-			new Request("https://www.cellsunova.com/signup", { method: "POST", body }) as never,
+			new Request("https://www.cellunovabiologics.com/signup", { method: "POST", body }) as never,
 			env,
 			ctx,
 		);
 		const { cookie } = await login();
 		const res = await worker.fetch!(
-			new Request("https://www.cellsunova.com/portal/api/leads", { headers: { cookie } }) as never,
+			new Request("https://www.cellunovabiologics.com/portal/api/leads", { headers: { cookie } }) as never,
 			env,
 			ctx,
 		);
@@ -321,13 +331,13 @@ describe("cellsunova.com site routing", () => {
 		form.set("email", "dupe@clinic.test");
 		form.set("phone", "+1 555 3");
 		await worker.fetch!(
-			new Request("https://www.cellsunova.com/signup", { method: "POST", body: form }) as never,
+			new Request("https://www.cellunovabiologics.com/signup", { method: "POST", body: form }) as never,
 			env,
 			ctx,
 		);
 		const { cookie } = await login();
 		const upload = await worker.fetch!(
-			new Request("https://www.cellsunova.com/portal/api/leads", {
+			new Request("https://www.cellunovabiologics.com/portal/api/leads", {
 				method: "POST",
 				headers: { cookie, "content-type": "application/json" },
 				body: JSON.stringify({
@@ -348,7 +358,7 @@ describe("cellsunova.com site routing", () => {
 
 		// A later GET returns the same merged list.
 		const again = await worker.fetch!(
-			new Request("https://www.cellsunova.com/portal/api/leads", { headers: { cookie } }) as never,
+			new Request("https://www.cellunovabiologics.com/portal/api/leads", { headers: { cookie } }) as never,
 			env,
 			ctx,
 		);
@@ -391,7 +401,7 @@ describe("cellsunova.com site routing", () => {
 
 		try {
 			const scan = await worker.fetch!(
-				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+				new Request("https://www.cellunovabiologics.com/portal/api/leads/scan", {
 					method: "POST",
 					headers: { cookie, "content-type": "application/json" },
 					body: JSON.stringify({ state: "ID", categories: ["ortho"], limit: 50 }),
@@ -408,7 +418,7 @@ describe("cellsunova.com site routing", () => {
 
 			// Rescan with identical registry data: everything dedupes, nothing added.
 			const again = await worker.fetch!(
-				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+				new Request("https://www.cellunovabiologics.com/portal/api/leads/scan", {
 					method: "POST",
 					headers: { cookie, "content-type": "application/json" },
 					body: JSON.stringify({ state: "ID", categories: ["ortho"], limit: 50 }),
@@ -455,7 +465,7 @@ describe("cellsunova.com site routing", () => {
 
 		try {
 			const scan = await worker.fetch!(
-				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+				new Request("https://www.cellunovabiologics.com/portal/api/leads/scan", {
 					method: "POST",
 					headers: { cookie, "content-type": "application/json" },
 					body: JSON.stringify({ state: "ID", categories: ["podiatry"], limit: 25 }),
@@ -505,7 +515,7 @@ describe("cellsunova.com site routing", () => {
 
 		try {
 			const scan = await worker.fetch!(
-				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+				new Request("https://www.cellunovabiologics.com/portal/api/leads/scan", {
 					method: "POST",
 					headers: { cookie, "content-type": "application/json" },
 					body: JSON.stringify({ state: "ALL", categories: ["ortho"], limit: 25 }),
@@ -570,7 +580,7 @@ describe("cellsunova.com site routing", () => {
 
 		try {
 			const scan = await worker.fetch!(
-				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+				new Request("https://www.cellunovabiologics.com/portal/api/leads/scan", {
 					method: "POST",
 					headers: { cookie, "content-type": "application/json" },
 					body: JSON.stringify({ state: "ID", categories: ["ortho"], limit: 2 }),
@@ -618,7 +628,7 @@ describe("cellsunova.com site routing", () => {
 
 		try {
 			const scan = await worker.fetch!(
-				new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+				new Request("https://www.cellunovabiologics.com/portal/api/leads/scan", {
 					method: "POST",
 					headers: { cookie, "content-type": "application/json" },
 					body: JSON.stringify({ state: "ID", categories: ["podiatry"], limit: 50 }),
@@ -639,7 +649,7 @@ describe("cellsunova.com site routing", () => {
 		const { env } = makeEnv();
 		const { cookie } = await login();
 		const res = await worker.fetch!(
-			new Request("https://www.cellsunova.com/portal/api/leads/scan", {
+			new Request("https://www.cellunovabiologics.com/portal/api/leads/scan", {
 				method: "POST",
 				headers: { cookie, "content-type": "application/json" },
 				body: JSON.stringify({ state: "AZ", categories: [] }),

@@ -34,8 +34,13 @@ export default {
 		// The public CelluNOVA site lives on its own domain; everything else
 		// (workers.dev, previews) keeps serving the Jarvis API below.
 		const host = url.hostname.toLowerCase();
-		if (host === "cellsunova.com" || host === "www.cellsunova.com") {
+		if (host === "cellunovabiologics.com" || host === "www.cellunovabiologics.com") {
 			return serveCelluNova(request, env, url);
+		}
+		// The previous domain permanently redirects to the new one, keeping the path.
+		if (host === "cellsunova.com" || host === "www.cellsunova.com") {
+			url.hostname = "www.cellunovabiologics.com";
+			return Response.redirect(url.toString(), 301);
 		}
 
 		switch (`${request.method} ${url.pathname}`) {
@@ -100,7 +105,7 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 /**
- * cellsunova.com: serve the static CelluNOVA site from the assets binding.
+ * cellunovabiologics.com: serve the static CelluNOVA site from the assets binding.
  *
  * URL scheme (public URLs on the left, files under web/ on the right):
  *   /                    -> clinic-portal/site/            (homepage)
@@ -113,8 +118,8 @@ export default {
  */
 async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Response> {
 	// Canonical host: apex redirects to www.
-	if (url.hostname.toLowerCase() === "cellsunova.com") {
-		url.hostname = "www.cellsunova.com";
+	if (url.hostname.toLowerCase() === "cellunovabiologics.com") {
+		url.hostname = "www.cellunovabiologics.com";
 		return Response.redirect(url.toString(), 301);
 	}
 

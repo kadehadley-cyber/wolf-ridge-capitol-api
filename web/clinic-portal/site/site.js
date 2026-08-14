@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   cellsunova.com homepage — the only script on the page. Draws the green
+   cellunovabiologics.com homepage — the only script on the page. Draws the green
    particle-cell hero, rotates the headline, and handles the welcome card.
    Our own code (script-src 'self'); no external calls, no user data.
    ───────────────────────────────────────────────────────────────────────── */
