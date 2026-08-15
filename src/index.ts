@@ -34,6 +34,19 @@ export default {
 		// The public CelluNOVA site lives on its own domain; everything else
 		// (workers.dev, previews) keeps serving the Jarvis API below.
 		const host = url.hostname.toLowerCase();
+		const isSiteHost =
+			host === "cellunovabiologics.com" ||
+			host === "www.cellunovabiologics.com" ||
+			host === "cellsunova.com" ||
+			host === "www.cellsunova.com";
+		// Force HTTPS on the site domains, whatever the zone settings say. A plain
+		// http page makes browsers warn "the information you're about to submit is
+		// not secure" on every form.
+		if (isSiteHost && url.protocol === "http:") {
+			url.protocol = "https:";
+			url.hostname = host.endsWith("cellsunova.com") ? "www.cellunovabiologics.com" : host;
+			return Response.redirect(url.toString(), 301);
+		}
 		if (host === "cellunovabiologics.com" || host === "www.cellunovabiologics.com") {
 			return serveCelluNova(request, env, url);
 		}
