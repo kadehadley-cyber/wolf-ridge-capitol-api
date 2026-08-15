@@ -23,6 +23,12 @@ interface Env {
 	/** Where clinic applications are sent for review. Defaults to DrHadley@cellunovabiologics.com. */
 	ADMIN_NOTIFY_EMAIL?: string;
 
+	// --- Stripe checkout (secrets; never in the repo) ---
+	/** Stripe secret key (secret). Without it, checkout returns 503. */
+	STRIPE_SECRET_KEY?: string;
+	/** Stripe webhook signing secret (secret). Enables /stripe/webhook. */
+	STRIPE_WEBHOOK_SECRET?: string;
+
 	// --- Access control ---
 	/**
 	 * Shared bearer token (secret) for the HTTP endpoints `/jarvis` and

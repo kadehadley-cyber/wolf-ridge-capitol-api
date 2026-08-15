@@ -10,6 +10,7 @@ const ctx = {} as ExecutionContext;
 function makeDb() {
 	const apps = new Map<string, Record<string, unknown>>();
 	const leads = new Map<string, { data: string }>();
+	const orders = new Map<string, { data: string }>();
 	const exec = (sql: string, args: unknown[]) => ({
 		run: async () => {
 			const s = sql.trimStart();
@@ -26,17 +27,24 @@ function makeDb() {
 				leads.set(String(args[0]), { data: String(args[1]) });
 			} else if (s.startsWith("DELETE FROM crm_leads")) {
 				leads.clear();
+			} else if (s.startsWith("INSERT OR REPLACE INTO orders")) {
+				orders.set(String(args[0]), { data: String(args[1]) });
 			}
 			return {};
 		},
 		first: async () => apps.get(String(args[0])) ?? null,
 		all: async () => ({
-			results: sql.includes("FROM crm_leads") ? [...leads.values()] : [...apps.values()],
+			results: sql.includes("FROM crm_leads")
+				? [...leads.values()]
+				: sql.includes("FROM orders")
+					? [...orders.values()]
+					: [...apps.values()],
 		}),
 	});
 	return {
 		rows: apps,
 		leads,
+		orders,
 		prepare(sql: string) {
 			return { bind: (...args: unknown[]) => exec(sql, args), ...exec(sql, []) };
 		},
@@ -662,6 +670,159 @@ describe("cellunovabiologics.com site routing", () => {
 		} finally {
 			globalThis.fetch = realFetch;
 		}
+	});
+
+	it("requires a session for the ordering API and 503s without a Stripe key", async () => {
+		const { env } = makeEnv();
+		const anon = await worker.fetch!(
+			new Request("https://www.cellunovabiologics.com/portal/api/checkout", { method: "POST" }) as never,
+			env,
+			ctx,
+		);
+		expect(anon.status).toBe(401);
+
+		const { cookie } = await login();
+		const res = await worker.fetch!(
+			new Request("https://www.cellunovabiologics.com/portal/api/checkout", {
+				method: "POST",
+				headers: { cookie, "content-type": "application/json" },
+				body: JSON.stringify({ items: [{ id: "nova-flow", vol: "1 cc", qty: 1 }] }),
+			}) as never,
+			env,
+			ctx,
+		);
+		expect(res.status).toBe(503);
+	});
+
+	it("creates a Stripe checkout session with server-side prices", async () => {
+		const { env } = makeEnv();
+		(env as { STRIPE_SECRET_KEY?: string }).STRIPE_SECRET_KEY = "sk_test_x";
+		const { cookie } = await login();
+
+		const realFetch = globalThis.fetch;
+		let sentBody = "";
+		globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			const u = String(input);
+			if (u.startsWith("https://api.stripe.com/v1/checkout/sessions")) {
+				sentBody = String(init?.body ?? "");
+				return new Response(
+					JSON.stringify({ id: "cs_test_123", url: "https://checkout.stripe.com/c/pay/cs_test_123" }),
+					{ headers: { "content-type": "application/json" } },
+				);
+			}
+			return realFetch(input as never, init as never);
+		}) as typeof fetch;
+
+		try {
+			const res = await worker.fetch!(
+				new Request("https://www.cellunovabiologics.com/portal/api/checkout", {
+					method: "POST",
+					headers: { cookie, "content-type": "application/json" },
+					body: JSON.stringify({
+						items: [
+							{ id: "nova-elite", vol: "2 cc", qty: 3 },
+							{ id: "exo-plus", vol: "1 cc", qty: 2 },
+						],
+						notes: "For Tuesday cases",
+					}),
+				}) as never,
+				env,
+				ctx,
+			);
+			expect(res.status).toBe(200);
+			const data = (await res.json()) as { url: string };
+			expect(data.url).toContain("checkout.stripe.com");
+			const p = new URLSearchParams(sentBody);
+			expect(p.get("mode")).toBe("payment");
+			expect(p.get("line_items[0][price_data][unit_amount]")).toBe("160000"); // 2 cc × $800
+			expect(p.get("line_items[0][quantity]")).toBe("3");
+			expect(p.get("line_items[1][price_data][unit_amount]")).toBe("50000"); // 1 cc × $500 (NOVA-EXO+)
+			expect(p.get("metadata[notes]")).toBe("For Tuesday cases");
+			expect(p.get("success_url")).toContain("/portal/orders/");
+		} finally {
+			globalThis.fetch = realFetch;
+		}
+	});
+
+	it("confirms a paid session, records the order, and lists it", async () => {
+		const { env, db } = makeEnv();
+		(env as { STRIPE_SECRET_KEY?: string }).STRIPE_SECRET_KEY = "sk_test_x";
+		const { cookie } = await login();
+
+		const realFetch = globalThis.fetch;
+		globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			const u = String(input);
+			if (u.startsWith("https://api.stripe.com/v1/checkout/sessions/cs_test_abc")) {
+				return new Response(
+					JSON.stringify({
+						id: "cs_test_abc",
+						payment_status: "paid",
+						amount_total: 530000,
+						currency: "usd",
+						created: 1765000000,
+						metadata: { notes: "call before shipping" },
+						line_items: {
+							data: [
+								{ description: "NOVA-ELITE — 2 cc", quantity: 3, amount_total: 480000 },
+								{ description: "NOVA-EXO+ — 1 cc", quantity: 1, amount_total: 50000 },
+							],
+						},
+					}),
+					{ headers: { "content-type": "application/json" } },
+				);
+			}
+			return realFetch(input as never, init as never);
+		}) as typeof fetch;
+
+		try {
+			const confirm = await worker.fetch!(
+				new Request("https://www.cellunovabiologics.com/portal/api/checkout/confirm?session_id=cs_test_abc", {
+					headers: { cookie },
+				}) as never,
+				env,
+				ctx,
+			);
+			expect(confirm.status).toBe(200);
+			const data = (await confirm.json()) as { paid: boolean; order: { total: number; items: unknown[] } };
+			expect(data.paid).toBe(true);
+			expect(data.order.total).toBe(5300);
+			expect(data.order.items).toHaveLength(2);
+			expect(db.orders.size).toBe(1);
+
+			const list = await worker.fetch!(
+				new Request("https://www.cellunovabiologics.com/portal/api/orders", { headers: { cookie } }) as never,
+				env,
+				ctx,
+			);
+			const listed = (await list.json()) as { orders: Array<{ total: number; notes: string }> };
+			expect(listed.orders).toHaveLength(1);
+			expect(listed.orders[0].total).toBe(5300);
+			expect(listed.orders[0].notes).toBe("call before shipping");
+		} finally {
+			globalThis.fetch = realFetch;
+		}
+	});
+
+	it("rejects unconfigured or badly signed Stripe webhooks", async () => {
+		const { env } = makeEnv();
+		const noConfig = await worker.fetch!(
+			new Request("https://www.cellunovabiologics.com/stripe/webhook", { method: "POST", body: "{}" }) as never,
+			env,
+			ctx,
+		);
+		expect(noConfig.status).toBe(501);
+
+		(env as { STRIPE_WEBHOOK_SECRET?: string }).STRIPE_WEBHOOK_SECRET = "whsec_test";
+		const badSig = await worker.fetch!(
+			new Request("https://www.cellunovabiologics.com/stripe/webhook", {
+				method: "POST",
+				body: "{}",
+				headers: { "stripe-signature": `t=${Math.floor(Date.now() / 1000)},v1=deadbeef` },
+			}) as never,
+			env,
+			ctx,
+		);
+		expect(badSig.status).toBe(400);
 	});
 
 	it("rejects a scan without any specialties", async () => {
