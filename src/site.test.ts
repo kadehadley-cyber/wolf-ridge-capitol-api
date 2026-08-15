@@ -186,6 +186,25 @@ describe("cellunovabiologics.com site routing", () => {
 		expect(res.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/crm/");
 	});
 
+	it("forces https on the site domains", async () => {
+		const { env } = makeEnv();
+		const res = await worker.fetch!(
+			new Request("http://www.cellunovabiologics.com/signup") as never,
+			env,
+			ctx,
+		);
+		expect(res.status).toBe(301);
+		expect(res.headers.get("location")).toBe("https://www.cellunovabiologics.com/signup");
+		// http on the old domain jumps straight to https on the new one.
+		const old = await worker.fetch!(
+			new Request("http://cellsunova.com/portal/") as never,
+			env,
+			ctx,
+		);
+		expect(old.status).toBe(301);
+		expect(old.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/");
+	});
+
 	it("permanently redirects the old domain to the new one, keeping the path", async () => {
 		for (const host of ["www.cellsunova.com", "cellsunova.com"]) {
 			const { res, calls } = await hit("/portal/crm/?tab=leads", host);
