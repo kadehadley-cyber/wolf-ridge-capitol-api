@@ -254,6 +254,45 @@
 
     function refresh() { renderCatalog(); renderSummary(); }
 
+    /* ══ CHECKOUT ═════════════════════════════════════════════════════════
+     * Posts the cart (ids + quantities only — the server owns the prices) to
+     * the checkout endpoint and redirects to Stripe's hosted payment page.
+     * Cards never touch this site. */
+    var checkingOut = false;
+    function startCheckout() {
+        if (checkingOut) return;
+        checkingOut = true;
+        var btn = $('orderSubmit');
+        var oldLabel = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Starting secure checkout…';
+        fetch('/portal/api/checkout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                items: orderLines().map(function (x) {
+                    return { id: x.line.product.id, vol: x.line.variant.vol, qty: x.line.qty };
+                }),
+                notes: ($('orderNotes').value || '').slice(0, 480)
+            })
+        })
+            .then(function (res) {
+                return res.json().then(function (d) {
+                    if (!res.ok) throw new Error(d && d.error ? d.error : 'Checkout failed.');
+                    return d;
+                });
+            })
+            .then(function (d) { window.location.assign(d.url); })
+            .catch(function (e) {
+                checkingOut = false;
+                btn.disabled = false;
+                btn.textContent = oldLabel;
+                cModal.alert('Checkout unavailable',
+                    (e && e.message) ? e.message : 'Could not start checkout. Please try again.');
+            });
+    }
+
     /* ══ EVENTS ═══════════════════════════════════════════════════════════ */
     document.addEventListener('click', function (e) {
         var el = e.target.closest('[data-action]');
@@ -266,9 +305,7 @@
         else if (a === 'toggle-mobile-bar') { /* room for an expand panel */ }
         else if (a === 'submit-order') {
             if (!orderLines().length) return;
-            cModal.alert('Submitted for review',
-                'Your draft order was queued for physician review. In production this posts to the '
-                + 'review endpoint; no payment is taken until a physician confirms. This static build sends nothing.');
+            startCheckout();
         }
     });
 

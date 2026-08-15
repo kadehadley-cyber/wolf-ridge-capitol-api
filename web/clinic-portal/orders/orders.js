@@ -272,5 +272,56 @@
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && cModal.isOpen()) cModal.close(); });
 
+    /* ══ SERVER ORDERS ════════════════════════════════════════════════════
+     * The server is the source of truth: paid Stripe orders recorded by the
+     * worker replace the placeholders (even when the list is empty). Only when
+     * the server is unreachable — the static demo build — do placeholders stay. */
+    function mapServerOrder(o) {
+        var msgs = [];
+        if (o.notes) msgs.push({ who: 'you', name: 'You', time: o.date, body: o.notes });
+        msgs.push({ who: 'team', name: 'CelluNOVA',
+            time: o.date, body: 'Payment received — a physician is reviewing your order before it ships.' });
+        return {
+            id: o.number || o.id,
+            date: o.date || '',
+            stage: (typeof o.stage === 'number' ? o.stage : 1),
+            total: o.total || 0,
+            items: (o.items || []).map(function (it) {
+                return { name: String(it.name || ''), vol: String(it.vol || ''), qty: Number(it.qty) || 1, price: Number(it.price) || 0 };
+            }),
+            messages: msgs
+        };
+    }
+    function loadOrders() {
+        fetch('/portal/api/orders', { credentials: 'same-origin' })
+            .then(function (r) { if (!r.ok) throw new Error('bad status'); return r.json(); })
+            .then(function (d) {
+                ORDERS = (d.orders || []).map(mapServerOrder);
+                var note = $('ordersNote');
+                if (note) note.hidden = true;
+                render();
+            })
+            .catch(function () { /* server unreachable: keep the demo placeholders */ });
+    }
+
     render();
+
+    var sid = new URLSearchParams(window.location.search).get('session_id');
+    if (sid) {
+        // Back from Stripe: verify the payment server-side, record it, then load.
+        fetch('/portal/api/checkout/confirm?session_id=' + encodeURIComponent(sid), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.paid) {
+                    cModal.alert('Payment received',
+                        'Order ' + ((d.order && d.order.number) || '') + ' is paid and queued for physician review. '
+                        + 'You’ll hear from our team before it ships.');
+                }
+                loadOrders();
+            })
+            .catch(function () { loadOrders(); });
+        try { history.replaceState(null, '', '/portal/orders/'); } catch (e) { /* noop */ }
+    } else {
+        loadOrders();
+    }
 })();

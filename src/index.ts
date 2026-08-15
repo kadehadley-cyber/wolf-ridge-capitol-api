@@ -20,6 +20,7 @@ import {
 } from "./auth";
 import { ask, type ImageAttachment } from "./jarvis";
 import { handleLeadScan, handleLeadsApi } from "./leads";
+import { handleCheckout, handleCheckoutConfirm, handleOrdersList, handleStripeWebhook } from "./stripe";
 import { handleApprove, handleSignup } from "./signup";
 import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
@@ -188,6 +189,24 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 			});
 		}
 		return p.endsWith("/scan") ? handleLeadScan(request, env) : handleLeadsApi(request, env);
+	}
+
+	// ── Ordering API (JSON; session required) ──
+	if (p === "/portal/api/checkout" || p === "/portal/api/checkout/confirm" || p === "/portal/api/orders") {
+		if (!(await hasValidSession(env, request))) {
+			return new Response(JSON.stringify({ error: "Sign in required." }), {
+				status: 401,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+		if (p === "/portal/api/checkout") return handleCheckout(request, env);
+		if (p === "/portal/api/checkout/confirm") return handleCheckoutConfirm(request, env);
+		return handleOrdersList(request, env);
+	}
+
+	// Stripe calls this with a signed payload; no session, signature is the auth.
+	if (p === "/stripe/webhook") {
+		return handleStripeWebhook(request, env);
 	}
 
 	if (request.method !== "GET" && request.method !== "HEAD") {
