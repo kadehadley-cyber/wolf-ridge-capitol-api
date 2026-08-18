@@ -18,7 +18,19 @@ export function adminEmail(env: Env): string {
 	return env.ADMIN_NOTIFY_EMAIL || DEFAULT_ADMIN_EMAIL;
 }
 
-export async function sendEmail(env: Env, to: string, subject: string, html: string): Promise<SendResult> {
+export interface EmailAttachment {
+	filename: string;
+	/** Base64-encoded file body. */
+	content: string;
+}
+
+export async function sendEmail(
+	env: Env,
+	to: string,
+	subject: string,
+	html: string,
+	attachments?: EmailAttachment[],
+): Promise<SendResult> {
 	if (!env.RESEND_API_KEY) {
 		console.warn(`email skipped (RESEND_API_KEY not set): to=${to} subject=${subject}`);
 		return { ok: false, skipped: true };
@@ -35,6 +47,7 @@ export async function sendEmail(env: Env, to: string, subject: string, html: str
 				to: [to],
 				subject,
 				html,
+				...(attachments?.length ? { attachments } : {}),
 			}),
 		});
 		if (!res.ok) {

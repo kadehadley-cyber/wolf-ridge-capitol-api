@@ -54,7 +54,7 @@ interface Application {
 
 /* ── Small branded page shell (matches the login page look) ─────────────── */
 
-function page(title: string, inner: string, status = 200): Response {
+export function page(title: string, inner: string, status = 200): Response {
 	const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
