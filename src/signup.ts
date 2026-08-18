@@ -154,9 +154,9 @@ has been approved. Welcome to the CelluNOVA team.</p>
 <p style="margin:0 0 8px;font-size:13px;font-weight:bold;color:#2e7d74;text-transform:uppercase;letter-spacing:1px;">How to order from your portal</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;">
 ${step(1, 'Sign in to the clinic portal at <a href="' + SITE + '/portal/" style="color:#2e7d74;">www.cellunovabiologics.com/portal</a>. Your sign-in credentials arrive separately from our team.')}
-${step(2, "Open <strong>Pricing &amp; Ordering</strong> and build your order from the NOVA product line, adding case notes for our physicians.")}
-${step(3, "A CelluNOVA physician reviews every order before any payment is processed.")}
-${step(4, "Approved orders ship cold-chain with tracking, with protocols matched to what you ordered.")}
+${step(2, "Open <strong>Pricing &amp; Ordering</strong> and build your order from the NOVA product line, adding case notes for our team.")}
+${step(3, "Pay securely by card at checkout — your order goes straight to fulfilment.")}
+${step(4, "Orders ship cold-chain with tracking, with protocols matched to what you ordered.")}
 </table>
 ${button(SITE + "/portal/", "Open the Clinic Portal")}
 <p style="margin:6px 0 0;font-size:14px;color:#4a5f58;line-height:1.7;">Prefer a hand? Your rep can place the order for you.</p>
