@@ -27,6 +27,8 @@ const CATALOG: Record<string, { name: string; perCcCents: number; vols: Record<s
 	"nova-flex": { name: "NOVA-M1", perCcCents: 80000, vols: { "1 cc": 1, "2 cc": 2 } },
 	"nova-elite": { name: "NOVA-E2", perCcCents: 80000, vols: { "1 cc": 1, "2 cc": 2 } },
 	"exo-plus": { name: "NOVA-E1", perCcCents: 50000, vols: { "1 cc": 1, "2 cc": 2, "3 cc": 3 } },
+	// Materials & Extras — fixed-price equipment.
+	"cryofreezer": { name: "-80°C Cryofreezer", perCcCents: 270000, vols: { "1 unit": 1 } },
 };
 const MAX_LINES = 20;
 const MAX_QTY = 50;
