@@ -23,6 +23,7 @@ import {
 import { ask, type ImageAttachment } from "./jarvis";
 import { handleLeadScan, handleLeadsApi } from "./leads";
 import { handleCheckout, handleCheckoutConfirm, handleOrdersList, handleStripeWebhook } from "./stripe";
+import { handleRepAssign, handleRepFollowup, handleRepFollowupDone, handleRepLeads, handleRepNote } from "./rep";
 import { handleApprove, handleSignup } from "./signup";
 import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
@@ -139,19 +140,38 @@ function isAdminOnlyPath(p: string): boolean {
 	);
 }
 
-/** For clinic sessions, drop the admin-only links from any served portal HTML
- *  so the sidebar only shows what the account can actually open. */
-function stripAdminNav(res: Response): Response {
+/** Portal paths a rep session may reach: its own workspace, the marketing
+ *  materials, the one sample protocol (Shoulder IM), and shared styling. */
+function isRepAllowedPath(p: string): boolean {
+	return (
+		p === "/portal/rep" ||
+		p.startsWith("/portal/rep/") ||
+		p === "/portal/marketing" ||
+		p.startsWith("/portal/marketing/") ||
+		p === "/portal/marketing-resources" ||
+		p === "/portal/protocols/library/shoulder-im.pdf" ||
+		p.startsWith("/portal/styles/") ||
+		p.startsWith("/portal/js/")
+	);
+}
+
+/** For clinic and rep sessions, drop the links from served portal HTML that
+ *  the account can't open, so the sidebar shows only what actually works. */
+function stripNavFor(role: string, res: Response): Response {
 	if (typeof HTMLRewriter === "undefined") return res; // non-workers runtime (tests)
 	const type = res.headers.get("content-type") ?? "";
 	if (!type.includes("text/html")) return res;
+	const strip =
+		role === "clinic"
+			? ["/portal/crm", "/portal/marketing", "/portal/support", "/portal/treatment-schedule", "/portal/rep"]
+			: role === "rep"
+				? ["/portal/crm", "/portal/protocols", "/portal/templates", "/portal/pricing", "/portal/orders", "/portal/support", "/portal/treatment-schedule"]
+				: [];
+	if (!strip.length) return res;
 	const remove = { element(el: { remove(): void }) { el.remove(); } };
-	return new HTMLRewriter()
-		.on('a[href="/portal/crm"]', remove)
-		.on('a[href="/portal/marketing"]', remove)
-		.on('a[href="/portal/support"]', remove)
-		.on('a[href="/portal/treatment-schedule"]', remove)
-		.transform(res);
+	let rw = new HTMLRewriter();
+	for (const href of strip) rw = rw.on(`a[href="${href}"]`, remove);
+	return rw.transform(res);
 }
 
 /**
@@ -239,6 +259,34 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		return p.endsWith("/scan") ? handleLeadScan(request, env) : handleLeadsApi(request, env);
 	}
 
+	// ── Rep workspace API (JSON; rep sees own assignments, admin everything,
+	//    manager read-only, clinic never) ──
+	if (p.startsWith("/portal/api/rep/")) {
+		const sess = await getSession(env, request);
+		if (!sess) {
+			return new Response(JSON.stringify({ error: "Sign in required." }), {
+				status: 401,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+		const deny = (msg: string, status = 403) =>
+			new Response(JSON.stringify({ error: msg }), {
+				status,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		if (sess.role === "clinic") return deny("Not available to clinic accounts.");
+		if (p === "/portal/api/rep/leads" && request.method === "GET") return handleRepLeads(env, sess);
+		if (request.method !== "POST") return deny("Method not allowed.", 405);
+		if (sess.role === "manager") return deny("Manager accounts are view-only.");
+		if (p === "/portal/api/rep/assign") {
+			return sess.role === "admin" ? handleRepAssign(request, env) : deny("Admin access required.");
+		}
+		if (p === "/portal/api/rep/note") return handleRepNote(request, env, sess);
+		if (p === "/portal/api/rep/followup") return handleRepFollowup(request, env, sess);
+		if (p === "/portal/api/rep/followup-done") return handleRepFollowupDone(request, env, sess);
+		return deny("Not found.", 404);
+	}
+
 	// ── Ordering API (JSON; session required) ──
 	if (p === "/portal/api/checkout" || p === "/portal/api/checkout/confirm" || p === "/portal/api/orders") {
 		const sess = await getSession(env, request);
@@ -297,6 +345,13 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 			url.search = "";
 			return Response.redirect(url.toString(), 302);
 		}
+		// Reps live in their workspace: assigned leads, the marketing
+		// materials, and the sample protocol — nothing else.
+		if (role === "rep" && !isRepAllowedPath(p)) {
+			url.pathname = "/portal/rep/";
+			url.search = "";
+			return Response.redirect(url.toString(), 302);
+		}
 	}
 
 	// Approve link from the clinic-application review email (session-gated
@@ -313,7 +368,7 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		["/portal/support", "/portal/tickets/"],
 		["/portal/marketing-resources", "/portal/marketing/"],
 	]);
-	for (const dir of ["crm", "pricing", "orders", "tickets", "treatment-schedule", "welcome", "admin", "marketing", "templates"]) {
+	for (const dir of ["crm", "pricing", "orders", "tickets", "treatment-schedule", "welcome", "admin", "marketing", "templates", "rep"]) {
 		redirects.set(`/portal/${dir}`, `/portal/${dir}/`);
 	}
 	const target = redirects.get(p);
@@ -335,7 +390,7 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 
 	const assetUrl = new URL(assetPath, url.origin);
 	const res = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
-	return role === "clinic" ? stripAdminNav(res) : res;
+	return role ? stripNavFor(role, res) : res;
 }
 
 /**

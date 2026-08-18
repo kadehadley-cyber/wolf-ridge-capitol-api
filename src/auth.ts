@@ -21,8 +21,10 @@ export const DEFAULT_ADMIN_PASS_HASH =
 
 /** Signed-in roles. The admin (DrHadley) sees and edits everything; a manager
  *  sees everything the admin sees but read-only (no scans, imports, orders,
- *  or approvals); clinic accounts get only the clinic-facing pages. */
-export type Role = "admin" | "manager" | "clinic";
+ *  or approvals); clinic accounts get only the clinic-facing pages; rep
+ *  accounts get their assigned leads, the marketing materials, and one
+ *  sample protocol. */
+export type Role = "admin" | "manager" | "clinic" | "rep";
 
 /** What a signed session asserts: who signed in and at which level. */
 export interface Session {
@@ -43,6 +45,19 @@ const MANAGER_ACCOUNT: Account = {
 	hash: "pbkdf2$100000$4ac2b07b25a4c91b951132bce30e0dde$91b7946a0e954275f6aeb177c253246593ca9a674864061bb9e2746d84430d40",
 	role: "manager",
 };
+
+// Rep accounts, one per approved sales rep. Add a row per rep; only the
+// PBKDF2 hash is stored here. Leads are assigned to a rep by username.
+const REP_ACCOUNTS: Account[] = [
+	{
+		user: "Rep1", // starter rep account — rename per rep as they're approved
+		hash: "pbkdf2$100000$f0417ed8d783a887d1c989c3b995e93a$fc2f634b205b0c8784c0aead82f0c1995aa2cbb8620425c29ca32f47c029580c",
+		role: "rep",
+	},
+];
+
+/** Usernames leads can be assigned to (the admin's assign dropdown). */
+export const REP_USERS: string[] = REP_ACCOUNTS.map((a) => a.user);
 
 // Clinic accounts, one per partner clinic. Add a row per clinic; only the
 // PBKDF2 hash is stored here.
@@ -65,6 +80,7 @@ function accounts(env: Env): Account[] {
 			role: "admin",
 		},
 		MANAGER_ACCOUNT,
+		...REP_ACCOUNTS,
 		...CLINIC_ACCOUNTS,
 	];
 }
@@ -142,7 +158,7 @@ export const CLEAR_SESSION_COOKIE = `${COOKIE}=; Max-Age=0; Path=/; Secure; Http
 /** The signed session, or null when it is absent/expired/forged. */
 export async function getSession(env: Env, request: Request): Promise<Session | null> {
 	const cookie = request.headers.get("cookie") ?? "";
-	const m = /(?:^|;\s*)cn_admin=(\d+)\.(admin|manager|clinic)\.([0-9a-f]*)\.([0-9a-f]+)/.exec(cookie);
+	const m = /(?:^|;\s*)cn_admin=(\d+)\.(admin|manager|clinic|rep)\.([0-9a-f]*)\.([0-9a-f]+)/.exec(cookie);
 	if (!m) return null;
 	const exp = Number(m[1]);
 	if (!Number.isFinite(exp) || exp < Date.now()) return null;
