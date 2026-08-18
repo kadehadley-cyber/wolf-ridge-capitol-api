@@ -1055,6 +1055,23 @@ describe("cellunovabiologics.com site routing", () => {
 			expect(p.get("line_items[1][price_data][unit_amount]")).toBe("50000"); // 1 cc × $500 (NOVA-E1)
 			expect(p.get("metadata[notes]")).toBe("For Tuesday cases");
 			expect(p.get("success_url")).toContain("/portal/orders/");
+
+			// Volumes are per-product: 3 cc exists only for NOVA-E1, 5 cc nowhere.
+			const tryVol = async (id: string, vol: string) =>
+				(
+					await worker.fetch!(
+						new Request("https://www.cellunovabiologics.com/portal/api/checkout", {
+							method: "POST",
+							headers: { cookie, "content-type": "application/json" },
+							body: JSON.stringify({ items: [{ id, vol, qty: 1 }] }),
+						}) as never,
+						env,
+						ctx,
+					)
+				).status;
+			expect(await tryVol("exo-plus", "3 cc")).toBe(200);
+			expect(await tryVol("nova-flow", "3 cc")).toBe(400);
+			expect(await tryVol("nova-elite", "5 cc")).toBe(400);
 		} finally {
 			globalThis.fetch = realFetch;
 		}

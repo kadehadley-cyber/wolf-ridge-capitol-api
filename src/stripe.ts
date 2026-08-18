@@ -20,13 +20,14 @@ import { adminEmail, esc, sendEmail } from "./email";
 const SITE = "https://www.cellunovabiologics.com";
 
 // The NOVA line: $800 per cc, NOVA-E1 at $500 per cc (unit_amount is cents).
-const CATALOG: Record<string, { name: string; perCcCents: number }> = {
-	"nova-flow": { name: "NOVA-V1", perCcCents: 80000 },
-	"nova-flex": { name: "NOVA-M1", perCcCents: 80000 },
-	"nova-elite": { name: "NOVA-E2", perCcCents: 80000 },
-	"exo-plus": { name: "NOVA-E1", perCcCents: 50000 },
+// Each product sells only its listed volumes: V1/M1/E2 in 1 or 2 cc, E1 in
+// 1, 2, or 3 cc.
+const CATALOG: Record<string, { name: string; perCcCents: number; vols: Record<string, number> }> = {
+	"nova-flow": { name: "NOVA-V1", perCcCents: 80000, vols: { "1 cc": 1, "2 cc": 2 } },
+	"nova-flex": { name: "NOVA-M1", perCcCents: 80000, vols: { "1 cc": 1, "2 cc": 2 } },
+	"nova-elite": { name: "NOVA-E2", perCcCents: 80000, vols: { "1 cc": 1, "2 cc": 2 } },
+	"exo-plus": { name: "NOVA-E1", perCcCents: 50000, vols: { "1 cc": 1, "2 cc": 2, "3 cc": 3 } },
 };
-const VOLUMES: Record<string, number> = { "1 cc": 1, "2 cc": 2, "5 cc": 5 };
 const MAX_LINES = 20;
 const MAX_QTY = 50;
 
@@ -94,7 +95,7 @@ export async function handleCheckout(request: Request, env: Env, account = ""): 
 	let i = 0;
 	for (const item of items) {
 		const product = CATALOG[String(item.id ?? "")];
-		const cc = VOLUMES[String(item.vol ?? "")];
+		const cc = product?.vols[String(item.vol ?? "")];
 		const qty = Math.floor(Number(item.qty) || 0);
 		if (!product || !cc) return json({ error: "Unknown product or size." }, 400);
 		if (qty < 1 || qty > MAX_QTY) return json({ error: "Quantity out of range." }, 400);

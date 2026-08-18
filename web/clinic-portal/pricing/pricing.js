@@ -37,13 +37,13 @@
     };
     var PRODUCTS = [
         { id: 'nova-flow',  name: 'NOVA-V1', cat: 'msc',
-          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }, { vol: '5 cc', price: 4000 }] },
+          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }] },
         { id: 'nova-flex',  name: 'NOVA-M1', cat: 'msc',
-          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }, { vol: '5 cc', price: 4000 }] },
+          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }] },
         { id: 'nova-elite', name: 'NOVA-E2', cat: 'msc', popular: true,
-          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }, { vol: '5 cc', price: 4000 }] },
+          variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }] },
         { id: 'exo-plus',   name: 'NOVA-E1', cat: 'exo', popular: true,
-          variants: [{ vol: '1 cc', price: 500 }, { vol: '2 cc', price: 1000 }, { vol: '5 cc', price: 2500 }] }
+          variants: [{ vol: '1 cc', price: 500 }, { vol: '2 cc', price: 1000 }, { vol: '3 cc', price: 1500 }] }
     ];
 
     var catLabel = {};
