@@ -70,8 +70,10 @@ async function stripeApi(env: Env, method: "GET" | "POST", path: string, body?: 
 	return data;
 }
 
-/** POST /portal/api/checkout — cart in, Stripe-hosted payment page URL out. */
-export async function handleCheckout(request: Request, env: Env): Promise<Response> {
+/** POST /portal/api/checkout — cart in, Stripe-hosted payment page URL out.
+ *  `account` is the signed-in username; it rides in the session metadata so
+ *  the recorded order is attributed to the clinic that placed it. */
+export async function handleCheckout(request: Request, env: Env, account = ""): Promise<Response> {
 	if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
 	if (!env.STRIPE_SECRET_KEY) {
 		return json({ error: "Payments aren't configured yet. Set the STRIPE_SECRET_KEY secret." }, 503);
@@ -105,6 +107,7 @@ export async function handleCheckout(request: Request, env: Env): Promise<Respon
 	const notes = String(body.notes ?? "").slice(0, 480);
 	if (notes) params.set("metadata[notes]", notes);
 	params.set("metadata[source]", "clinic-portal");
+	if (account) params.set("metadata[account]", account.slice(0, 100));
 
 	try {
 		const session = await stripeApi(env, "POST", "/v1/checkout/sessions", params);
@@ -121,7 +124,7 @@ interface StripeSession {
 	amount_total?: number;
 	currency?: string;
 	created?: number;
-	metadata?: { notes?: string };
+	metadata?: { notes?: string; account?: string };
 	line_items?: { data?: Array<{ description?: string; quantity?: number; amount_total?: number }> };
 }
 
@@ -146,6 +149,7 @@ async function recordPaidSession(env: Env, session: StripeSession): Promise<Reco
 		total: (Number(session.amount_total) || 0) / 100,
 		currency: session.currency ?? "usd",
 		notes: session.metadata?.notes ?? "",
+		account: session.metadata?.account ?? "",
 		items,
 	};
 	await ensureOrdersTable(env);
@@ -170,6 +174,7 @@ function orderNotificationEmail(order: {
 	total: number;
 	currency: string;
 	notes: string;
+	account?: string;
 	items: { name: string; vol: string; qty: number; price: number }[];
 }): string {
 	const rows = order.items
@@ -184,7 +189,7 @@ function orderNotificationEmail(order: {
 	return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#f6faf9;">
 <div style="background:#ffffff;border:1px solid #e3ecea;border-radius:10px;padding:24px;">
 <h1 style="margin:0 0 6px;font-size:21px;color:#16403b;">New paid order ${esc(order.number)}</h1>
-<p style="margin:0 0 16px;font-size:14px;color:#4a5f58;">Paid ${esc(order.date)} — now in fulfilment. Ship cold-chain with tracking.</p>
+<p style="margin:0 0 16px;font-size:14px;color:#4a5f58;">Paid ${esc(order.date)}${order.account ? ` by <strong style="color:#16403b;">${esc(order.account)}</strong>` : ""} — now in fulfilment. Ship cold-chain with tracking.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">${rows}
 <tr><td style="padding:10px;font-size:15px;font-weight:bold;color:#16403b;" colspan="2">Total paid</td>
 <td style="padding:10px;font-size:15px;font-weight:bold;color:#16403b;text-align:right;">$${order.total.toLocaleString("en-US")} ${esc(order.currency.toUpperCase())}</td></tr>
@@ -216,14 +221,20 @@ export async function handleCheckoutConfirm(request: Request, env: Env): Promise
 	}
 }
 
-/** GET /portal/api/orders — recorded orders, newest first. */
-export async function handleOrdersList(_request: Request, env: Env): Promise<Response> {
+/** GET /portal/api/orders — recorded orders, newest first. Admin sessions see
+ *  everything; a clinic session sees only orders placed by its own account. */
+export async function handleOrdersList(
+	_request: Request,
+	env: Env,
+	session: { role: string; user: string } = { role: "admin", user: "" },
+): Promise<Response> {
 	await ensureOrdersTable(env);
 	const rows = await env.DB.prepare(`SELECT data FROM orders ORDER BY created_at DESC`).all<{ data: string }>();
 	const orders: unknown[] = [];
 	for (const row of rows.results ?? []) {
 		try {
-			orders.push(JSON.parse(row.data));
+			const order = JSON.parse(row.data) as { account?: string };
+			if (session.role === "admin" || (order.account ?? "") === session.user) orders.push(order);
 		} catch {
 			// Skip an unparsable row rather than failing the list.
 		}
