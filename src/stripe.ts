@@ -140,7 +140,7 @@ async function recordPaidSession(env: Env, session: StripeSession): Promise<Reco
 		number: "CN-" + String(session.id ?? "").slice(-6).toUpperCase(),
 		date: new Date((Number(session.created) || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
 		status: "paid",
-		stage: 1, // paid, awaiting physician review
+		stage: 2, // paid and confirmed — straight to fulfilment
 		total: (Number(session.amount_total) || 0) / 100,
 		currency: session.currency ?? "usd",
 		notes: session.metadata?.notes ?? "",

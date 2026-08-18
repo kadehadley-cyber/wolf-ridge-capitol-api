@@ -17,7 +17,7 @@
 
     /* Pipeline the timeline walks through. `stage` on each order indexes here;
      * 'cancelled' is handled separately. */
-    var STEPS = ['Placed', 'Review', 'Approved', 'Shipped', 'Delivered'];
+    var STEPS = ['Placed', 'Paid', 'Processing', 'Shipped', 'Delivered'];
 
     /* ══ PLACEHOLDER ORDERS ═══════════════════════════════════════════════ */
     var ORDERS = [
@@ -29,7 +29,7 @@
             ],
             messages: [
                 { who: 'you', name: 'You', time: '2026-08-08 14:12:00', body: 'Placing our monthly restock — patients scheduled next week.' },
-                { who: 'team', name: 'CelluNOVA', time: '2026-08-08 15:40:00', body: 'Received — a physician is reviewing now. We’ll confirm before any charge.' }
+                { who: 'team', name: 'CelluNOVA', time: '2026-08-08 15:40:00', body: 'Received — your order is being prepared for shipment.' }
             ]
         },
         {
@@ -280,11 +280,11 @@
         var msgs = [];
         if (o.notes) msgs.push({ who: 'you', name: 'You', time: o.date, body: o.notes });
         msgs.push({ who: 'team', name: 'CelluNOVA',
-            time: o.date, body: 'Payment received — a physician is reviewing your order before it ships.' });
+            time: o.date, body: 'Payment received — your order is confirmed and being prepared for shipment.' });
         return {
             id: o.number || o.id,
             date: o.date || '',
-            stage: (typeof o.stage === 'number' ? o.stage : 1),
+            stage: (typeof o.stage === 'number' ? o.stage : 2),
             total: o.total || 0,
             items: (o.items || []).map(function (it) {
                 return { name: String(it.name || ''), vol: String(it.vol || ''), qty: Number(it.qty) || 1, price: Number(it.price) || 0 };
@@ -314,8 +314,8 @@
             .then(function (d) {
                 if (d && d.paid) {
                     cModal.alert('Payment received',
-                        'Order ' + ((d.order && d.order.number) || '') + ' is paid and queued for physician review. '
-                        + 'You’ll hear from our team before it ships.');
+                        'Order ' + ((d.order && d.order.number) || '') + ' is paid and confirmed. '
+                        + 'We’ll email tracking as soon as it ships.');
                 }
                 loadOrders();
             })
