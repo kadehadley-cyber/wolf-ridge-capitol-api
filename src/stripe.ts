@@ -15,6 +15,8 @@
 // Prices are computed HERE from the canonical catalog. The client sends only
 // product ids and quantities, so a tampered page can't change what's charged.
 
+import { adminEmail, esc, sendEmail } from "./email";
+
 const SITE = "https://www.cellunovabiologics.com";
 
 // The NOVA line: $800 per cc, NOVA-EXO+ at $500 per cc (unit_amount is cents).
@@ -147,10 +149,49 @@ async function recordPaidSession(env: Env, session: StripeSession): Promise<Reco
 		items,
 	};
 	await ensureOrdersTable(env);
+	const existing = await env.DB.prepare(`SELECT id FROM orders WHERE id = ?1`)
+		.bind(String(session.id))
+		.first();
 	await env.DB.prepare(`INSERT OR REPLACE INTO orders (id, data, created_at) VALUES (?1, ?2, ?3)`)
 		.bind(String(session.id), JSON.stringify(order), order.date)
 		.run();
+	// Notify on first record only — confirm-on-return and the webhook can both
+	// land here for the same session, but the admin should hear about it once.
+	if (!existing) {
+		await sendEmail(env, adminEmail(env), `New paid order: ${order.number}`, orderNotificationEmail(order));
+	}
 	return order;
+}
+
+/** Admin notification for a freshly paid order. */
+function orderNotificationEmail(order: {
+	number: string;
+	date: string;
+	total: number;
+	currency: string;
+	notes: string;
+	items: { name: string; vol: string; qty: number; price: number }[];
+}): string {
+	const rows = order.items
+		.map(
+			(it) => `<tr>
+	<td style="padding:6px 10px;border-bottom:1px solid #e3ecea;font-size:14px;color:#16403b;">${esc(it.name)}${it.vol ? " — " + esc(it.vol) : ""}</td>
+	<td style="padding:6px 10px;border-bottom:1px solid #e3ecea;font-size:14px;color:#4a5f58;text-align:center;">×${it.qty}</td>
+	<td style="padding:6px 10px;border-bottom:1px solid #e3ecea;font-size:14px;color:#16403b;text-align:right;">$${(it.price * it.qty).toLocaleString("en-US")}</td>
+</tr>`,
+		)
+		.join("");
+	return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#f6faf9;">
+<div style="background:#ffffff;border:1px solid #e3ecea;border-radius:10px;padding:24px;">
+<h1 style="margin:0 0 6px;font-size:21px;color:#16403b;">New paid order ${esc(order.number)}</h1>
+<p style="margin:0 0 16px;font-size:14px;color:#4a5f58;">Paid ${esc(order.date)} — now in fulfilment. Ship cold-chain with tracking.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">${rows}
+<tr><td style="padding:10px;font-size:15px;font-weight:bold;color:#16403b;" colspan="2">Total paid</td>
+<td style="padding:10px;font-size:15px;font-weight:bold;color:#16403b;text-align:right;">$${order.total.toLocaleString("en-US")} ${esc(order.currency.toUpperCase())}</td></tr>
+</table>
+${order.notes ? `<p style="margin:14px 0 0;font-size:13px;color:#4a5f58;"><strong style="color:#16403b;">Clinic notes:</strong> ${esc(order.notes)}</p>` : ""}
+<p style="margin:18px 0 0;"><a href="${SITE}/portal/orders/" style="display:inline-block;background:#2e7d74;color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:10px 18px;border-radius:6px;">Open Order History</a></p>
+</div></div>`;
 }
 
 /** GET /portal/api/checkout/confirm?session_id=… — verify with Stripe, record. */
