@@ -29,20 +29,20 @@
         { key: 'exo', label: 'Exosomes' }
     ];
     /* The NOVA product family, from the CelluNOVA Brand Standards Guide:
-     * NOVA-FLOW, NOVA-FLEX, NOVA-ELITE at $800 per cc; NOVA-EXO+ at $500 per
+     * NOVA-V1, NOVA-M1, NOVA-E2 at $800 per cc; NOVA-E1 at $500 per
      * cc. Volume options are placeholders until the finalized sizes are set. */
     var PRICING = {
         perCc: 800,
         novaExoPlusPerCc: 500
     };
     var PRODUCTS = [
-        { id: 'nova-flow',  name: 'NOVA-FLOW', cat: 'msc',
+        { id: 'nova-flow',  name: 'NOVA-V1', cat: 'msc',
           variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }, { vol: '5 cc', price: 4000 }] },
-        { id: 'nova-flex',  name: 'NOVA-FLEX', cat: 'msc',
+        { id: 'nova-flex',  name: 'NOVA-M1', cat: 'msc',
           variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }, { vol: '5 cc', price: 4000 }] },
-        { id: 'nova-elite', name: 'NOVA-ELITE', cat: 'msc', popular: true,
+        { id: 'nova-elite', name: 'NOVA-E2', cat: 'msc', popular: true,
           variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }, { vol: '5 cc', price: 4000 }] },
-        { id: 'exo-plus',   name: 'NOVA-EXO+', cat: 'exo', popular: true,
+        { id: 'exo-plus',   name: 'NOVA-E1', cat: 'exo', popular: true,
           variants: [{ vol: '1 cc', price: 500 }, { vol: '2 cc', price: 1000 }, { vol: '5 cc', price: 2500 }] }
     ];
 

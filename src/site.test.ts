@@ -1052,7 +1052,7 @@ describe("cellunovabiologics.com site routing", () => {
 			expect(p.get("mode")).toBe("payment");
 			expect(p.get("line_items[0][price_data][unit_amount]")).toBe("160000"); // 2 cc × $800
 			expect(p.get("line_items[0][quantity]")).toBe("3");
-			expect(p.get("line_items[1][price_data][unit_amount]")).toBe("50000"); // 1 cc × $500 (NOVA-EXO+)
+			expect(p.get("line_items[1][price_data][unit_amount]")).toBe("50000"); // 1 cc × $500 (NOVA-E1)
 			expect(p.get("metadata[notes]")).toBe("For Tuesday cases");
 			expect(p.get("success_url")).toContain("/portal/orders/");
 		} finally {
@@ -1079,8 +1079,8 @@ describe("cellunovabiologics.com site routing", () => {
 						metadata: { notes: "call before shipping" },
 						line_items: {
 							data: [
-								{ description: "NOVA-ELITE — 2 cc", quantity: 3, amount_total: 480000 },
-								{ description: "NOVA-EXO+ — 1 cc", quantity: 1, amount_total: 50000 },
+								{ description: "NOVA-E2 — 2 cc", quantity: 3, amount_total: 480000 },
+								{ description: "NOVA-E1 — 1 cc", quantity: 1, amount_total: 50000 },
 							],
 						},
 					}),

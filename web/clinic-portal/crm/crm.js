@@ -209,7 +209,7 @@
     var PRICING = {
         parityCompetitor: 'platinum',
         ourPricePerCc: 800,         // $ per cc across the line
-        novaExoPlusPerCc: 500       // NOVA-EXO+ per cc
+        novaExoPlusPerCc: 500       // NOVA-E1 per cc
     };
 
     /* ══ INTELLIGENCE SIGNALS (PLACEHOLDER) ═══════════════════════════════
@@ -566,7 +566,7 @@
     /* Estimated per-cc savings a rep can quote, given the lead's current price.
      * Reads the placeholder PRICING config, numbers change when it does. */
     /* Concrete savings math from real prices: their reported price per cc vs
-     * our $800 (NOVA-EXO+ at $500 is the sharper opener when they buy exosomes). */
+     * our $800 (NOVA-E1 at $500 is the sharper opener when they buy exosomes). */
     function savingsLine(l) {
         var supplier = (l.current_supplier || '').trim();
         if (supplier.toLowerCase() === PRICING.parityCompetitor)
@@ -578,10 +578,10 @@
                 + ', saving $' + delta + ' per cc';
             if (l.est_monthly_cc) line += ' (about $' + (delta * l.est_monthly_cc).toLocaleString()
                 + ' per month at ' + l.est_monthly_cc + ' cc)';
-            if (l.offers_exosomes) line += '. NOVA-EXO+ at $' + PRICING.novaExoPlusPerCc + ' per cc widens it further';
+            if (l.offers_exosomes) line += '. NOVA-E1 at $' + PRICING.novaExoPlusPerCc + ' per cc widens it further';
             return line + '.';
         }
-        return 'Versus ' + supplier + ', lead with NOVA-EXO+ at $' + PRICING.novaExoPlusPerCc
+        return 'Versus ' + supplier + ', lead with NOVA-E1 at $' + PRICING.novaExoPlusPerCc
             + ' per cc and physician-led support.';
     }
 
