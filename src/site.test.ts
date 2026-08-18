@@ -142,6 +142,39 @@ describe("cellunovabiologics.com site routing", () => {
 		expect(bad.res.status).toBe(401);
 	});
 
+	it("signs in a clinic account and blocks it from admin areas", async () => {
+		const { res, cookie } = await login("UnitedChiro", "UC-m42f5xyDaCiFkm");
+		expect(res.status).toBe(303);
+		expect(cookie.startsWith("cn_admin=")).toBe(true);
+		expect(cookie).toContain(".clinic.");
+		// Clinic pages work…
+		expect((await hit("/portal/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual(["/clinic-portal/"]);
+		expect((await hit("/portal/templates/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual([
+			"/clinic-portal/templates/",
+		]);
+		expect((await hit("/portal/orders/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual([
+			"/clinic-portal/orders/",
+		]);
+		// …admin areas redirect away without touching assets…
+		for (const blocked of ["/portal/crm/", "/portal/marketing/", "/portal/admin/", "/portal/approve"]) {
+			const { res: r, calls } = await hit(blocked, "www.cellunovabiologics.com", "GET", cookie);
+			expect(r.status).toBe(302);
+			expect(r.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/");
+			expect(calls).toEqual([]);
+		}
+		// …and the CRM API refuses with 403.
+		const api = await hit("/portal/api/leads", "www.cellunovabiologics.com", "GET", cookie);
+		expect(api.res.status).toBe(403);
+	});
+
+	it("keeps the CRM open to admin sessions", async () => {
+		const { cookie } = await login();
+		expect(cookie).toContain(".admin.");
+		const { res } = await hit("/portal/api/leads", "www.cellunovabiologics.com", "GET", cookie);
+		expect(res.status).not.toBe(403);
+		expect(res.status).not.toBe(401);
+	});
+
 	it("serves the protocols page at /portal/ when signed in", async () => {
 		const { cookie } = await login();
 		const { calls } = await hit("/portal/", "www.cellunovabiologics.com", "GET", cookie);

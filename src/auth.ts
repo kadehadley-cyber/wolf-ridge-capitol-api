@@ -25,18 +25,39 @@ const SECOND_ADMIN_USER = "Admin";
 const SECOND_ADMIN_PASS_HASH =
 	"pbkdf2$100000$4ac2b07b25a4c91b951132bce30e0dde$91b7946a0e954275f6aeb177c253246593ca9a674864061bb9e2746d84430d40";
 
+/** Signed-in roles. Admins see everything; clinic accounts get the
+ *  clinic-facing pages (protocols, templates, ordering, orders, support) but
+ *  never the CRM, marketing, or admin areas. */
+export type Role = "admin" | "clinic";
+
 interface Account {
 	user: string;
 	hash: string;
+	role: Role;
 }
+
+// Clinic accounts, one per partner clinic. Add a row per clinic; only the
+// PBKDF2 hash is stored here.
+const CLINIC_ACCOUNTS: Account[] = [
+	{
+		user: "UnitedChiro", // United Chiropractic and Medical — Katy, TX
+		hash: "pbkdf2$100000$b0f81e7d5605abf51a1cf65e8dd62bb1$bce8c62576d2cef4569d81a8931216c9300c90ed15abb78381c3ea5947517e86",
+		role: "clinic",
+	},
+];
 
 /** Accounts allowed to sign in: the primary (overridable via the
  *  PORTAL_ADMIN_USER / PORTAL_ADMIN_PASS_HASH secrets so it can rotate without
- *  a code change) plus the built-in secondary account. */
+ *  a code change), the built-in secondary admin, and the clinic accounts. */
 function accounts(env: Env): Account[] {
 	return [
-		{ user: env.PORTAL_ADMIN_USER || DEFAULT_ADMIN_USER, hash: env.PORTAL_ADMIN_PASS_HASH || DEFAULT_ADMIN_PASS_HASH },
-		{ user: SECOND_ADMIN_USER, hash: SECOND_ADMIN_PASS_HASH },
+		{
+			user: env.PORTAL_ADMIN_USER || DEFAULT_ADMIN_USER,
+			hash: env.PORTAL_ADMIN_PASS_HASH || DEFAULT_ADMIN_PASS_HASH,
+			role: "admin",
+		},
+		{ user: SECOND_ADMIN_USER, hash: SECOND_ADMIN_PASS_HASH, role: "admin" },
+		...CLINIC_ACCOUNTS,
 	];
 }
 
@@ -74,8 +95,8 @@ export async function pbkdf2Hex(password: string, saltHex: string, iterations: n
 	return bytesToHex(bits);
 }
 
-export async function verifyCredentials(env: Env, username: string, password: string): Promise<boolean> {
-	let ok = false;
+export async function verifyCredentials(env: Env, username: string, password: string): Promise<Role | null> {
+	let matched: Role | null = null;
 	// Check every account with the same work regardless of match, so a wrong
 	// username costs the same as a wrong password and neither short-circuits.
 	for (const acc of accounts(env)) {
@@ -85,9 +106,9 @@ export async function verifyCredentials(env: Env, username: string, password: st
 		const derived = await pbkdf2Hex(password, parts[2], iterations);
 		const userOk = timingSafeEqualStr(username, acc.user);
 		const passOk = timingSafeEqualStr(derived, parts[3]);
-		if (userOk && passOk) ok = true;
+		if (userOk && passOk) matched = acc.role;
 	}
-	return ok;
+	return matched;
 }
 
 async function signingKey(env: Env): Promise<CryptoKey> {
@@ -98,30 +119,37 @@ async function signingKey(env: Env): Promise<CryptoKey> {
 	]);
 }
 
-export async function createSessionCookie(env: Env): Promise<string> {
+export async function createSessionCookie(env: Env, role: Role = "admin"): Promise<string> {
 	const exp = Date.now() + SESSION_TTL_MS;
-	const sig = await crypto.subtle.sign("HMAC", await signingKey(env), encoder.encode(String(exp)));
-	return `${COOKIE}=${exp}.${bytesToHex(sig)}; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}; Path=/; Secure; HttpOnly; SameSite=Lax`;
+	const payload = `${exp}.${role}`;
+	const sig = await crypto.subtle.sign("HMAC", await signingKey(env), encoder.encode(payload));
+	return `${COOKIE}=${payload}.${bytesToHex(sig)}; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}; Path=/; Secure; HttpOnly; SameSite=Lax`;
 }
 
 export const CLEAR_SESSION_COOKIE = `${COOKIE}=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax`;
 
-export async function hasValidSession(env: Env, request: Request): Promise<boolean> {
+/** The signed-in role, or null when the session is absent/expired/forged. */
+export async function sessionRole(env: Env, request: Request): Promise<Role | null> {
 	const cookie = request.headers.get("cookie") ?? "";
-	const m = /(?:^|;\s*)cn_admin=(\d+)\.([0-9a-f]+)/.exec(cookie);
-	if (!m) return false;
+	const m = /(?:^|;\s*)cn_admin=(\d+)\.(admin|clinic)\.([0-9a-f]+)/.exec(cookie);
+	if (!m) return null;
 	const exp = Number(m[1]);
-	if (!Number.isFinite(exp) || exp < Date.now()) return false;
+	if (!Number.isFinite(exp) || exp < Date.now()) return null;
 	try {
-		return await crypto.subtle.verify(
+		const ok = await crypto.subtle.verify(
 			"HMAC",
 			await signingKey(env),
-			hexToBytes(m[2]) as unknown as BufferSource,
-			encoder.encode(m[1]),
+			hexToBytes(m[3]) as unknown as BufferSource,
+			encoder.encode(`${m[1]}.${m[2]}`),
 		);
+		return ok ? (m[2] as Role) : null;
 	} catch {
-		return false;
+		return null;
 	}
+}
+
+export async function hasValidSession(env: Env, request: Request): Promise<boolean> {
+	return (await sessionRole(env, request)) !== null;
 }
 
 /** The sign-in page, served by the Worker with no external dependencies. */
