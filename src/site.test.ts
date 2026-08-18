@@ -133,13 +133,10 @@ describe("cellunovabiologics.com site routing", () => {
 		expect(res.headers.get("set-cookie")).toContain("HttpOnly");
 	});
 
-	it("signs in with the second admin account", async () => {
-		const { res, cookie } = await login("Admin", "NOVAto200M");
-		expect(res.status).toBe(303);
-		expect(cookie.startsWith("cn_admin=")).toBe(true);
-		// And a bad password for that account is still rejected.
-		const bad = await login("Admin", "wrong-password");
+	it("no longer accepts the retired second admin account", async () => {
+		const bad = await login("Admin", "NOVAto200M");
 		expect(bad.res.status).toBe(401);
+		expect(bad.cookie).toBe("");
 	});
 
 	it("signs in a clinic account and blocks it from admin areas", async () => {
@@ -173,6 +170,30 @@ describe("cellunovabiologics.com site routing", () => {
 		const { res } = await hit("/portal/api/leads", "www.cellunovabiologics.com", "GET", cookie);
 		expect(res.status).not.toBe(403);
 		expect(res.status).not.toBe(401);
+	});
+
+	it("scopes the orders list to the clinic that placed them", async () => {
+		const { env, db } = makeEnv();
+		const mkOrder = (id: string, account: string) =>
+			db.orders.set(id, {
+				data: JSON.stringify({ id, number: "CN-" + id.toUpperCase(), date: "2026-08-18T00:00:00Z", stage: 2, total: 800, currency: "usd", notes: "", account, items: [] }),
+			});
+		mkOrder("cs_mine", "UnitedChiro");
+		mkOrder("cs_admin_test", ""); // legacy/admin order with no account
+		const list = async (cookie: string) => {
+			const res = await worker.fetch!(
+				new Request("https://www.cellunovabiologics.com/portal/api/orders", { headers: { cookie } }) as never,
+				env,
+				ctx,
+			);
+			return ((await res.json()) as { orders: Array<{ account?: string }> }).orders;
+		};
+		const clinic = (await login("UnitedChiro", "UC-m42f5xyDaCiFkm")).cookie;
+		const admin = (await login()).cookie;
+		const clinicOrders = await list(clinic);
+		expect(clinicOrders).toHaveLength(1);
+		expect(clinicOrders[0].account).toBe("UnitedChiro");
+		expect(await list(admin)).toHaveLength(2);
 	});
 
 	it("serves the protocols page at /portal/ when signed in", async () => {

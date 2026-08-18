@@ -14,6 +14,7 @@
 import {
 	CLEAR_SESSION_COOKIE,
 	createSessionCookie,
+	getSession,
 	hasValidSession,
 	loginPage,
 	sessionRole,
@@ -172,13 +173,13 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 			const password = String(form.get("password") ?? "");
 			const nextRaw = String(form.get("next") ?? "/portal/");
 			const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/portal/";
-			const role = await verifyCredentials(env, username, password);
-			if (role) {
+			const account = await verifyCredentials(env, username, password);
+			if (account) {
 				// Clinic sign-ins never land on an admin-only page.
-				const dest = role === "clinic" && isAdminOnlyPath(next) ? "/portal/" : next;
+				const dest = account.role === "clinic" && isAdminOnlyPath(next) ? "/portal/" : next;
 				return new Response(null, {
 					status: 303,
-					headers: { location: dest, "set-cookie": await createSessionCookie(env, role) },
+					headers: { location: dest, "set-cookie": await createSessionCookie(env, account) },
 				});
 			}
 			return loginPage(true, next);
@@ -228,15 +229,16 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 
 	// ── Ordering API (JSON; session required) ──
 	if (p === "/portal/api/checkout" || p === "/portal/api/checkout/confirm" || p === "/portal/api/orders") {
-		if (!(await hasValidSession(env, request))) {
+		const sess = await getSession(env, request);
+		if (!sess) {
 			return new Response(JSON.stringify({ error: "Sign in required." }), {
 				status: 401,
 				headers: { "content-type": "application/json; charset=utf-8" },
 			});
 		}
-		if (p === "/portal/api/checkout") return handleCheckout(request, env);
+		if (p === "/portal/api/checkout") return handleCheckout(request, env, sess.user);
 		if (p === "/portal/api/checkout/confirm") return handleCheckoutConfirm(request, env);
-		return handleOrdersList(request, env);
+		return handleOrdersList(request, env, sess);
 	}
 
 	// Stripe calls this with a signed payload; no session, signature is the auth.
