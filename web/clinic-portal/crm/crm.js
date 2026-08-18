@@ -786,6 +786,20 @@
         return box;
     }
 
+    /* Rep roster for the assignment control, fetched once. The server only
+     * includes `reps` for admin and manager sessions, so for anyone else this
+     * resolves null and the control never renders. */
+    var repRosterPromise = null;
+    function repRoster() {
+        if (!repRosterPromise) {
+            repRosterPromise = fetch('/portal/api/rep/leads', { credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : {}; })
+                .then(function (d) { return (d && d.reps && d.reps.length) ? d.reps : null; })
+                .catch(function () { return null; });
+        }
+        return repRosterPromise;
+    }
+
     function renderDetail(lead) {
         detailEl.textContent = '';
 
@@ -804,6 +818,51 @@
             tier.style.marginLeft = '8px';
             tier.textContent = String(lead.tier).replace(/_/g, ' ').toUpperCase();
             detailEl.appendChild(tier);
+        }
+
+        /* ── Assign to rep (admin + manager; database-backed leads only) ── */
+        if (lead.id) {
+            var assignBox = document.createElement('div');
+            assignBox.className = 'crm-assign';
+            detailEl.appendChild(assignBox);
+            repRoster().then(function (reps) {
+                if (!reps) return;
+                var lab = document.createElement('span');
+                lab.className = 'crm-assign-label';
+                lab.textContent = 'Assigned rep';
+                var sel = document.createElement('select');
+                sel.className = 'crm-assign-select';
+                var none = document.createElement('option');
+                none.value = ''; none.textContent = '— unassigned —';
+                sel.appendChild(none);
+                reps.forEach(function (r) {
+                    var o = document.createElement('option');
+                    o.value = r; o.textContent = r;
+                    if ((lead.assigned_rep || '') === r) o.selected = true;
+                    sel.appendChild(o);
+                });
+                var status = document.createElement('span');
+                status.className = 'crm-assign-status';
+                sel.addEventListener('change', function () {
+                    sel.disabled = true;
+                    status.textContent = 'Saving…';
+                    fetch('/portal/api/rep/assign', {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({ id: lead.id, rep: sel.value })
+                    }).then(function (r) {
+                        return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Assign failed'); });
+                    }).then(function () {
+                        lead.assigned_rep = sel.value;
+                        status.textContent = sel.value ? 'Assigned to ' + sel.value : 'Unassigned';
+                    }).catch(function (e) {
+                        status.textContent = e && e.message ? e.message : 'Assign failed';
+                    }).then(function () { sel.disabled = false; });
+                });
+                assignBox.appendChild(lab);
+                assignBox.appendChild(sel);
+                assignBox.appendChild(status);
+            });
         }
 
         /* ── AI screening scores: priority + buy propensity + switch likelihood ──

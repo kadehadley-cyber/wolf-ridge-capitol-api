@@ -61,12 +61,14 @@ function applicationToLead(app: Record<string, unknown>): LeadRecord {
 async function currentLeads(env: Env): Promise<LeadRecord[]> {
 	await Promise.all([ensureLeadsTable(env), ensureApplicationsTable(env)]);
 
-	const uploadedRows = await env.DB.prepare(`SELECT data FROM crm_leads`).all<{ data: string }>();
+	const uploadedRows = await env.DB.prepare(`SELECT id, data FROM crm_leads`).all<{ id: string; data: string }>();
 	const uploaded: LeadRecord[] = [];
 	for (const row of uploadedRows.results ?? []) {
 		try {
 			const parsed = JSON.parse(row.data);
-			if (parsed && typeof parsed === "object") uploaded.push(parsed as LeadRecord);
+			// The row id rides along so the CRM can address this lead in the
+			// rep-assignment API.
+			if (parsed && typeof parsed === "object") uploaded.push({ ...(parsed as LeadRecord), id: row.id });
 		} catch {
 			// Skip an unparsable row rather than failing the whole list.
 		}

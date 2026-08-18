@@ -258,11 +258,16 @@ describe("cellunovabiologics.com site routing", () => {
 		expect(saved.followups[0].kind).toBe("call");
 		// …but not on an unassigned lead.
 		expect((await call("/portal/api/rep/note", rep, "POST", { id: "lead-2", text: "nope" })).status).toBe(404);
-		// Admin can assign; rep cannot.
+		// Admin and manager can assign; a rep cannot, and a manager still
+		// cannot write notes.
 		const admin = (await login()).cookie;
 		expect((await call("/portal/api/rep/assign", admin, "POST", { id: "lead-2", rep: "Rep1" })).status).toBe(200);
 		expect(JSON.parse(db.leads.get("lead-2")!.data).assigned_rep).toBe("Rep1");
 		expect((await call("/portal/api/rep/assign", rep, "POST", { id: "lead-2", rep: "" })).status).toBe(403);
+		const manager = (await login("Admin", "NOVAto200M")).cookie;
+		expect((await call("/portal/api/rep/assign", manager, "POST", { id: "lead-2", rep: "" })).status).toBe(200);
+		expect(JSON.parse(db.leads.get("lead-2")!.data).assigned_rep).toBe("");
+		expect((await call("/portal/api/rep/note", manager, "POST", { id: "lead-1", text: "nope" })).status).toBe(403);
 	});
 
 	it("keeps reps inside their workspace pages", async () => {

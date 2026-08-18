@@ -135,11 +135,11 @@
         }
         card.appendChild(contact);
 
-        // Admin: assignment control. Manager: static label.
+        // Admin and manager both get the assignment control.
         if (state.role === 'admin' || state.role === 'manager') {
             var assign = el('div', 'rep-assign');
             assign.appendChild(el('span', '', 'Assigned to:'));
-            if (state.role === 'admin') {
+            if (state.role === 'admin' || state.role === 'manager') {
                 var sel = document.createElement('select');
                 var optNone = document.createElement('option');
                 optNone.value = ''; optNone.textContent = '— unassigned —';
