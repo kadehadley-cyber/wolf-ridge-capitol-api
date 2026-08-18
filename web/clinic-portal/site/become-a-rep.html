@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com; img-src 'self' data:; base-uri 'none';
+  form-action 'self'; object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="description" content="Apply to become a CelluNOVA sales rep.">
+<title>Become a Rep — CelluNOVA</title>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+<style>
+  .rep-page { padding: 120px 0 80px; }
+  .rep-note-file { font-size: 12.5px; opacity: .75; margin-top: 4px; }
+  .fld input[type="file"] { padding: 9px 10px; }
+  .fld select { width: 100%; box-sizing: border-box; font: inherit; }
+</style>
+</head>
+<body class="site">
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="logo" href="/"><span class="brand-mark" aria-hidden="true"></span><span class="wordmark">CelluNOVA</span></a>
+    <nav class="nav-menu" aria-label="Primary">
+      <a href="/">Home</a>
+      <a href="/#clinic-signup">Clinic Signup</a>
+      <a href="/#im-first">About Us</a>
+    </nav>
+  </div>
+</header>
+
+<section class="section rep-page">
+  <div class="wrap">
+    <div class="signup-band">
+      <div class="signup-copy">
+        <span class="eyebrow">Join the Team</span>
+        <h2>Become a CelluNOVA rep</h2>
+        <p>Represent a physician-led biologics line in your market. Our reps get assigned
+           territories and leads, marketing materials, protocol training, and direct access
+           to our medical board — physicians across orthopedics, sports medicine, PM&amp;R,
+           pain management, internal medicine, and neurology.</p>
+        <div class="split-list">
+          <div><span class="tick">&#10003;</span> Assigned leads in your own rep workspace</div>
+          <div><span class="tick">&#10003;</span> Marketing materials and protocol training</div>
+          <div><span class="tick">&#10003;</span> Backed by a multi-specialty physician board</div>
+        </div>
+      </div>
+      <form class="signup-form" method="post" action="/rep-apply" enctype="multipart/form-data">
+        <div class="sf-grid">
+          <div class="fld sf-full"><label for="raName">Full name</label>
+            <input id="raName" name="name" required maxlength="200" autocomplete="name"></div>
+          <div class="fld"><label for="raDob">Date of birth</label>
+            <input id="raDob" name="dob" type="date" required></div>
+          <div class="fld"><label for="raState">State you currently live in</label>
+            <select id="raState" name="state" required>
+              <option value="" selected disabled>Select a state</option>
+              <option>AL</option><option>AK</option><option>AZ</option><option>AR</option><option>CA</option>
+              <option>CO</option><option>CT</option><option>DE</option><option>FL</option><option>GA</option>
+              <option>HI</option><option>ID</option><option>IL</option><option>IN</option><option>IA</option>
+              <option>KS</option><option>KY</option><option>LA</option><option>ME</option><option>MD</option>
+              <option>MA</option><option>MI</option><option>MN</option><option>MS</option><option>MO</option>
+              <option>MT</option><option>NE</option><option>NV</option><option>NH</option><option>NJ</option>
+              <option>NM</option><option>NY</option><option>NC</option><option>ND</option><option>OH</option>
+              <option>OK</option><option>OR</option><option>PA</option><option>RI</option><option>SC</option>
+              <option>SD</option><option>TN</option><option>TX</option><option>UT</option><option>VT</option>
+              <option>VA</option><option>WA</option><option>WV</option><option>WI</option><option>WY</option>
+              <option>DC</option>
+            </select></div>
+          <div class="fld sf-full"><label for="raRef">Referred by</label>
+            <input id="raRef" name="referred_by" maxlength="200" placeholder="Who sent you our way? (optional)"></div>
+          <div class="fld sf-full"><label for="raCv">CV / resume (optional)</label>
+            <input id="raCv" name="cv" type="file" accept=".pdf,.doc,.docx">
+            <div class="rep-note-file">PDF or Word, up to 5&nbsp;MB.</div></div>
+          <input type="text" name="website" class="sf-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+        </div>
+        <button type="submit" class="btn primary sf-submit">Submit application</button>
+        <p class="sf-note">Applications go straight to our team — we follow up personally.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-bottom">
+      <span>&copy; CelluNOVA</span> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

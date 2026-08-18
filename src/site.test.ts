@@ -13,6 +13,7 @@ function makeDb() {
 	const orders = new Map<string, { data: string }>();
 	const accounts = new Map<string, Record<string, unknown>>();
 	const reports = new Map<string, { data: string }>();
+	const repApps = new Map<string, Record<string, unknown>>();
 	const exec = (sql: string, args: unknown[]) => ({
 		run: async () => {
 			const s = sql.trimStart();
@@ -48,6 +49,11 @@ function makeDb() {
 				accounts.delete(String(args[0]));
 			} else if (s.startsWith("INSERT INTO marketing_reports")) {
 				reports.set(String(args[0]), { data: String(args[1]) });
+			} else if (s.startsWith("INSERT INTO rep_applications")) {
+				repApps.set(String(args[0]), {
+					id: args[0], name: args[1], dob: args[2], state: args[3],
+					referred_by: args[4], cv_filename: args[5], created_at: args[6],
+				});
 			}
 			return {};
 		},
@@ -75,6 +81,7 @@ function makeDb() {
 		orders,
 		accounts,
 		reports,
+		repApps,
 		prepare(sql: string) {
 			return { bind: (...args: unknown[]) => exec(sql, args), ...exec(sql, []) };
 		},
@@ -361,6 +368,38 @@ describe("cellunovabiologics.com site routing", () => {
 		expect((await loginEnv("JSmith", reset.password)).res.status).toBe(303);
 		await call(admin, "POST", { action: "delete", user: "JSmith" });
 		expect(db.accounts.has("JSmith")).toBe(false);
+	});
+
+	it("accepts rep applications, validates them, and serves the public page", async () => {
+		const { env, db, calls } = makeEnv();
+		const apply = async (fields: Record<string, string>) => {
+			const form = new FormData();
+			for (const [k, v] of Object.entries(fields)) form.set(k, v);
+			return worker.fetch!(
+				new Request("https://www.cellunovabiologics.com/rep-apply", { method: "POST", body: form }) as never,
+				env,
+				ctx,
+			);
+		};
+		// The public page serves without a session.
+		await worker.fetch!(
+			new Request("https://www.cellunovabiologics.com/become-a-rep") as never,
+			env,
+			ctx,
+		);
+		expect(calls).toContain("/clinic-portal/site/become-a-rep");
+		// A valid application stores.
+		const ok = await apply({ name: "Jamie Rivera", dob: "1992-04-11", state: "TX", referred_by: "Dr. Sheppard" });
+		expect(ok.status).toBe(200);
+		expect(await ok.text()).toContain("received");
+		expect(db.repApps.size).toBe(1);
+		const row = [...db.repApps.values()][0];
+		expect(row.state).toBe("TX");
+		expect(row.referred_by).toBe("Dr. Sheppard");
+		// Missing/invalid fields refuse; the honeypot pretends success but stores nothing.
+		expect((await apply({ name: "X", dob: "not-a-date", state: "TX" })).status).toBe(400);
+		expect((await apply({ name: "Bot", dob: "1990-01-01", state: "TX", website: "spam" })).status).toBe(200);
+		expect(db.repApps.size).toBe(1);
 	});
 
 	it("marketing scanner: gated by role, scans NPPES, stores an AI report", async () => {

@@ -27,6 +27,7 @@ import { handleRepAssign, handleRepFollowup, handleRepFollowupDone, handleRepLea
 import { handleAccountsApi } from "./accounts";
 import { handleMarketingGenerate, handleMarketingReports } from "./marketing";
 import { handleApprove, handleSignup } from "./signup";
+import { handleRepApply } from "./rep-apply";
 import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
 import { handleInbound, verifyWebhook } from "./whatsapp";
@@ -242,6 +243,14 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		url.search = "";
 		url.hash = "";
 		return Response.redirect(url.toString() + "#clinic-signup", 302);
+	}
+
+	// ── Rep application (public page at /become-a-rep posts here) ──
+	if (p === "/rep-apply") {
+		if (request.method === "POST") return handleRepApply(request, env);
+		url.pathname = "/become-a-rep";
+		url.search = "";
+		return Response.redirect(url.toString(), 302);
 	}
 
 	// ── CRM leads API (JSON; admin session required, 401/403 not a redirect;
