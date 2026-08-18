@@ -19,10 +19,10 @@ export const DEFAULT_ADMIN_USER = "DrHadley";
 export const DEFAULT_ADMIN_PASS_HASH =
 	"pbkdf2$100000$6e78f2a513948a981ea29c9781e038f4$74967a333a458f5886f25d2822e532ee6163c4c6d4b76fbed5c7f820cb71d4ce";
 
-/** Signed-in roles. The admin (DrHadley) sees everything; clinic accounts get
- *  the clinic-facing pages (protocols, templates, ordering, their own orders,
- *  support) but never the CRM, marketing, or admin areas. */
-export type Role = "admin" | "clinic";
+/** Signed-in roles. The admin (DrHadley) sees and edits everything; a manager
+ *  sees everything the admin sees but read-only (no scans, imports, orders,
+ *  or approvals); clinic accounts get only the clinic-facing pages. */
+export type Role = "admin" | "manager" | "clinic";
 
 /** What a signed session asserts: who signed in and at which level. */
 export interface Session {
@@ -36,6 +36,14 @@ interface Account {
 	role: Role;
 }
 
+// The manager account: full visibility, no writes. Only the PBKDF2 hash is
+// stored here.
+const MANAGER_ACCOUNT: Account = {
+	user: "Admin",
+	hash: "pbkdf2$100000$4ac2b07b25a4c91b951132bce30e0dde$91b7946a0e954275f6aeb177c253246593ca9a674864061bb9e2746d84430d40",
+	role: "manager",
+};
+
 // Clinic accounts, one per partner clinic. Add a row per clinic; only the
 // PBKDF2 hash is stored here.
 const CLINIC_ACCOUNTS: Account[] = [
@@ -48,7 +56,7 @@ const CLINIC_ACCOUNTS: Account[] = [
 
 /** Accounts allowed to sign in: the sole admin (overridable via the
  *  PORTAL_ADMIN_USER / PORTAL_ADMIN_PASS_HASH secrets so it can rotate without
- *  a code change) plus the clinic accounts. */
+ *  a code change), the read-only manager, and the clinic accounts. */
 function accounts(env: Env): Account[] {
 	return [
 		{
@@ -56,6 +64,7 @@ function accounts(env: Env): Account[] {
 			hash: env.PORTAL_ADMIN_PASS_HASH || DEFAULT_ADMIN_PASS_HASH,
 			role: "admin",
 		},
+		MANAGER_ACCOUNT,
 		...CLINIC_ACCOUNTS,
 	];
 }
@@ -133,7 +142,7 @@ export const CLEAR_SESSION_COOKIE = `${COOKIE}=; Max-Age=0; Path=/; Secure; Http
 /** The signed session, or null when it is absent/expired/forged. */
 export async function getSession(env: Env, request: Request): Promise<Session | null> {
 	const cookie = request.headers.get("cookie") ?? "";
-	const m = /(?:^|;\s*)cn_admin=(\d+)\.(admin|clinic)\.([0-9a-f]*)\.([0-9a-f]+)/.exec(cookie);
+	const m = /(?:^|;\s*)cn_admin=(\d+)\.(admin|manager|clinic)\.([0-9a-f]*)\.([0-9a-f]+)/.exec(cookie);
 	if (!m) return null;
 	const exp = Number(m[1]);
 	if (!Number.isFinite(exp) || exp < Date.now()) return null;

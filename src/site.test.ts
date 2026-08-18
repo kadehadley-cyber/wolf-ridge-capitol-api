@@ -133,10 +133,33 @@ describe("cellunovabiologics.com site routing", () => {
 		expect(res.headers.get("set-cookie")).toContain("HttpOnly");
 	});
 
-	it("no longer accepts the retired second admin account", async () => {
-		const bad = await login("Admin", "NOVAto200M");
-		expect(bad.res.status).toBe(401);
-		expect(bad.cookie).toBe("");
+	it("signs in the manager account with view-only access", async () => {
+		const { res, cookie } = await login("Admin", "NOVAto200M");
+		expect(res.status).toBe(303);
+		expect(cookie).toContain(".manager.");
+		// Sees every page, including admin areas…
+		expect((await hit("/portal/crm/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual([
+			"/clinic-portal/crm/",
+		]);
+		expect((await hit("/portal/marketing/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual([
+			"/clinic-portal/marketing/",
+		]);
+		// …and can read the CRM list…
+		const read = await hit("/portal/api/leads", "www.cellunovabiologics.com", "GET", cookie);
+		expect(read.res.status).not.toBe(403);
+		expect(read.res.status).not.toBe(401);
+		// …but every write path refuses:
+		const scan = await hit("/portal/api/leads/scan", "www.cellunovabiologics.com", "POST", cookie);
+		expect(scan.res.status).toBe(403);
+		const importLeads = await hit("/portal/api/leads", "www.cellunovabiologics.com", "POST", cookie);
+		expect(importLeads.res.status).toBe(403);
+		const checkout = await hit("/portal/api/checkout", "www.cellunovabiologics.com", "POST", cookie);
+		expect(checkout.res.status).toBe(403);
+		const confirm = await hit("/portal/api/checkout/confirm?session_id=cs_x", "www.cellunovabiologics.com", "GET", cookie);
+		expect(confirm.res.status).toBe(403);
+		const approve = await hit("/portal/approve?id=x&token=y", "www.cellunovabiologics.com", "GET", cookie);
+		expect(approve.res.status).toBe(302);
+		expect(approve.res.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/");
 	});
 
 	it("signs in a clinic account and blocks it from admin areas", async () => {

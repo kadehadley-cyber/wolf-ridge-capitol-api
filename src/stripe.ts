@@ -221,8 +221,8 @@ export async function handleCheckoutConfirm(request: Request, env: Env): Promise
 	}
 }
 
-/** GET /portal/api/orders — recorded orders, newest first. Admin sessions see
- *  everything; a clinic session sees only orders placed by its own account. */
+/** GET /portal/api/orders — recorded orders, newest first. Admin and manager
+ *  sessions see everything; a clinic session sees only its own orders. */
 export async function handleOrdersList(
 	_request: Request,
 	env: Env,
@@ -234,7 +234,7 @@ export async function handleOrdersList(
 	for (const row of rows.results ?? []) {
 		try {
 			const order = JSON.parse(row.data) as { account?: string };
-			if (session.role === "admin" || (order.account ?? "") === session.user) orders.push(order);
+			if (session.role === "admin" || session.role === "manager" || (order.account ?? "") === session.user) orders.push(order);
 		} catch {
 			// Skip an unparsable row rather than failing the list.
 		}

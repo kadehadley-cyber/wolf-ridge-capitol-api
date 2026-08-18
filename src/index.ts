@@ -219,7 +219,8 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		return Response.redirect(url.toString() + "#clinic-signup", 302);
 	}
 
-	// ── CRM leads API (JSON; admin session required, 401/403 not a redirect) ──
+	// ── CRM leads API (JSON; admin session required, 401/403 not a redirect;
+	//    a manager may read the list but never scan or import) ──
 	if (p === "/portal/api/leads" || p === "/portal/api/leads/scan") {
 		const role = await sessionRole(env, request);
 		if (!role) {
@@ -228,8 +229,9 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 				headers: { "content-type": "application/json; charset=utf-8" },
 			});
 		}
-		if (role !== "admin") {
-			return new Response(JSON.stringify({ error: "Admin access required." }), {
+		const managerRead = role === "manager" && request.method === "GET" && p === "/portal/api/leads";
+		if (role !== "admin" && !managerRead) {
+			return new Response(JSON.stringify({ error: role === "manager" ? "Manager accounts are view-only." : "Admin access required." }), {
 				status: 403,
 				headers: { "content-type": "application/json; charset=utf-8" },
 			});
@@ -246,8 +248,17 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 				headers: { "content-type": "application/json; charset=utf-8" },
 			});
 		}
-		if (p === "/portal/api/checkout") return handleCheckout(request, env, sess.user);
-		if (p === "/portal/api/checkout/confirm") return handleCheckoutConfirm(request, env);
+		if (p === "/portal/api/checkout" || p === "/portal/api/checkout/confirm") {
+			// Managers observe; they don't place or record orders.
+			if (sess.role === "manager") {
+				return new Response(JSON.stringify({ error: "Manager accounts are view-only." }), {
+					status: 403,
+					headers: { "content-type": "application/json; charset=utf-8" },
+				});
+			}
+			if (p === "/portal/api/checkout") return handleCheckout(request, env, sess.user);
+			return handleCheckoutConfirm(request, env);
+		}
 		return handleOrdersList(request, env, sess);
 	}
 
@@ -276,6 +287,12 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		}
 		// Clinic accounts get the clinic-facing pages only.
 		if (role === "clinic" && isAdminOnlyPath(p)) {
+			url.pathname = "/portal/";
+			url.search = "";
+			return Response.redirect(url.toString(), 302);
+		}
+		// Managers see every page but never act: the approve link writes.
+		if (role === "manager" && p === "/portal/approve") {
 			url.pathname = "/portal/";
 			url.search = "";
 			return Response.redirect(url.toString(), 302);
