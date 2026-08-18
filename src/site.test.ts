@@ -12,6 +12,7 @@ function makeDb() {
 	const leads = new Map<string, { id?: string; data: string }>();
 	const orders = new Map<string, { data: string }>();
 	const accounts = new Map<string, Record<string, unknown>>();
+	const reports = new Map<string, { data: string }>();
 	const exec = (sql: string, args: unknown[]) => ({
 		run: async () => {
 			const s = sql.trimStart();
@@ -45,6 +46,8 @@ function makeDb() {
 				if (row) row.disabled = args[0];
 			} else if (s.startsWith("DELETE FROM portal_accounts")) {
 				accounts.delete(String(args[0]));
+			} else if (s.startsWith("INSERT INTO marketing_reports")) {
+				reports.set(String(args[0]), { data: String(args[1]) });
 			}
 			return {};
 		},
@@ -61,7 +64,9 @@ function makeDb() {
 					? [...orders.values()]
 					: sql.includes("FROM portal_accounts")
 						? [...accounts.values()]
-						: [...apps.values()],
+						: sql.includes("FROM marketing_reports")
+							? [...reports.values()]
+							: [...apps.values()],
 		}),
 	});
 	return {
@@ -69,6 +74,7 @@ function makeDb() {
 		leads,
 		orders,
 		accounts,
+		reports,
 		prepare(sql: string) {
 			return { bind: (...args: unknown[]) => exec(sql, args), ...exec(sql, []) };
 		},
@@ -355,6 +361,72 @@ describe("cellunovabiologics.com site routing", () => {
 		expect((await loginEnv("JSmith", reset.password)).res.status).toBe(303);
 		await call(admin, "POST", { action: "delete", user: "JSmith" });
 		expect(db.accounts.has("JSmith")).toBe(false);
+	});
+
+	it("marketing scanner: gated by role, scans NPPES, stores an AI report", async () => {
+		const { env, db } = makeEnv();
+		(env as unknown as { AI: unknown }).AI = {
+			run: async () => ({
+				response: JSON.stringify({
+					summary: "Katy has strong regen demand.",
+					market_overview: "Growing suburban market.",
+					top_competitors: [
+						{ name: "Katy Sports & Spine", address: "1 Main St, Katy, TX", why: "Sports med group", stem_cell_status: "likely", similarity: "high" },
+					],
+					search_terms: [{ term: "stem cell knee katy", why: "ortho intent", score_0_100: 80 }],
+					adoption_pathways: [{ angle: "Physician-led sourcing", why_relevant: "differentiator" }],
+					regulatory_note: "Mind Texas advertising rules.",
+				}),
+			}),
+		};
+		const realFetch = globalThis.fetch;
+		globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			const u = String(input instanceof Request ? input.url : input);
+			if (u.startsWith("https://npiregistry.cms.hhs.gov/")) {
+				return new Response(JSON.stringify({
+					results: [{
+						enumeration_type: "NPI-2",
+						basic: { organization_name: "Katy Sports & Spine" },
+						addresses: [{ address_purpose: "LOCATION", address_1: "1 Main St", city: "Katy", state: "TX", telephone_number: "281-555-0100" }],
+						taxonomies: [{ desc: "Sports Medicine", primary: true }],
+					}],
+				}), { headers: { "content-type": "application/json" } });
+			}
+			return realFetch(input as never, init);
+		}) as typeof fetch;
+		try {
+			const call = async (path: string, cookie?: string, method = "GET", body?: unknown) =>
+				worker.fetch!(
+					new Request("https://www.cellunovabiologics.com" + path, {
+						method,
+						headers: { ...(cookie ? { cookie } : {}), ...(body ? { "content-type": "application/json" } : {}) },
+						...(body ? { body: JSON.stringify(body) } : {}),
+					}) as never,
+					env,
+					ctx,
+				);
+			// Gating: anonymous 401, clinic 403, manager can read but not generate.
+			expect((await call("/portal/api/marketing/reports")).status).toBe(401);
+			const clinic = (await login("UnitedChiro", "UC-m42f5xyDaCiFkm")).cookie;
+			expect((await call("/portal/api/marketing/reports", clinic)).status).toBe(403);
+			const manager = (await login("Admin", "NOVAto200M")).cookie;
+			expect((await call("/portal/api/marketing/reports", manager)).status).toBe(200);
+			expect((await call("/portal/api/marketing/generate", manager, "POST", { city: "Katy", state: "TX" })).status).toBe(403);
+			// Admin generates a real report from the mocked registry + AI.
+			const admin = (await login()).cookie;
+			const gen = await call("/portal/api/marketing/generate", admin, "POST", { city: "Katy", state: "TX", focus: "sports medicine" });
+			expect(gen.status).toBe(200);
+			const { report } = (await gen.json()) as { report: Record<string, unknown> };
+			expect(report.provider_count).toBe(1);
+			expect((report.top_competitors as Array<{ name: string; maps_url: string }>)[0].name).toBe("Katy Sports & Spine");
+			expect((report.top_competitors as Array<{ maps_url: string }>)[0].maps_url).toContain("google.com/maps");
+			expect(db.reports.size).toBe(1);
+			// The stored report lists back.
+			const list = (await (await call("/portal/api/marketing/reports", admin)).json()) as { reports: unknown[] };
+			expect(list.reports).toHaveLength(1);
+		} finally {
+			globalThis.fetch = realFetch;
+		}
 	});
 
 	it("scopes the orders list to the clinic that placed them", async () => {
