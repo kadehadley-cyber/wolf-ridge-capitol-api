@@ -19,12 +19,12 @@ import { adminEmail, esc, sendEmail } from "./email";
 
 const SITE = "https://www.cellunovabiologics.com";
 
-// The NOVA line: $800 per cc, NOVA-EXO+ at $500 per cc (unit_amount is cents).
+// The NOVA line: $800 per cc, NOVA-E1 at $500 per cc (unit_amount is cents).
 const CATALOG: Record<string, { name: string; perCcCents: number }> = {
-	"nova-flow": { name: "NOVA-FLOW", perCcCents: 80000 },
-	"nova-flex": { name: "NOVA-FLEX", perCcCents: 80000 },
-	"nova-elite": { name: "NOVA-ELITE", perCcCents: 80000 },
-	"exo-plus": { name: "NOVA-EXO+", perCcCents: 50000 },
+	"nova-flow": { name: "NOVA-V1", perCcCents: 80000 },
+	"nova-flex": { name: "NOVA-M1", perCcCents: 80000 },
+	"nova-elite": { name: "NOVA-E2", perCcCents: 80000 },
+	"exo-plus": { name: "NOVA-E1", perCcCents: 50000 },
 };
 const VOLUMES: Record<string, number> = { "1 cc": 1, "2 cc": 2, "5 cc": 5 };
 const MAX_LINES = 20;

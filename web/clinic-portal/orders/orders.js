@@ -24,8 +24,8 @@
         {
             id: 'CN-1042', date: '2026-08-08 14:12:00', stage: 1, total: 0,
             items: [
-                { name: 'Umbilical MSC', vol: '2 cc', qty: 4, price: 0 },
-                { name: 'Exosomes — standard', vol: '1 cc', qty: 2, price: 0 }
+                { name: 'NOVA-M1', vol: '2 cc', qty: 4, price: 0 },
+                { name: 'NOVA-E1', vol: '1 cc', qty: 2, price: 0 }
             ],
             messages: [
                 { who: 'you', name: 'You', time: '2026-08-08 14:12:00', body: 'Placing our monthly restock — patients scheduled next week.' },
@@ -35,7 +35,7 @@
         {
             id: 'CN-1039', date: '2026-08-01 09:30:00', stage: 3, total: 0,
             items: [
-                { name: 'Lyophilized exosomes', vol: '3 vials', qty: 3, price: 0 }
+                { name: 'NOVA-E1', vol: '3 vials', qty: 3, price: 0 }
             ],
             messages: [
                 { who: 'you', name: 'You', time: '2026-08-01 09:30:00', body: 'Standard reorder.' },
@@ -45,7 +45,7 @@
         {
             id: 'CN-1031', date: '2026-07-20 16:00:00', stage: 4, total: 0,
             items: [
-                { name: 'Umbilical MSC', vol: '1 cc', qty: 6, price: 0 }
+                { name: 'NOVA-M1', vol: '1 cc', qty: 6, price: 0 }
             ],
             messages: [
                 { who: 'team', name: 'CelluNOVA', time: '2026-07-24 10:00:00', body: 'Delivered — thanks! Reorder any time.' }
@@ -54,7 +54,7 @@
         {
             id: 'CN-1026', date: '2026-07-10 12:00:00', stage: -1, total: 0, cancelled: true,
             items: [
-                { name: 'Exosomes — high-count', vol: '2 cc', qty: 2, price: 0 }
+                { name: 'NOVA-E2', vol: '2 cc', qty: 2, price: 0 }
             ],
             messages: [
                 { who: 'you', name: 'You', time: '2026-07-10 12:30:00', body: 'Please cancel — ordering the standard line instead.' },
