@@ -16,6 +16,7 @@ import {
 	createSessionCookie,
 	hasValidSession,
 	loginPage,
+	sessionRole,
 	verifyCredentials,
 } from "./auth";
 import { ask, type ImageAttachment } from "./jarvis";
@@ -118,6 +119,30 @@ export default {
 	},
 } satisfies ExportedHandler<Env>;
 
+/** Portal areas that only admin sessions may reach: the CRM (lead data is
+ *  PII), marketing/admin tooling, and the application-approval link. */
+function isAdminOnlyPath(p: string): boolean {
+	return (
+		p === "/portal/approve" ||
+		["/portal/crm", "/portal/marketing", "/portal/marketing-resources", "/portal/admin"].some(
+			(base) => p === base || p.startsWith(base + "/"),
+		)
+	);
+}
+
+/** For clinic sessions, drop the admin-only links from any served portal HTML
+ *  so the sidebar only shows what the account can actually open. */
+function stripAdminNav(res: Response): Response {
+	if (typeof HTMLRewriter === "undefined") return res; // non-workers runtime (tests)
+	const type = res.headers.get("content-type") ?? "";
+	if (!type.includes("text/html")) return res;
+	const remove = { element(el: { remove(): void }) { el.remove(); } };
+	return new HTMLRewriter()
+		.on('a[href="/portal/crm"]', remove)
+		.on('a[href="/portal/marketing"]', remove)
+		.transform(res);
+}
+
 /**
  * cellunovabiologics.com: serve the static CelluNOVA site from the assets binding.
  *
@@ -147,10 +172,13 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 			const password = String(form.get("password") ?? "");
 			const nextRaw = String(form.get("next") ?? "/portal/");
 			const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/portal/";
-			if (await verifyCredentials(env, username, password)) {
+			const role = await verifyCredentials(env, username, password);
+			if (role) {
+				// Clinic sign-ins never land on an admin-only page.
+				const dest = role === "clinic" && isAdminOnlyPath(next) ? "/portal/" : next;
 				return new Response(null, {
 					status: 303,
-					headers: { location: next, "set-cookie": await createSessionCookie(env) },
+					headers: { location: dest, "set-cookie": await createSessionCookie(env, role) },
 				});
 			}
 			return loginPage(true, next);
@@ -180,11 +208,18 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		return Response.redirect(url.toString() + "#clinic-signup", 302);
 	}
 
-	// ── CRM leads API (JSON; session required, 401 rather than a redirect) ──
+	// ── CRM leads API (JSON; admin session required, 401/403 not a redirect) ──
 	if (p === "/portal/api/leads" || p === "/portal/api/leads/scan") {
-		if (!(await hasValidSession(env, request))) {
+		const role = await sessionRole(env, request);
+		if (!role) {
 			return new Response(JSON.stringify({ error: "Sign in required." }), {
 				status: 401,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+		if (role !== "admin") {
+			return new Response(JSON.stringify({ error: "Admin access required." }), {
+				status: 403,
 				headers: { "content-type": "application/json; charset=utf-8" },
 			});
 		}
@@ -219,10 +254,18 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 	}
 
 	// ── Portal requires a signed session; everything else is public ──
+	let role: import("./auth").Role | null = null;
 	if (p === "/portal" || p.startsWith("/portal/")) {
-		if (!(await hasValidSession(env, request))) {
+		role = await sessionRole(env, request);
+		if (!role) {
 			url.pathname = "/login";
 			url.search = "?next=" + encodeURIComponent(p + url.search);
+			return Response.redirect(url.toString(), 302);
+		}
+		// Clinic accounts get the clinic-facing pages only.
+		if (role === "clinic" && isAdminOnlyPath(p)) {
+			url.pathname = "/portal/";
+			url.search = "";
 			return Response.redirect(url.toString(), 302);
 		}
 	}
@@ -241,7 +284,7 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		["/portal/support", "/portal/tickets/"],
 		["/portal/marketing-resources", "/portal/marketing/"],
 	]);
-	for (const dir of ["crm", "pricing", "orders", "tickets", "treatment-schedule", "welcome", "admin", "marketing"]) {
+	for (const dir of ["crm", "pricing", "orders", "tickets", "treatment-schedule", "welcome", "admin", "marketing", "templates"]) {
 		redirects.set(`/portal/${dir}`, `/portal/${dir}/`);
 	}
 	const target = redirects.get(p);
@@ -262,7 +305,8 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 	}
 
 	const assetUrl = new URL(assetPath, url.origin);
-	return env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+	const res = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+	return role === "clinic" ? stripAdminNav(res) : res;
 }
 
 /**
