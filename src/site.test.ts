@@ -153,7 +153,16 @@ describe("cellunovabiologics.com site routing", () => {
 			"/clinic-portal/orders/",
 		]);
 		// …admin areas redirect away without touching assets…
-		for (const blocked of ["/portal/crm/", "/portal/marketing/", "/portal/admin/", "/portal/approve"]) {
+		for (const blocked of [
+			"/portal/crm/",
+			"/portal/marketing/",
+			"/portal/admin/",
+			"/portal/approve",
+			"/portal/tickets/",
+			"/portal/support",
+			"/portal/treatment-schedule/",
+			"/portal/welcome/",
+		]) {
 			const { res: r, calls } = await hit(blocked, "www.cellunovabiologics.com", "GET", cookie);
 			expect(r.status).toBe(302);
 			expect(r.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/");

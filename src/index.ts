@@ -120,14 +120,22 @@ export default {
 	},
 } satisfies ExportedHandler<Env>;
 
-/** Portal areas that only admin sessions may reach: the CRM (lead data is
- *  PII), marketing/admin tooling, and the application-approval link. */
+/** Portal areas that only admin sessions may reach. Clinic accounts get
+ *  exactly: protocols, clinic templates (incl. rebrandable materials),
+ *  pricing/ordering, and their own order history — everything else here. */
 function isAdminOnlyPath(p: string): boolean {
 	return (
 		p === "/portal/approve" ||
-		["/portal/crm", "/portal/marketing", "/portal/marketing-resources", "/portal/admin"].some(
-			(base) => p === base || p.startsWith(base + "/"),
-		)
+		[
+			"/portal/crm",
+			"/portal/marketing",
+			"/portal/marketing-resources",
+			"/portal/admin",
+			"/portal/tickets",
+			"/portal/support",
+			"/portal/treatment-schedule",
+			"/portal/welcome",
+		].some((base) => p === base || p.startsWith(base + "/"))
 	);
 }
 
@@ -141,6 +149,8 @@ function stripAdminNav(res: Response): Response {
 	return new HTMLRewriter()
 		.on('a[href="/portal/crm"]', remove)
 		.on('a[href="/portal/marketing"]', remove)
+		.on('a[href="/portal/support"]', remove)
+		.on('a[href="/portal/treatment-schedule"]', remove)
 		.transform(res);
 }
 
