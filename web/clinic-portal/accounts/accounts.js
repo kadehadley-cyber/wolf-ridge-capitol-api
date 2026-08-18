@@ -97,10 +97,84 @@
         });
     }
 
+    /* ── Pending rep applications ── */
+    function suggestUsername(name) {
+        var parts = String(name || '').trim().split(/\s+/);
+        var raw = parts.length > 1 ? parts[0].charAt(0) + parts[parts.length - 1] : parts[0] || '';
+        return raw.replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 32);
+    }
+
+    function renderApps(apps) {
+        var section = $('appsSection'), list = $('appList');
+        list.textContent = '';
+        if (!apps.length) { section.hidden = true; return; }
+        section.hidden = false;
+        apps.forEach(function (a) {
+            var row = el('div', 'acct-app');
+            var info = el('div');
+            info.appendChild(el('div', 'acct-app-name', a.name));
+            var meta = ['DOB ' + (a.dob || '—'), a.state || '—'];
+            if (a.email) meta.push(a.email);
+            if (a.phone) meta.push(a.phone);
+            if (a.referred_by) meta.push('Referred by ' + a.referred_by);
+            meta.push(a.cv_filename ? 'CV: ' + a.cv_filename + ' (in your email)' : 'No CV');
+            var when = new Date(a.created_at);
+            if (!isNaN(when.getTime())) meta.push(when.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+            info.appendChild(el('div', 'acct-app-meta', meta.join(' · ')));
+            row.appendChild(info);
+            var actions = el('div', 'acct-app-actions');
+            actions.appendChild(actionBtn('Approve & create login', '', function () {
+                var user = window.prompt('Username for ' + a.name + "'s rep login:", suggestUsername(a.name));
+                if (!user) return Promise.resolve();
+                return api({ action: 'app-approve', app_id: a.id, user: user.trim() }).then(function (d) {
+                    showPassword('Rep login created', d.user, d.password);
+                    return load();
+                });
+            }));
+            actions.appendChild(actionBtn('Dismiss', 'ghost', function () {
+                if (!window.confirm('Dismiss ' + a.name + "'s application?")) return Promise.resolve();
+                return api({ action: 'app-dismiss', app_id: a.id }).then(load);
+            }));
+            row.appendChild(actions);
+            list.appendChild(row);
+        });
+    }
+
+    /* ── View-as switcher ── */
+    function renderViewAs() {
+        var wrap = $('viewasButtons');
+        wrap.textContent = '';
+        var reps = accounts.filter(function (a) { return a.role === 'rep' && !a.disabled; });
+        var options = [{ label: 'Manager view', role: 'manager', user: '' }];
+        reps.forEach(function (r) { options.push({ label: 'Rep view: ' + r.user, role: 'rep', user: r.user }); });
+        options.forEach(function (o) {
+            var b = el('button', 'acct-btn ghost', o.label);
+            b.type = 'button';
+            b.addEventListener('click', function () {
+                b.disabled = true;
+                fetch('/portal/api/preview', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ role: o.role, user: o.user })
+                }).then(function (r) {
+                    return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Preview failed'); });
+                }).then(function () {
+                    window.location.href = o.role === 'rep' ? '/portal/rep/' : '/portal/';
+                }).catch(function (e) { alert(e.message); b.disabled = false; });
+            });
+            wrap.appendChild(b);
+        });
+    }
+
     function load() {
         return fetch('/portal/api/accounts', { credentials: 'same-origin' })
             .then(function (r) { if (!r.ok) throw new Error('Could not load accounts'); return r.json(); })
-            .then(function (d) { accounts = d.accounts || []; render(); });
+            .then(function (d) {
+                accounts = d.accounts || [];
+                render();
+                renderApps(d.applications || []);
+                renderViewAs();
+            });
     }
 
     $('createBtn').addEventListener('click', function () {

@@ -51,9 +51,12 @@ function makeDb() {
 				reports.set(String(args[0]), { data: String(args[1]) });
 			} else if (s.startsWith("INSERT INTO rep_applications")) {
 				repApps.set(String(args[0]), {
-					id: args[0], name: args[1], dob: args[2], state: args[3],
-					referred_by: args[4], cv_filename: args[5], created_at: args[6],
+					id: args[0], name: args[1], dob: args[2], state: args[3], email: args[4],
+					phone: args[5], referred_by: args[6], cv_filename: args[7], status: "pending", created_at: args[8],
 				});
+			} else if (s.startsWith("UPDATE rep_applications")) {
+				const row = repApps.get(String(args[1]));
+				if (row) row.status = args[0];
 			}
 			return {};
 		},
@@ -72,7 +75,9 @@ function makeDb() {
 						? [...accounts.values()]
 						: sql.includes("FROM marketing_reports")
 							? [...reports.values()]
-							: [...apps.values()],
+							: sql.includes("FROM rep_applications")
+								? [...repApps.values()]
+								: [...apps.values()],
 		}),
 	});
 	return {
@@ -389,17 +394,81 @@ describe("cellunovabiologics.com site routing", () => {
 		);
 		expect(calls).toContain("/clinic-portal/site/become-a-rep");
 		// A valid application stores.
-		const ok = await apply({ name: "Jamie Rivera", dob: "1992-04-11", state: "TX", referred_by: "Dr. Sheppard" });
+		const ok = await apply({
+			name: "Jamie Rivera", dob: "1992-04-11", state: "TX",
+			email: "jamie@example.com", phone: "555-201-3344", referred_by: "Dr. Sheppard",
+		});
 		expect(ok.status).toBe(200);
 		expect(await ok.text()).toContain("received");
 		expect(db.repApps.size).toBe(1);
 		const row = [...db.repApps.values()][0];
 		expect(row.state).toBe("TX");
+		expect(row.email).toBe("jamie@example.com");
+		expect(row.phone).toBe("555-201-3344");
 		expect(row.referred_by).toBe("Dr. Sheppard");
 		// Missing/invalid fields refuse; the honeypot pretends success but stores nothing.
-		expect((await apply({ name: "X", dob: "not-a-date", state: "TX" })).status).toBe(400);
-		expect((await apply({ name: "Bot", dob: "1990-01-01", state: "TX", website: "spam" })).status).toBe(200);
+		expect((await apply({ name: "X", dob: "not-a-date", state: "TX", email: "x@y.z", phone: "1" })).status).toBe(400);
+		expect((await apply({ name: "NoMail", dob: "1990-01-01", state: "TX", phone: "555" })).status).toBe(400);
+		expect((await apply({ name: "Bot", dob: "1990-01-01", state: "TX", email: "b@c.d", phone: "5", website: "spam" })).status).toBe(200);
 		expect(db.repApps.size).toBe(1);
+	});
+
+	it("admin approves rep applications and previews other roles", async () => {
+		const { env, db } = makeEnv();
+		// A rep application arrives.
+		const form = new FormData();
+		form.set("name", "Casey Nguyen");
+		form.set("dob", "1990-06-02");
+		form.set("state", "TX");
+		form.set("email", "casey@example.com");
+		form.set("phone", "555-880-1200");
+		await worker.fetch!(
+			new Request("https://www.cellunovabiologics.com/rep-apply", { method: "POST", body: form }) as never,
+			env,
+			ctx,
+		);
+		const appId = [...db.repApps.keys()][0];
+		const call = async (path: string, cookie: string, method = "GET", body?: unknown) =>
+			worker.fetch!(
+				new Request("https://www.cellunovabiologics.com" + path, {
+					method,
+					headers: { cookie, ...(body ? { "content-type": "application/json" } : {}) },
+					...(body ? { body: JSON.stringify(body) } : {}),
+				}) as never,
+				env,
+				ctx,
+			);
+		const admin = (await login()).cookie;
+		// The application shows in the accounts listing…
+		const list = (await (await call("/portal/api/accounts", admin)).json()) as { applications: Array<{ id: string; name: string }> };
+		expect(list.applications).toHaveLength(1);
+		expect(list.applications[0].name).toBe("Casey Nguyen");
+		// …and approving it creates a working rep login and clears the queue.
+		const approved = (await (
+			await call("/portal/api/accounts", admin, "POST", { action: "app-approve", app_id: appId, user: "CNguyen" })
+		).json()) as { password: string; role: string };
+		expect(approved.role).toBe("rep");
+		expect(db.repApps.get(appId)?.status).toBe("approved");
+		const after = (await (await call("/portal/api/accounts", admin)).json()) as { applications: unknown[] };
+		expect(after.applications).toHaveLength(0);
+
+		// View-as: only the admin may start a preview, and while previewing as
+		// manager the admin-only API refuses — proof the preview restricts.
+		const rep = (await login("Rep1", "Rep-sA5xnHPHNMckBR")).cookie;
+		expect((await call("/portal/api/preview", rep, "POST", { role: "manager" })).status).toBe(403);
+		const pv = await call("/portal/api/preview", admin, "POST", { role: "manager" });
+		expect(pv.status).toBe(200);
+		const pvCookie = (pv.headers.get("set-cookie") ?? "").split(";")[0];
+		expect(pvCookie.startsWith("cn_preview=manager.")).toBe(true);
+		const combined = admin + "; " + pvCookie;
+		expect((await call("/portal/api/accounts", combined)).status).toBe(403);
+		// A rep preview scopes rep data to the previewed rep.
+		const pvRep = await call("/portal/api/preview", admin, "POST", { role: "rep", user: "CNguyen" });
+		expect(pvRep.status).toBe(200);
+		// Exiting clears the cookie and lands back on Accounts.
+		const exit = await call("/portal/preview/exit", combined);
+		expect(exit.status).toBe(303);
+		expect(exit.headers.get("set-cookie")).toContain("cn_preview=;");
 	});
 
 	it("marketing scanner: gated by role, scans NPPES, stores an AI report", async () => {

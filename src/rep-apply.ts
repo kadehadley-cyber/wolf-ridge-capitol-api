@@ -12,7 +12,7 @@ const MAX_CV_BYTES = 5 * 1024 * 1024;
 const CV_EXTENSIONS = /\.(pdf|doc|docx)$/i;
 
 const ensured = new WeakMap<object, Promise<unknown>>();
-function ensureRepApplicationsTable(env: Env): Promise<unknown> {
+export function ensureRepApplicationsTable(env: Env): Promise<unknown> {
 	let p = ensured.get(env.DB);
 	if (!p) {
 		p = env.DB.prepare(
@@ -21,15 +21,53 @@ function ensureRepApplicationsTable(env: Env): Promise<unknown> {
 				name TEXT NOT NULL,
 				dob TEXT NOT NULL,
 				state TEXT NOT NULL,
+				email TEXT,
+				phone TEXT,
 				referred_by TEXT,
 				cv_filename TEXT,
 				status TEXT NOT NULL DEFAULT 'pending',
 				created_at TEXT NOT NULL
 			)`,
-		).run();
+		)
+			.run()
+			// Older deployments created the table without contact columns.
+			.then(async (r) => {
+				for (const col of ["email", "phone"]) {
+					await env.DB.prepare(`ALTER TABLE rep_applications ADD COLUMN ${col} TEXT`).run().catch(() => {});
+				}
+				return r;
+			});
 		ensured.set(env.DB, p);
 	}
 	return p;
+}
+
+export interface RepApplicationRow {
+	id: string;
+	name: string;
+	dob: string;
+	state: string;
+	email: string | null;
+	phone: string | null;
+	referred_by: string | null;
+	cv_filename: string | null;
+	status: string;
+	created_at: string;
+}
+
+/** Pending applications, newest first — for the admin's Accounts page. */
+export async function listPendingRepApplications(env: Env): Promise<RepApplicationRow[]> {
+	await ensureRepApplicationsTable(env);
+	const rows = await env.DB.prepare(
+		`SELECT id, name, dob, state, email, phone, referred_by, cv_filename, status, created_at
+		 FROM rep_applications ORDER BY created_at DESC`,
+	).all<RepApplicationRow>();
+	return (rows.results ?? []).filter((r) => (r.status ?? "pending") === "pending");
+}
+
+export async function setRepApplicationStatus(env: Env, id: string, status: "approved" | "dismissed"): Promise<void> {
+	await ensureRepApplicationsTable(env);
+	await env.DB.prepare(`UPDATE rep_applications SET status = ?1 WHERE id = ?2`).bind(status, id).run();
 }
 
 function field(form: FormData, name: string, max: number): string {
@@ -48,14 +86,17 @@ export async function handleRepApply(request: Request, env: Env): Promise<Respon
 	const name = field(form, "name", 200);
 	const dob = field(form, "dob", 10);
 	const state = field(form, "state", 2).toUpperCase();
+	const email = field(form, "email", 320);
+	const phone = field(form, "phone", 40);
 	const referredBy = field(form, "referred_by", 200);
 
 	const dobOk = /^\d{4}-\d{2}-\d{2}$/.test(dob) && !Number.isNaN(Date.parse(dob));
-	if (!name || !dobOk || !/^[A-Z]{2}$/.test(state)) {
+	const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+	if (!name || !dobOk || !/^[A-Z]{2}$/.test(state) || !emailOk || !phone) {
 		return page(
 			"Check your application",
 			`<h1>Almost <span>there</span></h1>
-			<p>Your full name, date of birth, and state are required.</p>
+			<p>Your full name, date of birth, state, a valid email, and a phone number are required.</p>
 			<a class="btn" href="/become-a-rep">Back to the form</a>`,
 			400,
 		);
@@ -99,14 +140,16 @@ export async function handleRepApply(request: Request, env: Env): Promise<Respon
 	const id = crypto.randomUUID();
 	const createdAt = new Date().toISOString();
 	await env.DB.prepare(
-		`INSERT INTO rep_applications (id, name, dob, state, referred_by, cv_filename, status, created_at)
-		 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7)`,
+		`INSERT INTO rep_applications (id, name, dob, state, email, phone, referred_by, cv_filename, status, created_at)
+		 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'pending', ?9)`,
 	)
-		.bind(id, name, dob, state, referredBy || null, cvName || null, createdAt)
+		.bind(id, name, dob, state, email, phone, referredBy || null, cvName || null, createdAt)
 		.run();
 
 	const rows = [
 		["Name", name],
+		["Email", email],
+		["Phone", phone],
 		["Date of birth", dob],
 		["State", state],
 		["Referred by", referredBy || "—"],

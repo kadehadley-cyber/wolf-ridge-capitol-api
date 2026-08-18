@@ -12,6 +12,7 @@
 // listed read-only here. A database row can never carry the admin role.
 
 import { builtinRoster, ensureAccountsTable, generatePassword, hashPassword, listDbAccounts } from "./auth";
+import { listPendingRepApplications, setRepApplicationStatus } from "./rep-apply";
 
 const USERNAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$/;
 const CREATABLE_ROLES = new Set(["manager", "rep", "clinic"]);
@@ -34,7 +35,7 @@ export async function handleAccountsApi(request: Request, env: Env): Promise<Res
 			disabled: !!r.disabled,
 			created_at: r.created_at,
 		}));
-		return json({ accounts: [...builtin, ...db] });
+		return json({ accounts: [...builtin, ...db], applications: await listPendingRepApplications(env) });
 	}
 	if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
@@ -45,6 +46,15 @@ export async function handleAccountsApi(request: Request, env: Env): Promise<Res
 		return json({ error: "Body must be JSON." }, 400);
 	}
 	const action = String(body.action ?? "create");
+
+	// Dismissing a rep application needs no username.
+	if (action === "app-dismiss") {
+		const appId = String(body.app_id ?? "");
+		if (!appId) return json({ error: "Missing application id." }, 400);
+		await setRepApplicationStatus(env, appId, "dismissed");
+		return json({ ok: true, app_id: appId, dismissed: true });
+	}
+
 	const user = String(body.user ?? "").trim();
 	if (!USERNAME_RE.test(user)) {
 		return json({ error: "Usernames are 3–32 characters: letters, digits, dot, dash, underscore." }, 400);
@@ -54,8 +64,8 @@ export async function handleAccountsApi(request: Request, env: Env): Promise<Res
 	const isBuiltin = builtins.some((a) => a.user.toLowerCase() === user.toLowerCase());
 	const existing = (await listDbAccounts(env)).find((r) => r.user.toLowerCase() === user.toLowerCase());
 
-	if (action === "create") {
-		const role = String(body.role ?? "");
+	if (action === "create" || action === "app-approve") {
+		const role = action === "app-approve" ? "rep" : String(body.role ?? "");
 		if (!CREATABLE_ROLES.has(role)) return json({ error: "Role must be manager, rep, or clinic." }, 400);
 		if (isBuiltin || existing) return json({ error: "That username is taken." }, 409);
 		const password = generatePassword(PASSWORD_PREFIX[role]);
@@ -64,6 +74,10 @@ export async function handleAccountsApi(request: Request, env: Env): Promise<Res
 		)
 			.bind(user, await hashPassword(password), role, new Date().toISOString())
 			.run();
+		if (action === "app-approve") {
+			const appId = String(body.app_id ?? "");
+			if (appId) await setRepApplicationStatus(env, appId, "approved");
+		}
 		return json({ ok: true, user, role, password });
 	}
 

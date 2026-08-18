@@ -830,3 +830,15 @@ input[type="url"]:focus { border-color: rgba(125,211,64,.4); background: rgba(12
         transition-duration: .001ms !important;
     }
 }
+
+/* ── Admin view-as preview banner ── */
+.preview-banner {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+    padding: 11px 18px; text-align: center;
+    background: #d4af37; color: #16180f;
+    font-size: 13.5px; font-weight: 600; letter-spacing: .02em;
+    box-shadow: 0 -8px 24px rgba(0,0,0,.35);
+}
+.preview-banner a {
+    color: #16180f; font-weight: 800; text-decoration: underline; margin-left: 10px;
+}

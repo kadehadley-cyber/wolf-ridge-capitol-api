@@ -26,10 +26,13 @@ export const DEFAULT_ADMIN_PASS_HASH =
  *  sample protocol. */
 export type Role = "admin" | "manager" | "clinic" | "rep";
 
-/** What a signed session asserts: who signed in and at which level. */
+/** What a signed session asserts: who signed in and at which level. When the
+ *  admin is previewing another role, `role`/`user` reflect the previewed
+ *  identity and `preview` is set — the underlying admin session is intact. */
 export interface Session {
 	role: Role;
 	user: string;
+	preview?: boolean;
 }
 
 interface Account {
@@ -237,8 +240,44 @@ export async function createSessionCookie(env: Env, session: Session = { role: "
 
 export const CLEAR_SESSION_COOKIE = `${COOKIE}=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax`;
 
-/** The signed session, or null when it is absent/expired/forged. */
-export async function getSession(env: Env, request: Request): Promise<Session | null> {
+/* ── Admin "view as" preview ─────────────────────────────────────────────
+ * A second, HMAC-signed cookie that an ADMIN session may carry to see the
+ * portal as another role/user. It can only ever restrict: it is honored
+ * solely when the base session is a valid admin session. */
+
+const PREVIEW_COOKIE = "cn_preview";
+
+export async function createPreviewCookie(env: Env, role: Role, user: string): Promise<string> {
+	const userHex = bytesToHex(encoder.encode(user).buffer as ArrayBuffer);
+	const payload = `${role}.${userHex}`;
+	const sig = await crypto.subtle.sign("HMAC", await signingKey(env), encoder.encode(`preview.${payload}`));
+	return `${PREVIEW_COOKIE}=${payload}.${bytesToHex(sig)}; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}; Path=/; Secure; HttpOnly; SameSite=Lax`;
+}
+
+export const CLEAR_PREVIEW_COOKIE = `${PREVIEW_COOKIE}=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax`;
+
+async function previewFromCookie(env: Env, cookie: string): Promise<Session | null> {
+	const m = /(?:^|;\s*)cn_preview=(manager|clinic|rep)\.([0-9a-f]*)\.([0-9a-f]+)/.exec(cookie);
+	if (!m) return null;
+	try {
+		const ok = await crypto.subtle.verify(
+			"HMAC",
+			await signingKey(env),
+			hexToBytes(m[3]) as unknown as BufferSource,
+			encoder.encode(`preview.${m[1]}.${m[2]}`),
+		);
+		if (!ok) return null;
+		const user = new TextDecoder().decode(hexToBytes(m[2]) as unknown as ArrayBuffer);
+		return { role: m[1] as Role, user, preview: true };
+	} catch {
+		return null;
+	}
+}
+
+/** The signed session, or null when it is absent/expired/forged. An admin
+ *  session carrying a valid preview cookie resolves to the previewed
+ *  role/user (with `preview: true`); set `ignorePreview` to see through it. */
+export async function getSession(env: Env, request: Request, ignorePreview = false): Promise<Session | null> {
 	const cookie = request.headers.get("cookie") ?? "";
 	const m = /(?:^|;\s*)cn_admin=(\d+)\.(admin|manager|clinic|rep)\.([0-9a-f]*)\.([0-9a-f]+)/.exec(cookie);
 	if (!m) return null;
@@ -253,7 +292,12 @@ export async function getSession(env: Env, request: Request): Promise<Session | 
 		);
 		if (!ok) return null;
 		const user = new TextDecoder().decode(hexToBytes(m[3]) as unknown as ArrayBuffer);
-		return { role: m[2] as Role, user };
+		const base: Session = { role: m[2] as Role, user };
+		if (!ignorePreview && base.role === "admin") {
+			const preview = await previewFromCookie(env, cookie);
+			if (preview) return preview;
+		}
+		return base;
 	} catch {
 		return null;
 	}

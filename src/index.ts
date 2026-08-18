@@ -12,11 +12,14 @@
 // briefing when a WhatsApp delivery channel is configured.
 
 import {
+	CLEAR_PREVIEW_COOKIE,
 	CLEAR_SESSION_COOKIE,
+	createPreviewCookie,
 	createSessionCookie,
 	getSession,
 	hasValidSession,
 	loginPage,
+	repRoster,
 	sessionRole,
 	verifyCredentials,
 } from "./auth";
@@ -273,6 +276,65 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		return p.endsWith("/scan") ? handleLeadScan(request, env) : handleLeadsApi(request, env);
 	}
 
+	// ── Admin "view as" preview: see the portal as a manager or a rep ──
+	if (p === "/portal/api/preview" && request.method === "POST") {
+		// The base session decides — a preview must not be able to nest or
+		// escalate, so look through any active preview cookie.
+		const base = await getSession(env, request, true);
+		if (!base || base.role !== "admin") {
+			return new Response(JSON.stringify({ error: "Admin access required." }), {
+				status: base ? 403 : 401,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+		let body: { role?: string; user?: string };
+		try {
+			body = (await request.json()) as typeof body;
+		} catch {
+			body = {};
+		}
+		const role = String(body.role ?? "");
+		if (role === "") {
+			return new Response(JSON.stringify({ ok: true, preview: null }), {
+				status: 200,
+				headers: { "content-type": "application/json; charset=utf-8", "set-cookie": CLEAR_PREVIEW_COOKIE },
+			});
+		}
+		let user = String(body.user ?? "");
+		if (role === "manager") {
+			user = "Admin";
+		} else if (role === "rep") {
+			if (!(await repRoster(env)).includes(user)) {
+				return new Response(JSON.stringify({ error: "Unknown rep." }), {
+					status: 400,
+					headers: { "content-type": "application/json; charset=utf-8" },
+				});
+			}
+		} else {
+			return new Response(JSON.stringify({ error: "Preview as manager or a rep." }), {
+				status: 400,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+		return new Response(JSON.stringify({ ok: true, preview: { role, user } }), {
+			status: 200,
+			headers: {
+				"content-type": "application/json; charset=utf-8",
+				"set-cookie": await createPreviewCookie(env, role as "manager" | "rep", user),
+			},
+		});
+	}
+
+	// Exit preview from the banner link — just clears the preview cookie.
+	if (p === "/portal/preview/exit") {
+		url.pathname = "/portal/accounts/";
+		url.search = "";
+		return new Response(null, {
+			status: 303,
+			headers: { location: url.toString(), "set-cookie": CLEAR_PREVIEW_COOKIE },
+		});
+	}
+
 	// ── Marketing scanner API (admin, manager, rep; clinics never; report
 	//    generation writes to D1, so managers stay read-only) ──
 	if (p === "/portal/api/marketing/reports" || p === "/portal/api/marketing/generate") {
@@ -383,8 +445,11 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 
 	// ── Portal requires a signed session; everything else is public ──
 	let role: import("./auth").Role | null = null;
+	let previewing: { role: string; user: string } | null = null;
 	if (p === "/portal" || p.startsWith("/portal/")) {
-		role = await sessionRole(env, request);
+		const sess = await getSession(env, request);
+		role = sess?.role ?? null;
+		if (sess?.preview) previewing = { role: sess.role, user: sess.user };
 		if (!role) {
 			url.pathname = "/login";
 			url.search = "?next=" + encodeURIComponent(p + url.search);
@@ -468,7 +533,24 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 			res = new Response(null, { status: res.status, headers });
 		}
 	}
-	return role ? stripNavFor(role, res) : res;
+	if (role) res = stripNavFor(role, res);
+	if (previewing) res = injectPreviewBanner(res, previewing);
+	return res;
+}
+
+/** Floating banner on every portal page while the admin previews a role. */
+function injectPreviewBanner(res: Response, preview: { role: string; user: string }): Response {
+	if (typeof HTMLRewriter === "undefined") return res; // non-workers runtime (tests)
+	const type = res.headers.get("content-type") ?? "";
+	if (!type.includes("text/html")) return res;
+	const escText = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	const banner =
+		`<div class="preview-banner">Viewing the portal as <strong>${escText(preview.user)}</strong>` +
+		` (${escText(preview.role)}) — this is exactly what they see. ` +
+		`<a href="/portal/preview/exit">Exit preview</a></div>`;
+	return new HTMLRewriter()
+		.on("body", { element(el: { append(html: string, opts: { html: boolean }): void }) { el.append(banner, { html: true }); } })
+		.transform(res);
 }
 
 /**
