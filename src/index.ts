@@ -299,10 +299,14 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		if (sess.role === "clinic") return deny("Not available to clinic accounts.");
 		if (p === "/portal/api/rep/leads" && request.method === "GET") return handleRepLeads(env, sess);
 		if (request.method !== "POST") return deny("Method not allowed.", 405);
-		if (sess.role === "manager") return deny("Manager accounts are view-only.");
+		// Assignment is the one write managers may make — routing leads to reps
+		// is management work; everything else stays view-only for them.
 		if (p === "/portal/api/rep/assign") {
-			return sess.role === "admin" ? handleRepAssign(request, env) : deny("Admin access required.");
+			return sess.role === "admin" || sess.role === "manager"
+				? handleRepAssign(request, env)
+				: deny("Admin or manager access required.");
 		}
+		if (sess.role === "manager") return deny("Manager accounts are view-only.");
 		if (p === "/portal/api/rep/note") return handleRepNote(request, env, sess);
 		if (p === "/portal/api/rep/followup") return handleRepFollowup(request, env, sess);
 		if (p === "/portal/api/rep/followup-done") return handleRepFollowupDone(request, env, sess);

@@ -293,3 +293,21 @@
     .crm-print-band.cold { color: #777; }
     .crm-print-empty { font-size: 11px; color: #444; }
 }
+
+/* ── Rep assignment (admin + manager) ── */
+.crm-assign {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 12px 0 2px; padding: 10px 14px; border-radius: 10px;
+    background: var(--card2, rgba(255,255,255,.03)); border: 1px solid var(--line2, rgba(255,255,255,.10));
+}
+.crm-assign-label {
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--brand2, #4fb3a5); font-weight: 700;
+}
+.crm-assign-select {
+    font: inherit; font-size: 13px; color: var(--text, #f0f4ff);
+    background: rgba(255,255,255,.04); border: 1px solid var(--line2, rgba(255,255,255,.10));
+    border-radius: 8px; padding: 7px 10px;
+}
+.crm-assign-select:focus { outline: none; border-color: rgba(125,211,64,.55); }
+.crm-assign-status { font-size: 12px; color: var(--muted, #6a7a90); }
