@@ -1,0 +1,63 @@
+/* Rep workspace — assigned leads with notes, follow-ups, and reminders. */
+
+.rep-reminders {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    padding: 14px 18px; margin: 0 0 20px; border-radius: var(--radius);
+    background: var(--panel); border: 1px solid var(--line2);
+}
+.rep-reminders-title { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--brand2); }
+.rep-reminders-empty { font-size: 13px; color: var(--muted); }
+.rep-pill { font-size: 12px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line2); color: var(--text); }
+.rep-pill.overdue { border-color: rgba(255, 120, 140, .6); color: #ff8fa6; }
+.rep-pill.today { border-color: rgba(212, 175, 55, .6); color: var(--accent); }
+
+.rep-list { display: grid; gap: 16px; }
+
+.rep-card { border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line2); overflow: hidden; }
+.rep-card-head { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; padding: 16px 18px 4px; cursor: pointer; }
+.rep-card-name { font-size: 16px; font-weight: 700; color: var(--text); }
+.rep-card-sub { font-size: 12.5px; color: var(--muted); }
+.rep-card-flag { margin-left: auto; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.rep-card-flag.overdue { color: #ff8fa6; }
+.rep-card-flag.today { color: var(--accent); }
+.rep-card-contact { padding: 0 18px 12px; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.rep-card-contact a { color: var(--brand2); text-decoration: none; }
+
+.rep-card-body { border-top: 1px solid var(--line); padding: 14px 18px 18px; display: grid; gap: 18px; }
+@media (min-width: 860px) { .rep-card-body { grid-template-columns: 1fr 1fr; } }
+
+.rep-sec-title { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--brand2); margin: 0 0 8px; }
+
+.rep-notes { display: grid; gap: 8px; margin: 0 0 10px; }
+.rep-note { font-size: 13px; line-height: 1.55; color: var(--text); background: var(--card2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.rep-note-meta { font-size: 11px; color: var(--dim); margin-top: 3px; }
+
+.rep-fus { display: grid; gap: 6px; margin: 0 0 10px; }
+.rep-fu { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--text);
+    background: var(--card2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; }
+.rep-fu.done { opacity: .5; text-decoration: line-through; }
+.rep-fu.overdue { border-color: rgba(255, 120, 140, .5); }
+.rep-fu.today { border-color: rgba(212, 175, 55, .5); }
+.rep-fu-due { font-weight: 700; white-space: nowrap; }
+.rep-fu-kind { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--brand2); }
+.rep-fu-note { color: var(--muted); }
+.rep-fu input[type="checkbox"] { accent-color: var(--brand); }
+
+.rep-form { display: flex; flex-wrap: wrap; gap: 8px; }
+.rep-form textarea, .rep-form input, .rep-form select {
+    font: inherit; font-size: 13px; color: var(--text);
+    background: rgba(255,255,255,.04); border: 1px solid var(--line2); border-radius: 8px; padding: 8px 10px;
+}
+.rep-form textarea { width: 100%; min-height: 56px; resize: vertical; }
+.rep-form input:focus, .rep-form textarea:focus, .rep-form select:focus { outline: none; border-color: rgba(125,211,64,.55); }
+.rep-btn {
+    font: inherit; font-size: 12.5px; font-weight: 700; letter-spacing: .04em; cursor: pointer;
+    color: #04120a; background: #6fce35; border: none; border-radius: 8px; padding: 8px 16px;
+}
+.rep-btn:hover { background: #8fdd5a; }
+.rep-btn:disabled { opacity: .5; cursor: default; }
+
+.rep-assign { padding: 0 18px 14px; display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+
+.rep-empty { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 14px;
+    border: 1px dashed var(--line2); border-radius: var(--radius); }

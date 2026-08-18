@@ -9,7 +9,7 @@ const ctx = {} as ExecutionContext;
 /** Minimal in-memory D1 stand-in covering the SQL the signup + leads flows use. */
 function makeDb() {
 	const apps = new Map<string, Record<string, unknown>>();
-	const leads = new Map<string, { data: string }>();
+	const leads = new Map<string, { id?: string; data: string }>();
 	const orders = new Map<string, { data: string }>();
 	const exec = (sql: string, args: unknown[]) => ({
 		run: async () => {
@@ -24,7 +24,10 @@ function makeDb() {
 				const row = apps.get(String(args[1]));
 				if (row) { row.status = "approved"; row.approved_at = args[0]; }
 			} else if (s.startsWith("INSERT INTO crm_leads")) {
-				leads.set(String(args[0]), { data: String(args[1]) });
+				leads.set(String(args[0]), { id: String(args[0]), data: String(args[1]) });
+			} else if (s.startsWith("UPDATE crm_leads")) {
+				const row = leads.get(String(args[1]));
+				if (row) row.data = String(args[0]);
 			} else if (s.startsWith("DELETE FROM crm_leads")) {
 				leads.clear();
 			} else if (s.startsWith("INSERT OR REPLACE INTO orders")) {
@@ -32,7 +35,12 @@ function makeDb() {
 			}
 			return {};
 		},
-		first: async () => apps.get(String(args[0])) ?? null,
+		first: async () =>
+			sql.includes("FROM crm_leads")
+				? (leads.get(String(args[0])) ?? null)
+				: sql.includes("FROM orders")
+					? (orders.get(String(args[0])) ?? null)
+					: (apps.get(String(args[0])) ?? null),
 		all: async () => ({
 			results: sql.includes("FROM crm_leads")
 				? [...leads.values()]
@@ -202,6 +210,64 @@ describe("cellunovabiologics.com site routing", () => {
 		const { res } = await hit("/portal/api/leads", "www.cellunovabiologics.com", "GET", cookie);
 		expect(res.status).not.toBe(403);
 		expect(res.status).not.toBe(401);
+	});
+
+	it("gives reps their assigned leads only, with notes and follow-ups", async () => {
+		const { env, db } = makeEnv();
+		db.leads.set("lead-1", { id: "lead-1", data: JSON.stringify({ name: "Katy Spine Clinic", assigned_rep: "Rep1" }) });
+		db.leads.set("lead-2", { id: "lead-2", data: JSON.stringify({ name: "Other Clinic", assigned_rep: "" }) });
+		const call = async (path: string, cookie: string, method = "GET", body?: unknown) =>
+			worker.fetch!(
+				new Request("https://www.cellunovabiologics.com" + path, {
+					method,
+					headers: { cookie, ...(body ? { "content-type": "application/json" } : {}) },
+					...(body ? { body: JSON.stringify(body) } : {}),
+				}) as never,
+				env,
+				ctx,
+			);
+		const rep = (await login("Rep1", "Rep-sA5xnHPHNMckBR")).cookie;
+		expect(rep).toContain(".rep.");
+		// Sees only the assigned lead.
+		const mine = (await (await call("/portal/api/rep/leads", rep)).json()) as { leads: Array<{ id: string }> };
+		expect(mine.leads).toHaveLength(1);
+		expect(mine.leads[0].id).toBe("lead-1");
+		// Can note and schedule on it…
+		const note = await call("/portal/api/rep/note", rep, "POST", { id: "lead-1", text: "Spoke with front desk" });
+		expect(note.status).toBe(200);
+		const fu = await call("/portal/api/rep/followup", rep, "POST", { id: "lead-1", due: "2027-01-15", kind: "call", note: "Demo" });
+		expect(fu.status).toBe(200);
+		const saved = JSON.parse(db.leads.get("lead-1")!.data);
+		expect(saved.rep_notes[0].text).toBe("Spoke with front desk");
+		expect(saved.followups[0].kind).toBe("call");
+		// …but not on an unassigned lead.
+		expect((await call("/portal/api/rep/note", rep, "POST", { id: "lead-2", text: "nope" })).status).toBe(404);
+		// Admin can assign; rep cannot.
+		const admin = (await login()).cookie;
+		expect((await call("/portal/api/rep/assign", admin, "POST", { id: "lead-2", rep: "Rep1" })).status).toBe(200);
+		expect(JSON.parse(db.leads.get("lead-2")!.data).assigned_rep).toBe("Rep1");
+		expect((await call("/portal/api/rep/assign", rep, "POST", { id: "lead-2", rep: "" })).status).toBe(403);
+	});
+
+	it("keeps reps inside their workspace pages", async () => {
+		const { cookie } = await login("Rep1", "Rep-sA5xnHPHNMckBR");
+		// Allowed: the workspace, marketing, and the one sample protocol.
+		expect((await hit("/portal/rep/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual([
+			"/clinic-portal/rep/",
+		]);
+		expect((await hit("/portal/marketing/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual([
+			"/clinic-portal/marketing/",
+		]);
+		expect(
+			(await hit("/portal/protocols/library/shoulder-im.pdf", "www.cellunovabiologics.com", "GET", cookie)).calls,
+		).toEqual(["/clinic-portal/protocols/library/shoulder-im.pdf"]);
+		// Everything else bounces to the workspace.
+		for (const blocked of ["/portal/", "/portal/crm/", "/portal/pricing/", "/portal/orders/", "/portal/templates/", "/portal/protocols/library/knee.html"]) {
+			const { res, calls } = await hit(blocked, "www.cellunovabiologics.com", "GET", cookie);
+			expect(res.status).toBe(302);
+			expect(res.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/rep/");
+			expect(calls).toEqual([]);
+		}
 	});
 
 	it("scopes the orders list to the clinic that placed them", async () => {
