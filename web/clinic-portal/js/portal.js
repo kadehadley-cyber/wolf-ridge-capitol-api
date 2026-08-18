@@ -75,30 +75,31 @@
      * /portal/protocols/library/ as self-contained HTML pages (with chart-note
      * templates) or official PDFs. Each opens in the sandboxed viewer. Sorted
      * into the category that matches its administration route. */
+    /* Every library document is a PDF; clicking one opens it in a new tab. */
     var LIBRARY = [
         { cat: 'ia',    slug: 'knee',                         title: 'Knee — intra-articular — chart notes' },
-        { cat: 'ia',    slug: 'knee-protocol', type: 'pdf',   title: 'Intra-articular knee (official PDF)' },
+        { cat: 'ia',    slug: 'knee-protocol',                title: 'Intra-articular knee (official PDF)' },
         { cat: 'ia',    slug: 'hip',                          title: 'Hip — IA + IM — chart notes' },
-        { cat: 'ia',    slug: 'hip-protocol', type: 'pdf',    title: 'Hip — IA + IM (official PDF)' },
+        { cat: 'ia',    slug: 'hip-protocol',                 title: 'Hip — IA + IM (official PDF)' },
         { cat: 'ia',    slug: 'shoulder',                     title: 'Shoulder — IA / peritendinous — chart notes' },
-        { cat: 'ia',    slug: 'shoulder-ultrasound-ia', type: 'pdf', title: 'Shoulder — ultrasound-guided IA (official PDF)' },
-        { cat: 'im',    slug: 'shoulder-im', type: 'pdf',     title: 'Shoulder — IM (official PDF)' },
+        { cat: 'ia',    slug: 'shoulder-ultrasound-ia',       title: 'Shoulder — ultrasound-guided IA (official PDF)' },
+        { cat: 'im',    slug: 'shoulder-im',                  title: 'Shoulder — IM (official PDF)' },
         { cat: 'im',    slug: 'cervical-spine',               title: 'Cervical spine (neck) — chart notes' },
-        { cat: 'im',    slug: 'cervical-neck-im', type: 'pdf', title: 'Neck pain — cervical spine (official PDF)' },
-        { cat: 'im',    slug: 'injury-recovery', type: 'pdf', title: 'Injury recovery — return to work (official PDF)' },
+        { cat: 'im',    slug: 'cervical-neck-im',             title: 'Neck pain — cervical spine (official PDF)' },
+        { cat: 'im',    slug: 'injury-recovery',              title: 'Injury recovery — return to work (official PDF)' },
         { cat: 'im',    slug: 'spina-bifida',                 title: 'Spina bifida — IM support — chart notes' },
-        { cat: 'im',    slug: 'spina-bifida-support', type: 'pdf', title: 'Spina bifida support (official PDF)' },
+        { cat: 'im',    slug: 'spina-bifida-support',         title: 'Spina bifida support (official PDF)' },
         { cat: 'im',    slug: 'rheumatoid-arthritis',         title: 'Rheumatoid arthritis (RA)' },
         { cat: 'im',    slug: 'ankylosing-spondylitis',       title: 'Ankylosing spondylitis' },
         { cat: 'im',    slug: 'psoriatic-arthritis',          title: 'Psoriatic arthritis' },
         { cat: 'im',    slug: 'ibd-associated-arthritis',     title: 'IBD-associated arthritis' },
         { cat: 'iv',    slug: 'general-wellness-longevity',   title: 'General wellness & longevity' },
         { cat: 'other', slug: 'dementia',                     title: 'Cognitive — dementia & MCI — chart notes' },
-        { cat: 'other', slug: 'cognitive-dementia-support', type: 'pdf', title: 'Cognitive decline & dementia support (official PDF)' },
-        { cat: 'other', slug: 'hair-mesotherapy',             title: 'Hair & scalp mesotherapy — chart notes' },
-        { cat: 'other', slug: 'hair-mesotherapy', type: 'pdf', title: 'Hair & mesotherapy (official PDF)' },
+        { cat: 'other', slug: 'cognitive-dementia-support',   title: 'Cognitive decline & dementia support (official PDF)' },
+        { cat: 'other', slug: 'hair-mesotherapy-notes',       title: 'Hair & scalp mesotherapy — chart notes' },
+        { cat: 'other', slug: 'hair-mesotherapy',             title: 'Hair & mesotherapy (official PDF)' },
         { cat: 'other', slug: 'neuro-intranasal',             title: 'Neuro — intranasal — chart notes' },
-        { cat: 'other', slug: 'intranasal-tbi-cognitive', type: 'pdf', title: 'Intranasal neural — TBI & cognitive (official PDF)' },
+        { cat: 'other', slug: 'intranasal-tbi-cognitive',     title: 'Intranasal neural — TBI & cognitive (official PDF)' },
         { cat: 'pre',   slug: 'patient-screening',            title: 'Patient screening' },
         { cat: 'pre',   slug: 'informed-consent',             title: 'Informed consent' },
         { cat: 'pre',   slug: 'treatment-planning-worksheet', title: 'Treatment planning worksheet' },
@@ -112,9 +113,8 @@
     var DOCS = [];
     var docId = 0;
     LIBRARY.forEach(function (d) {
-        var type = d.type || 'html';
-        DOCS.push({ id: ++docId, cat: d.cat, kind: 'asset', type: type,
-                    title: d.title, url: '/portal/protocols/library/' + d.slug + '.' + type });
+        DOCS.push({ id: ++docId, cat: d.cat, kind: 'asset', type: 'pdf',
+                    title: d.title, url: '/portal/protocols/library/' + d.slug + '.pdf' });
     });
 
     function catOf(key) { return CATEGORIES.filter(function (c) { return c.key === key; })[0]; }
@@ -312,6 +312,10 @@
 
         // External links never embed — open in a new tab after a scheme check.
         if (doc.kind === 'link') { window.open(doc.url, '_blank', 'noopener,noreferrer'); return; }
+
+        // Library PDFs open straight into a new tab in the browser's native
+        // viewer — the session cookie rides along on the same-origin URL.
+        if (doc.kind === 'asset') { window.open(doc.url, '_blank', 'noopener'); return; }
 
         $('docViewerTitle').textContent = doc.title;
         $('docViewerSub').textContent = (doc.type === 'pdf' ? 'PDF' : 'HTML') + ' document';
