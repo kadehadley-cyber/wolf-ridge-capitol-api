@@ -11,7 +11,7 @@
 // Notes and follow-ups live inside the lead's JSON blob (rep_notes[] and
 // followups[]), so they survive CRM re-imports that round-trip lead objects.
 
-import { REP_USERS, type Session } from "./auth";
+import { repRoster, type Session } from "./auth";
 
 const KINDS = new Set(["call", "email", "visit", "other"]);
 const MAX_NOTE = 2000;
@@ -71,7 +71,7 @@ export async function handleRepLeads(env: Env, sess: Session): Promise<Response>
 		role: sess.role,
 		user: sess.user,
 		leads,
-		...(sess.role === "admin" || sess.role === "manager" ? { reps: REP_USERS } : {}),
+		...(sess.role === "admin" || sess.role === "manager" ? { reps: await repRoster(env) } : {}),
 	});
 }
 
@@ -136,7 +136,7 @@ export async function handleRepAssign(request: Request, env: Env): Promise<Respo
 	const body = await readBody(request);
 	if (!body) return json({ error: "Body must be JSON." }, 400);
 	const rep = String(body.rep ?? "");
-	if (rep !== "" && !REP_USERS.includes(rep)) return json({ error: "Unknown rep." }, 400);
+	if (rep !== "" && !(await repRoster(env)).includes(rep)) return json({ error: "Unknown rep." }, 400);
 	const found = await loadLead(env, String(body.id ?? ""));
 	if (!found) return json({ error: "No such lead." }, 404);
 	found.lead.assigned_rep = rep;
