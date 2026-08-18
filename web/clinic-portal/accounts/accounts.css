@@ -54,3 +54,27 @@
     user-select: all; word-break: break-all;
 }
 .acct-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ── View-as switcher ── */
+.acct-viewas {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 14px 18px; margin: 0 0 18px; border-radius: var(--radius);
+    background: var(--panel); border: 1px solid rgba(212,175,55,.35);
+}
+.acct-viewas-hint { font-size: 12.5px; color: var(--muted); }
+#viewasButtons { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ── Pending rep applications ── */
+.acct-apps {
+    padding: 16px 18px; margin: 0 0 18px; border-radius: var(--radius);
+    background: var(--panel); border: 1px solid rgba(125,211,64,.35);
+}
+.acct-app {
+    display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+    padding: 12px 0; border-top: 1px solid var(--line);
+}
+.acct-app:first-of-type { border-top: none; }
+.acct-app-name { font-size: 14.5px; font-weight: 700; color: var(--text); }
+.acct-app-meta { font-size: 12.5px; color: var(--muted); }
+.acct-app-actions { margin-left: auto; display: flex; gap: 8px; }
+.acct-apps-head { margin-bottom: 10px; }

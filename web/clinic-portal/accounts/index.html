@@ -24,7 +24,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles/portal.css?v=20260818">
-<link rel="stylesheet" href="accounts.css?v=20260818">
+<link rel="stylesheet" href="accounts.css?v=20260819">
 </head>
 <body class="portal-page">
 
@@ -101,6 +101,17 @@
            and disable access — no code changes, no waiting.</p>
       </div>
 
+      <div class="acct-viewas">
+        <span class="acct-create-label">View as</span>
+        <span class="acct-viewas-hint">See the portal exactly as another role sees it — a banner shows while previewing.</span>
+        <span id="viewasButtons"></span>
+      </div>
+
+      <div class="acct-apps" id="appsSection" hidden>
+        <div class="acct-create-label acct-apps-head">Pending rep applications</div>
+        <div id="appList"></div>
+      </div>
+
       <div class="acct-create">
         <span class="acct-create-label">New account</span>
         <input id="newUser" type="text" placeholder="Username (e.g. JSmith or KatyChiro)" maxlength="32" autocomplete="off">
@@ -145,6 +156,6 @@
   </div>
 </div>
 
-<script src="accounts.js?v=20260818"></script>
+<script src="accounts.js?v=20260819"></script>
 </body>
 </html>
