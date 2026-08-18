@@ -1072,6 +1072,10 @@ describe("cellunovabiologics.com site routing", () => {
 			expect(await tryVol("exo-plus", "3 cc")).toBe(200);
 			expect(await tryVol("nova-flow", "3 cc")).toBe(400);
 			expect(await tryVol("nova-elite", "5 cc")).toBe(400);
+			// Equipment: the cryofreezer sells as a single $2,700 unit.
+			expect(await tryVol("cryofreezer", "1 unit")).toBe(200);
+			expect(new URLSearchParams(sentBody).get("line_items[0][price_data][unit_amount]")).toBe("270000");
+			expect(await tryVol("cryofreezer", "2 cc")).toBe(400);
 		} finally {
 			globalThis.fetch = realFetch;
 		}

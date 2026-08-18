@@ -160,3 +160,11 @@
     .order-hero { margin: 0 -8px 28px; padding: 36px 18px 30px; }
     body.portal-page { padding-bottom: 70px; }
 }
+
+/* ── Materials & Extras (equipment) + product notes ── */
+.prod-gear:hover::before { background: #d4af37; }
+.prod-gear.prod-selected::before { background: #d4af37 !important; }
+.prod-gear .prod-price { color: #d4af37; }
+.prod-gear .prod-variant-pill.active { background: rgba(212,175,55,.10); border-color: rgba(212,175,55,.45); }
+.prod-gear .prod-variant-pill.active .pv-price { color: #d4af37; }
+.prod-note { font-size: 12px; color: var(--muted, #6a7a90); margin-top: 4px; line-height: 1.5; }

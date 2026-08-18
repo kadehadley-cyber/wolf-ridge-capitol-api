@@ -26,7 +26,7 @@
      * ═════════════════════════════════════════════════════════════════════ */
     var CATEGORIES = [
         { key: 'msc', label: 'NOVA biologics' },
-        { key: 'exo', label: 'Exosomes' }
+        { key: 'gear', label: 'Materials & Extras' }
     ];
     /* The NOVA product family, from the CelluNOVA Brand Standards Guide:
      * NOVA-V1, NOVA-M1, NOVA-E2 at $800 per cc; NOVA-E1 at $500 per
@@ -42,8 +42,11 @@
           variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }] },
         { id: 'nova-elite', name: 'NOVA-E2', cat: 'msc', popular: true,
           variants: [{ vol: '1 cc', price: 800 }, { vol: '2 cc', price: 1600 }] },
-        { id: 'exo-plus',   name: 'NOVA-E1', cat: 'exo', popular: true,
-          variants: [{ vol: '1 cc', price: 500 }, { vol: '2 cc', price: 1000 }, { vol: '3 cc', price: 1500 }] }
+        { id: 'exo-plus',   name: 'NOVA-E1', cat: 'msc', popular: true,
+          variants: [{ vol: '1 cc', price: 500 }, { vol: '2 cc', price: 1000 }, { vol: '3 cc', price: 1500 }] },
+        { id: 'cryofreezer', name: '-80°C Cryofreezer', cat: 'gear',
+          note: 'Benchtop ultra-low freezer — wall plug and 12V car adapter included.',
+          variants: [{ vol: '1 unit', price: 2700 }] }
     ];
 
     var catLabel = {};
@@ -118,6 +121,7 @@
         meta.appendChild(vol);
         if (p.popular) { var pop = document.createElement('span'); pop.className = 'prod-pop'; pop.textContent = 'Popular'; meta.appendChild(pop); }
         left.append(nm, meta);
+        if (p.note) { var note = document.createElement('div'); note.className = 'prod-note'; note.textContent = p.note; left.appendChild(note); }
 
         var right = document.createElement('div');
         right.className = 'prod-right';
