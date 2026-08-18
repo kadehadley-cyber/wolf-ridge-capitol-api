@@ -14,8 +14,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles/portal.css">
-<link rel="stylesheet" href="marketing.css">
+<link rel="stylesheet" href="../styles/portal.css?v=20260818">
+<link rel="stylesheet" href="marketing.css?v=20260818">
 </head>
 <body class="portal-page">
 <div class="portal-layout">
@@ -46,14 +46,17 @@
       <div class="proto-hero">
         <div class="proto-hero-eyebrow">Market Intelligence</div>
         <h1 class="proto-hero-title">Marketing <span>Resources</span></h1>
-        <p class="proto-hero-sub">AI market scans for your area — competitors, likely patient search terms,
-           and adoption angles. A new report is generated each time you refresh your data.</p>
+        <p class="proto-hero-sub">Live AI market scans: real provider data for your target area from the
+           CMS NPI registry, analyzed into competitors, patient search terms, and adoption angles.</p>
       </div>
 
-      <div class="crm-placeholder-note shop-note">
-        Placeholder report — the render schema is faithful to <code>portal.js</code>’s
-        <code>loadMarketingReport</code>; the data is fabricated. Competitor links are rendered through a
-        scheme allowlist (§2), so a hostile scraped URL renders inert.
+      <div class="mk-generate">
+        <span class="mk-generate-label">New scan</span>
+        <input id="scanCity" type="text" placeholder="City (e.g. Katy)" maxlength="60" autocomplete="off">
+        <input id="scanState" type="text" placeholder="ST" maxlength="2" autocomplete="off" class="mk-state">
+        <input id="scanFocus" type="text" placeholder="Focus (optional, e.g. sports medicine)" maxlength="120" autocomplete="off">
+        <button class="btn sm" id="scanBtn" type="button">Run AI market scan</button>
+        <span class="mk-generate-status" id="scanStatus"></span>
       </div>
 
       <div class="mk-layout">
@@ -65,6 +68,6 @@
     </main>
   </div>
 </div>
-<script src="marketing.js"></script>
+<script src="marketing.js?v=20260818"></script>
 </body>
 </html>

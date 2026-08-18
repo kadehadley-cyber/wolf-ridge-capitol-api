@@ -25,6 +25,7 @@ import { handleLeadScan, handleLeadsApi } from "./leads";
 import { handleCheckout, handleCheckoutConfirm, handleOrdersList, handleStripeWebhook } from "./stripe";
 import { handleRepAssign, handleRepFollowup, handleRepFollowupDone, handleRepLeads, handleRepNote } from "./rep";
 import { handleAccountsApi } from "./accounts";
+import { handleMarketingGenerate, handleMarketingReports } from "./marketing";
 import { handleApprove, handleSignup } from "./signup";
 import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
@@ -261,6 +262,27 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 			});
 		}
 		return p.endsWith("/scan") ? handleLeadScan(request, env) : handleLeadsApi(request, env);
+	}
+
+	// ── Marketing scanner API (admin, manager, rep; clinics never; report
+	//    generation writes to D1, so managers stay read-only) ──
+	if (p === "/portal/api/marketing/reports" || p === "/portal/api/marketing/generate") {
+		const sess = await getSession(env, request);
+		const mjson = (data: unknown, status: number) =>
+			new Response(JSON.stringify(data), {
+				status,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		if (!sess) return mjson({ error: "Sign in required." }, 401);
+		if (sess.role === "clinic") return mjson({ error: "Not available to clinic accounts." }, 403);
+		if (p === "/portal/api/marketing/reports" && request.method === "GET") {
+			return handleMarketingReports(env);
+		}
+		if (p === "/portal/api/marketing/generate" && request.method === "POST") {
+			if (sess.role === "manager") return mjson({ error: "Manager accounts are view-only." }, 403);
+			return handleMarketingGenerate(request, env);
+		}
+		return mjson({ error: "Method not allowed." }, 405);
 	}
 
 	// ── Account manager API (JSON; strictly the admin — not even the manager) ──
