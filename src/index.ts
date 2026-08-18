@@ -24,6 +24,7 @@ import { ask, type ImageAttachment } from "./jarvis";
 import { handleLeadScan, handleLeadsApi } from "./leads";
 import { handleCheckout, handleCheckoutConfirm, handleOrdersList, handleStripeWebhook } from "./stripe";
 import { handleRepAssign, handleRepFollowup, handleRepFollowupDone, handleRepLeads, handleRepNote } from "./rep";
+import { handleAccountsApi } from "./accounts";
 import { handleApprove, handleSignup } from "./signup";
 import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
@@ -136,6 +137,7 @@ function isAdminOnlyPath(p: string): boolean {
 			"/portal/support",
 			"/portal/treatment-schedule",
 			"/portal/welcome",
+			"/portal/accounts",
 		].some((base) => p === base || p.startsWith(base + "/"))
 	);
 }
@@ -163,10 +165,12 @@ function stripNavFor(role: string, res: Response): Response {
 	if (!type.includes("text/html")) return res;
 	const strip =
 		role === "clinic"
-			? ["/portal/crm", "/portal/marketing", "/portal/support", "/portal/treatment-schedule", "/portal/rep"]
+			? ["/portal/crm", "/portal/marketing", "/portal/support", "/portal/treatment-schedule", "/portal/rep", "/portal/accounts"]
 			: role === "rep"
-				? ["/portal/crm", "/portal/protocols", "/portal/templates", "/portal/pricing", "/portal/orders", "/portal/support", "/portal/treatment-schedule"]
-				: [];
+				? ["/portal/crm", "/portal/protocols", "/portal/templates", "/portal/pricing", "/portal/orders", "/portal/support", "/portal/treatment-schedule", "/portal/accounts"]
+				: role === "manager"
+					? ["/portal/accounts"]
+					: [];
 	if (!strip.length) return res;
 	const remove = { element(el: { remove(): void }) { el.remove(); } };
 	let rw = new HTMLRewriter();
@@ -259,6 +263,24 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		return p.endsWith("/scan") ? handleLeadScan(request, env) : handleLeadsApi(request, env);
 	}
 
+	// ── Account manager API (JSON; strictly the admin — not even the manager) ──
+	if (p === "/portal/api/accounts") {
+		const sess = await getSession(env, request);
+		if (!sess) {
+			return new Response(JSON.stringify({ error: "Sign in required." }), {
+				status: 401,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+		if (sess.role !== "admin") {
+			return new Response(JSON.stringify({ error: "Admin access required." }), {
+				status: 403,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+		return handleAccountsApi(request, env);
+	}
+
 	// ── Rep workspace API (JSON; rep sees own assignments, admin everything,
 	//    manager read-only, clinic never) ──
 	if (p.startsWith("/portal/api/rep/")) {
@@ -339,8 +361,9 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 			url.search = "";
 			return Response.redirect(url.toString(), 302);
 		}
-		// Managers see every page but never act: the approve link writes.
-		if (role === "manager" && p === "/portal/approve") {
+		// Managers see every page but never act: the approve link writes, and
+		// the account manager is strictly the admin's.
+		if (role === "manager" && (p === "/portal/approve" || p === "/portal/accounts" || p.startsWith("/portal/accounts/"))) {
 			url.pathname = "/portal/";
 			url.search = "";
 			return Response.redirect(url.toString(), 302);
@@ -368,7 +391,7 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		["/portal/support", "/portal/tickets/"],
 		["/portal/marketing-resources", "/portal/marketing/"],
 	]);
-	for (const dir of ["crm", "pricing", "orders", "tickets", "treatment-schedule", "welcome", "admin", "marketing", "templates", "rep"]) {
+	for (const dir of ["crm", "pricing", "orders", "tickets", "treatment-schedule", "welcome", "admin", "marketing", "templates", "rep", "accounts"]) {
 		redirects.set(`/portal/${dir}`, `/portal/${dir}/`);
 	}
 	const target = redirects.get(p);

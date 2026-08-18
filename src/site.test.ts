@@ -11,6 +11,7 @@ function makeDb() {
 	const apps = new Map<string, Record<string, unknown>>();
 	const leads = new Map<string, { id?: string; data: string }>();
 	const orders = new Map<string, { data: string }>();
+	const accounts = new Map<string, Record<string, unknown>>();
 	const exec = (sql: string, args: unknown[]) => ({
 		run: async () => {
 			const s = sql.trimStart();
@@ -32,6 +33,18 @@ function makeDb() {
 				leads.clear();
 			} else if (s.startsWith("INSERT OR REPLACE INTO orders")) {
 				orders.set(String(args[0]), { data: String(args[1]) });
+			} else if (s.startsWith("INSERT INTO portal_accounts")) {
+				accounts.set(String(args[0]), {
+					user: args[0], hash: args[1], role: args[2], disabled: 0, created_at: args[3],
+				});
+			} else if (s.startsWith("UPDATE portal_accounts SET hash")) {
+				const row = accounts.get(String(args[1]));
+				if (row) row.hash = args[0];
+			} else if (s.startsWith("UPDATE portal_accounts SET disabled")) {
+				const row = accounts.get(String(args[1]));
+				if (row) row.disabled = args[0];
+			} else if (s.startsWith("DELETE FROM portal_accounts")) {
+				accounts.delete(String(args[0]));
 			}
 			return {};
 		},
@@ -46,13 +59,16 @@ function makeDb() {
 				? [...leads.values()]
 				: sql.includes("FROM orders")
 					? [...orders.values()]
-					: [...apps.values()],
+					: sql.includes("FROM portal_accounts")
+						? [...accounts.values()]
+						: [...apps.values()],
 		}),
 	});
 	return {
 		rows: apps,
 		leads,
 		orders,
+		accounts,
 		prepare(sql: string) {
 			return { bind: (...args: unknown[]) => exec(sql, args), ...exec(sql, []) };
 		},
@@ -268,6 +284,72 @@ describe("cellunovabiologics.com site routing", () => {
 			expect(res.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/rep/");
 			expect(calls).toEqual([]);
 		}
+	});
+
+	it("account manager: admin-only, full create/reset/disable lifecycle", async () => {
+		const { env, db } = makeEnv();
+		const call = async (cookie: string, method = "GET", body?: unknown) =>
+			worker.fetch!(
+				new Request("https://www.cellunovabiologics.com/portal/api/accounts", {
+					method,
+					headers: { cookie, ...(body ? { "content-type": "application/json" } : {}) },
+					...(body ? { body: JSON.stringify(body) } : {}),
+				}) as never,
+				env,
+				ctx,
+			);
+		const loginEnv = async (username: string, password: string) => {
+			const form = new FormData();
+			form.set("username", username);
+			form.set("password", password);
+			const res = await worker.fetch!(
+				new Request("https://www.cellunovabiologics.com/login", { method: "POST", body: form }) as never,
+				env,
+				ctx,
+			);
+			return { res, cookie: (res.headers.get("set-cookie") ?? "").split(";")[0] };
+		};
+
+		// Only the admin gets in — the manager is 403, and the page redirects it.
+		const admin = (await login()).cookie;
+		const manager = (await login("Admin", "NOVAto200M")).cookie;
+		expect((await call(manager)).status).toBe(403);
+		const mgrPage = await hit("/portal/accounts/", "www.cellunovabiologics.com", "GET", manager);
+		expect(mgrPage.res.status).toBe(302);
+		expect(mgrPage.res.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/");
+		expect(mgrPage.calls).toEqual([]);
+
+		// Listing shows the built-ins.
+		const list = (await (await call(admin)).json()) as { accounts: Array<{ user: string; builtin: boolean }> };
+		expect(list.accounts.some((a) => a.user === "DrHadley" && a.builtin)).toBe(true);
+
+		// Create a rep account; the returned password signs in with role rep.
+		const created = (await (
+			await call(admin, "POST", { action: "create", user: "JSmith", role: "rep" })
+		).json()) as { password: string };
+		expect(created.password).toMatch(/^Rep-/);
+		expect(db.accounts.has("JSmith")).toBe(true);
+		const repLogin = await loginEnv("JSmith", created.password);
+		expect(repLogin.res.status).toBe(303);
+		expect(repLogin.cookie).toContain(".rep.");
+
+		// Duplicate and built-in names refuse; admin role can't be created.
+		expect((await call(admin, "POST", { action: "create", user: "JSmith", role: "rep" })).status).toBe(409);
+		expect((await call(admin, "POST", { action: "create", user: "DrHadley", role: "rep" })).status).toBe(409);
+		expect((await call(admin, "POST", { action: "create", user: "Sneaky", role: "admin" })).status).toBe(400);
+
+		// Reset invalidates the old password.
+		const reset = (await (await call(admin, "POST", { action: "reset", user: "JSmith" })).json()) as { password: string };
+		expect((await loginEnv("JSmith", created.password)).res.status).toBe(401);
+		expect((await loginEnv("JSmith", reset.password)).res.status).toBe(303);
+
+		// Disable blocks sign-in; enable restores it; delete removes the row.
+		await call(admin, "POST", { action: "disable", user: "JSmith" });
+		expect((await loginEnv("JSmith", reset.password)).res.status).toBe(401);
+		await call(admin, "POST", { action: "enable", user: "JSmith" });
+		expect((await loginEnv("JSmith", reset.password)).res.status).toBe(303);
+		await call(admin, "POST", { action: "delete", user: "JSmith" });
+		expect(db.accounts.has("JSmith")).toBe(false);
 	});
 
 	it("scopes the orders list to the clinic that placed them", async () => {

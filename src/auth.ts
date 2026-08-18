@@ -38,6 +38,71 @@ interface Account {
 	role: Role;
 }
 
+/* ── Database accounts (created from the admin's Accounts page) ──────────────
+ * Rows hold only the PBKDF2 hash. Built-in accounts always win a username
+ * clash, a row can never grant "admin", and disabled rows never sign in. */
+
+const ACCOUNT_TABLE_ENSURED = new WeakMap<object, Promise<unknown>>();
+export function ensureAccountsTable(env: Env): Promise<unknown> {
+	let p = ACCOUNT_TABLE_ENSURED.get(env.DB);
+	if (!p) {
+		p = env.DB.prepare(
+			`CREATE TABLE IF NOT EXISTS portal_accounts (
+				user TEXT PRIMARY KEY,
+				hash TEXT NOT NULL,
+				role TEXT NOT NULL,
+				disabled INTEGER NOT NULL DEFAULT 0,
+				created_at TEXT NOT NULL
+			)`,
+		).run();
+		ACCOUNT_TABLE_ENSURED.set(env.DB, p);
+	}
+	return p;
+}
+
+export interface DbAccountRow {
+	user: string;
+	hash: string;
+	role: string;
+	disabled: number;
+	created_at: string;
+}
+
+const DB_ROLES = new Set<string>(["manager", "rep", "clinic"]);
+
+export async function listDbAccounts(env: Env): Promise<DbAccountRow[]> {
+	await ensureAccountsTable(env);
+	const rows = await env.DB.prepare(`SELECT user, hash, role, disabled, created_at FROM portal_accounts ORDER BY created_at`).all<DbAccountRow>();
+	return rows.results ?? [];
+}
+
+/** DB accounts eligible to sign in. */
+async function activeDbAccounts(env: Env): Promise<Account[]> {
+	const builtins = new Set(accounts(env).map((a) => a.user.toLowerCase()));
+	const out: Account[] = [];
+	for (const row of await listDbAccounts(env)) {
+		if (row.disabled || !DB_ROLES.has(row.role)) continue;
+		if (builtins.has(row.user.toLowerCase())) continue;
+		out.push({ user: row.user, hash: row.hash, role: row.role as Role });
+	}
+	return out;
+}
+
+/** Generate a portal password: readable alphabet, ~80 bits of entropy. */
+export function generatePassword(prefix = "CN"): string {
+	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+	const bytes = crypto.getRandomValues(new Uint8Array(14));
+	let pw = prefix + "-";
+	for (const b of bytes) pw += alphabet[b % alphabet.length];
+	return pw;
+}
+
+/** Hash a password into the stored pbkdf2$iterations$salt$hash form. */
+export async function hashPassword(password: string): Promise<string> {
+	const salt = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+	return `pbkdf2$100000$${salt}$${await pbkdf2Hex(password, salt, 100000)}`;
+}
+
 // The manager account: full visibility, no writes. Only the PBKDF2 hash is
 // stored here.
 const MANAGER_ACCOUNT: Account = {
@@ -119,11 +184,28 @@ export async function pbkdf2Hex(password: string, saltHex: string, iterations: n
 	return bytesToHex(bits);
 }
 
+/** The built-in accounts, hashes omitted — for the admin's Accounts page. */
+export function builtinRoster(env: Env): Array<{ user: string; role: Role }> {
+	return accounts(env).map((a) => ({ user: a.user, role: a.role }));
+}
+
+/** Built-in + database accounts, deduped (built-ins win a username clash). */
+async function allAccounts(env: Env): Promise<Account[]> {
+	return [...accounts(env), ...(await activeDbAccounts(env))];
+}
+
+/** Reps that leads can be assigned to: built-in + active database reps. */
+export async function repRoster(env: Env): Promise<string[]> {
+	const names = new Set(REP_USERS);
+	for (const acc of await activeDbAccounts(env)) if (acc.role === "rep") names.add(acc.user);
+	return [...names];
+}
+
 export async function verifyCredentials(env: Env, username: string, password: string): Promise<Session | null> {
 	let matched: Session | null = null;
 	// Check every account with the same work regardless of match, so a wrong
 	// username costs the same as a wrong password and neither short-circuits.
-	for (const acc of accounts(env)) {
+	for (const acc of await allAccounts(env)) {
 		const parts = acc.hash.split("$");
 		if (parts.length !== 4 || parts[0] !== "pbkdf2") continue;
 		const iterations = Number(parts[1]) || 100000;
