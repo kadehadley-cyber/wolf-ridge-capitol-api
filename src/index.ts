@@ -388,8 +388,28 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		assetPath = "/clinic-portal/site" + p;
 	}
 
+	// The assets binding answers a literal "x.html" request with a redirect to
+	// the extensionless pretty URL — but that redirect points into the internal
+	// /clinic-portal/ namespace, which is not publicly routable. Ask for the
+	// pretty path directly so the content serves with no redirect at all.
+	if (/\.html$/i.test(assetPath)) assetPath = assetPath.slice(0, -5);
+
 	const assetUrl = new URL(assetPath, url.origin);
-	const res = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+	let res = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+
+	// Safety net: any asset redirect that leaks the internal /clinic-portal/
+	// prefix is rewritten back into the public /portal/ URL space.
+	if (res.status >= 300 && res.status < 400) {
+		const loc = res.headers.get("location") ?? "";
+		const m = /^(?:https?:\/\/[^/]+)?\/clinic-portal(\/.*)?$/.exec(loc);
+		if (m) {
+			const inner = m[1] ?? "/";
+			const publicPath = inner.startsWith("/site") ? inner.slice("/site".length) || "/" : "/portal" + inner;
+			const headers = new Headers(res.headers);
+			headers.set("location", new URL(publicPath, url.origin).toString());
+			res = new Response(null, { status: res.status, headers });
+		}
+	}
 	return role ? stripNavFor(role, res) : res;
 }
 

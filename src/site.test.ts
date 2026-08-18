@@ -305,9 +305,14 @@ describe("cellunovabiologics.com site routing", () => {
 		expect((await hit("/portal/crm/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual(["/clinic-portal/crm/"]);
 		expect((await hit("/portal/crm/crm.js", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual(["/clinic-portal/crm/crm.js"]);
 		expect((await hit("/portal/styles/portal.css", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual(["/clinic-portal/styles/portal.css"]);
-		// Hosted protocol-library pages serve as static assets behind the portal auth.
+		// Hosted protocol-library pages serve as static assets behind the portal
+		// auth. The .html extension is stripped before the assets fetch so the
+		// binding serves content directly instead of redirecting to the pretty
+		// URL in the internal (non-routable) /clinic-portal/ namespace.
 		expect((await hit("/portal/protocols/library/knee.html", "www.cellunovabiologics.com", "GET", cookie)).calls)
-			.toEqual(["/clinic-portal/protocols/library/knee.html"]);
+			.toEqual(["/clinic-portal/protocols/library/knee"]);
+		expect((await hit("/portal/templates/rebrand/new-service-flyer.html", "www.cellunovabiologics.com", "GET", cookie)).calls)
+			.toEqual(["/clinic-portal/templates/rebrand/new-service-flyer"]);
 		expect((await hit("/portal/protocols/library/injury-recovery.pdf", "www.cellunovabiologics.com", "GET", cookie)).calls)
 			.toEqual(["/clinic-portal/protocols/library/injury-recovery.pdf"]);
 	});
