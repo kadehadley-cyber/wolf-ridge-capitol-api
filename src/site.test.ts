@@ -14,6 +14,7 @@ function makeDb() {
 	const accounts = new Map<string, Record<string, unknown>>();
 	const reports = new Map<string, { data: string }>();
 	const repApps = new Map<string, Record<string, unknown>>();
+	const callBookings = new Map<string, Record<string, unknown>>();
 	const exec = (sql: string, args: unknown[]) => ({
 		run: async () => {
 			const s = sql.trimStart();
@@ -57,6 +58,11 @@ function makeDb() {
 			} else if (s.startsWith("UPDATE rep_applications")) {
 				const row = repApps.get(String(args[1]));
 				if (row) row.status = args[0];
+			} else if (s.startsWith("INSERT INTO call_bookings")) {
+				callBookings.set(String(args[0]), {
+					id: args[0], date: args[1], hour: args[2], name: args[3], clinic: args[4],
+					email: args[5], phone: args[6], notes: args[7], created_at: args[8],
+				});
 			}
 			return {};
 		},
@@ -77,7 +83,9 @@ function makeDb() {
 							? [...reports.values()]
 							: sql.includes("FROM rep_applications")
 								? [...repApps.values()]
-								: [...apps.values()],
+								: sql.includes("FROM call_bookings")
+									? [...callBookings.values()]
+									: [...apps.values()],
 		}),
 	});
 	return {
@@ -87,6 +95,7 @@ function makeDb() {
 		accounts,
 		reports,
 		repApps,
+		callBookings,
 		prepare(sql: string) {
 			return { bind: (...args: unknown[]) => exec(sql, args), ...exec(sql, []) };
 		},
@@ -411,6 +420,50 @@ describe("cellunovabiologics.com site routing", () => {
 		expect((await apply({ name: "NoMail", dob: "1990-01-01", state: "TX", phone: "555" })).status).toBe(400);
 		expect((await apply({ name: "Bot", dob: "1990-01-01", state: "TX", email: "b@c.d", phone: "5", website: "spam" })).status).toBe(200);
 		expect(db.repApps.size).toBe(1);
+	});
+
+	it("books 1-hour MD calls into open weekday slots", async () => {
+		const { env, db } = makeEnv();
+		// The next weekday within the window.
+		let d = new Date(Date.now() + 86400000);
+		while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d = new Date(d.getTime() + 86400000);
+		const date = d.toISOString().slice(0, 10);
+		const call = async (path: string, method = "GET", body?: unknown, cookie?: string) =>
+			worker.fetch!(
+				new Request("https://www.cellunovabiologics.com" + path, {
+					method,
+					headers: { ...(cookie ? { cookie } : {}), ...(body ? { "content-type": "application/json" } : {}) },
+					...(body ? { body: JSON.stringify(body) } : {}),
+				}) as never,
+				env,
+				ctx,
+			);
+		// Slots list: 8 one-hour slots, all open.
+		const slots = (await (await call(`/api/call-slots?date=${date}`)).json()) as { slots: Array<{ hour: number; taken: boolean }> };
+		expect(slots.slots).toHaveLength(8);
+		expect(slots.slots.every((s) => !s.taken)).toBe(true);
+		// Book one; it stores and the slot flips to taken.
+		const book = await call("/api/call-book", "POST", {
+			date, hour: 10, name: "Dr. Field", clinic: "Field Chiro", email: "field@example.com", phone: "555-4", notes: "Product fit",
+		});
+		expect(book.status).toBe(200);
+		expect(db.callBookings.size).toBe(1);
+		const after = (await (await call(`/api/call-slots?date=${date}`)).json()) as { slots: Array<{ hour: number; taken: boolean }> };
+		expect(after.slots.find((s) => s.hour === 10)?.taken).toBe(true);
+		// Double-booking refuses; bad dates refuse; honeypot stores nothing.
+		expect((await call("/api/call-book", "POST", { date, hour: 10, name: "X", email: "x@y.z" })).status).toBe(409);
+		expect((await call("/api/call-book", "POST", { date: "2020-01-01", hour: 9, name: "X", email: "x@y.z" })).status).toBe(400);
+		await call("/api/call-book", "POST", { date, hour: 11, name: "Bot", email: "b@c.d", website: "spam" });
+		expect(db.callBookings.size).toBe(1);
+		// The bookings list is for the admin (and manager), not reps or the public.
+		expect((await call("/portal/api/call-bookings")).status).toBe(401);
+		const rep = (await login("Rep1", "Rep-sA5xnHPHNMckBR")).cookie;
+		expect((await call("/portal/api/call-bookings", "GET", undefined, rep)).status).toBe(403);
+		const admin = (await login()).cookie;
+		const list = (await (await call("/portal/api/call-bookings", "GET", undefined, admin)).json()) as { bookings: Array<{ name: string; label: string }> };
+		expect(list.bookings).toHaveLength(1);
+		expect(list.bookings[0].name).toBe("Dr. Field");
+		expect(list.bookings[0].label).toBe("10:00 AM MT");
 	});
 
 	it("admin approves rep applications and previews other roles", async () => {

@@ -77,5 +77,41 @@
     st.addEventListener('click', function () { var sb = document.querySelector('.portal-sidebar'); st.setAttribute('aria-expanded', sb.classList.toggle('open') ? 'true' : 'false'); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && cModal.isOpen()) cModal.close(); });
 
+    /* Upcoming MD calls booked from the public /schedule-a-call page. */
+    function renderCalls(bookings) {
+        var el = $('callList');
+        if (!el) return;
+        el.textContent = '';
+        if (!bookings.length) {
+            var e = document.createElement('div'); e.className = 'sched-empty';
+            e.textContent = 'No calls booked yet.'; el.appendChild(e); return;
+        }
+        bookings.forEach(function (b) {
+            var d = new Date(b.date + 'T00:00:00');
+            var row = document.createElement('div'); row.className = 'sched-item';
+            var date = document.createElement('div'); date.className = 'sched-date';
+            var dd = document.createElement('div'); dd.className = 'd'; dd.textContent = isNaN(d) ? '—' : String(d.getDate());
+            var mm = document.createElement('div'); mm.className = 'm'; mm.textContent = isNaN(d) ? '' : d.toLocaleString('en-US', { month: 'short' });
+            date.append(dd, mm);
+            var body = document.createElement('div'); body.className = 'sched-body';
+            var title = document.createElement('div'); title.className = 'sched-title';
+            title.textContent = (b.label || '') + ' — ' + (b.name || '');
+            var subBits = [];
+            if (b.clinic) subBits.push(b.clinic);
+            if (b.phone) subBits.push(b.phone);
+            if (b.email) subBits.push(b.email);
+            if (b.notes) subBits.push('“' + b.notes + '”');
+            var sub = document.createElement('div'); sub.className = 'sched-sub'; sub.textContent = subBits.join(' · ');
+            body.append(title, sub);
+            var pill = document.createElement('span'); pill.className = 'sched-pill'; pill.textContent = '1 hr call';
+            row.append(date, body, pill);
+            el.appendChild(row);
+        });
+    }
+    fetch('/portal/api/call-bookings', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : { bookings: [] }; })
+        .then(function (d) { renderCalls(d.bookings || []); })
+        .catch(function () { renderCalls([]); });
+
     renderUpcoming();
 })();
