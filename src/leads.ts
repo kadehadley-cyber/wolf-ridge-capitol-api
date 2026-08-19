@@ -369,11 +369,18 @@ export async function handleLeadsApi(request: Request, env: Env): Promise<Respon
 		await ensureLeadsTable(env);
 		const createdAt = new Date().toISOString();
 		const statements = [env.DB.prepare(`DELETE FROM crm_leads`)];
+		// Rows keep the id they were served with, so rep assignments, notes,
+		// and follow-ups stay addressable across full-set re-uploads.
+		const seen = new Set<string>();
 		for (const lead of leads) {
 			if (lead === null || typeof lead !== "object") continue;
+			const embedded = (lead as { id?: unknown }).id;
+			let id = typeof embedded === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(embedded) ? embedded : crypto.randomUUID();
+			if (seen.has(id)) id = crypto.randomUUID();
+			seen.add(id);
 			statements.push(
 				env.DB.prepare(`INSERT INTO crm_leads (id, data, created_at) VALUES (?1, ?2, ?3)`).bind(
-					crypto.randomUUID(),
+					id,
 					JSON.stringify(lead),
 					createdAt,
 				),

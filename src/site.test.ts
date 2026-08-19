@@ -422,6 +422,26 @@ describe("cellunovabiologics.com site routing", () => {
 		expect(db.repApps.size).toBe(1);
 	});
 
+	it("keeps lead row ids stable across CRM re-uploads", async () => {
+		const { env, db } = makeEnv();
+		const admin = (await login()).cookie;
+		const uuid = "3f9a1b20-1111-4222-8333-abcdefabcdef";
+		const res = await worker.fetch!(
+			new Request("https://www.cellunovabiologics.com/portal/api/leads", {
+				method: "POST",
+				headers: { cookie: admin, "content-type": "application/json" },
+				body: JSON.stringify({ leads: [{ id: uuid, name: "Stable Clinic", assigned_rep: "Rep1" }, { id: 7, name: "Numeric Id Import" }] }),
+			}) as never,
+			env,
+			ctx,
+		);
+		expect(res.status).toBe(200);
+		// The UUID-bearing lead keeps its row id; the numeric one gets a fresh UUID.
+		expect(db.leads.has(uuid)).toBe(true);
+		expect(JSON.parse(db.leads.get(uuid)!.data).assigned_rep).toBe("Rep1");
+		expect(db.leads.size).toBe(2);
+	});
+
 	it("books 1-hour MD calls into open weekday slots", async () => {
 		const { env, db } = makeEnv();
 		// The next weekday within the window.
