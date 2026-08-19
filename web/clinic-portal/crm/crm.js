@@ -838,18 +838,10 @@
         detailEl.appendChild(assignBox);
         repRoster().then(function (reps) {
             if (!reps) return;
-            var serverBacked = typeof lead.id === 'string' && lead.id.indexOf('-') !== -1;
             var lab = document.createElement('span');
             lab.className = 'crm-assign-label';
             lab.textContent = 'Assigned rep';
             assignBox.appendChild(lab);
-            if (!serverBacked) {
-                var hint = document.createElement('span');
-                hint.className = 'crm-assign-status';
-                hint.textContent = 'This list isn’t synced with the portal yet — refresh the page, then assign.';
-                assignBox.appendChild(hint);
-                return;
-            }
             var sel = document.createElement('select');
             sel.className = 'crm-assign-select';
             var none = document.createElement('option');
@@ -877,7 +869,7 @@
                 fetch('/portal/api/rep/assign', {
                     method: 'POST', credentials: 'same-origin',
                     headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ id: lead.id, rep: sel.value })
+                    body: JSON.stringify(Object.assign(leadRef(lead), { rep: sel.value }))
                 }).then(function (r) {
                     return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Assign failed'); });
                 }).then(function () {
@@ -885,7 +877,7 @@
                     status.textContent = sel.value ? 'Saved — assigned to ' + sel.value + '.' : 'Saved — unassigned.';
                 }).catch(function (e) {
                     var msg = e && e.message ? e.message : 'Assign failed';
-                    if (msg.indexOf('No such') !== -1) msg = 'Lead is out of sync — refresh the page and save again.';
+                    if (msg.indexOf('No such') !== -1) msg = 'Could not match this lead on the portal — run a fresh scan or re-import, then try again.';
                     status.textContent = msg;
                 }).then(function () { sel.disabled = false; save.disabled = false; });
             });
@@ -1083,6 +1075,15 @@
         });
     }
 
+    /* Identify a lead to the server: by row id when it has one, and always by
+     * NPI/name/phone so a device-local list still matches the portal record. */
+    function leadRef(lead) {
+        return {
+            id: lead.id, npi: lead.npi || '',
+            name: lead.name || '', phone: lead.phone || ''
+        };
+    }
+
     /* Save the typed note (and optional follow-up date) to the server; notes
      * land on the lead and show in the assigned rep's workspace too. */
     function saveLeadNote() {
@@ -1090,10 +1091,6 @@
         var status = $('crmNoteStatus');
         var say = function (m) { if (status) status.textContent = m; };
         if (!lead) return;
-        if (!(typeof lead.id === 'string' && lead.id.indexOf('-') !== -1)) {
-            say('This list isn’t synced with the portal yet — refresh the page, then save notes.');
-            return;
-        }
         var text = ($('crmNoteInput') && $('crmNoteInput').value || '').trim();
         var due = $('crmFollowupDate') && $('crmFollowupDate').value;
         if (!text && !due) { say('Type a note or pick a follow-up date first.'); return; }
@@ -1104,7 +1101,7 @@
                 return fetch('/portal/api/rep/note', {
                     method: 'POST', credentials: 'same-origin',
                     headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ id: lead.id, text: text })
+                    body: JSON.stringify(Object.assign(leadRef(lead), { text: text }))
                 }).then(function (r) {
                     return r.json().then(function (d) {
                         if (!r.ok) throw new Error(d.error || 'Note failed');
@@ -1118,7 +1115,7 @@
                 return fetch('/portal/api/rep/followup', {
                     method: 'POST', credentials: 'same-origin',
                     headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ id: lead.id, due: due, kind: 'call', note: text.slice(0, 120) })
+                    body: JSON.stringify(Object.assign(leadRef(lead), { due: due, kind: 'call', note: text.slice(0, 120) }))
                 }).then(function (r) {
                     return r.json().then(function (d) {
                         if (!r.ok) throw new Error(d.error || 'Follow-up failed');
@@ -1135,7 +1132,7 @@
                 : due ? 'Saved — follow-up set for ' + due + '.' : 'Saved.';
         }).catch(function (e) {
             var msg = e && e.message ? e.message : 'Save failed';
-            if (msg.indexOf('No such') !== -1) msg = 'Lead is out of sync — refresh the page and try again.';
+            if (msg.indexOf('No such') !== -1) msg = 'Could not match this lead on the portal — run a fresh scan or re-import, then try again.';
             say(msg);
         });
     }
@@ -1696,6 +1693,9 @@
                     uploadLeads(saved.leads, 'this device');
                     return;
                 }
+                // The server answered with a real list: any list saved on this
+                // device is stale and must never shadow it again.
+                clearLocalLeads();
                 applyLeads(list, 'server', '');
             })
             .catch(function () { /* server unreachable: keep what we have */ });

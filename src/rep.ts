@@ -44,6 +44,39 @@ async function loadLead(env: Env, id: string): Promise<{ row: LeadRow; lead: Lea
 	}
 }
 
+/** Resolve a lead by row id, or — when the caller's copy of the list has no
+ *  server id (a device-local CRM list) — by NPI, then by name+phone. A fuzzy
+ *  match is used only when it is unambiguous. */
+async function resolveLead(
+	env: Env,
+	ref: { id?: unknown; npi?: unknown; name?: unknown; phone?: unknown },
+): Promise<{ row: LeadRow; lead: Lead } | null> {
+	const id = String(ref.id ?? "");
+	if (id.includes("-")) {
+		const byId = await loadLead(env, id);
+		if (byId) return byId;
+	}
+	const npi = String(ref.npi ?? "").replace(/\D/g, "");
+	const name = String(ref.name ?? "").trim().toLowerCase();
+	const phone = String(ref.phone ?? "").replace(/\D/g, "");
+	if (!npi && !(name && phone)) return null;
+	const rows = await env.DB.prepare(`SELECT id, data FROM crm_leads`).all<LeadRow>();
+	const matches: Array<{ row: LeadRow; lead: Lead }> = [];
+	for (const row of rows.results ?? []) {
+		try {
+			const lead = JSON.parse(row.data) as Lead & { npi?: unknown; name?: unknown; phone?: unknown };
+			const lNpi = String(lead.npi ?? "").replace(/\D/g, "");
+			const lName = String(lead.name ?? "").trim().toLowerCase();
+			const lPhone = String(lead.phone ?? "").replace(/\D/g, "");
+			const hit = npi ? lNpi === npi : lName === name && lPhone === phone;
+			if (hit) matches.push({ row, lead });
+		} catch {
+			// Skip unparsable rows.
+		}
+	}
+	return matches.length === 1 ? matches[0] : null;
+}
+
 async function saveLead(env: Env, id: string, lead: Lead): Promise<void> {
 	await env.DB.prepare(`UPDATE crm_leads SET data = ?1 WHERE id = ?2`).bind(JSON.stringify(lead), id).run();
 }
@@ -89,7 +122,7 @@ export async function handleRepNote(request: Request, env: Env, sess: Session): 
 	if (!body) return json({ error: "Body must be JSON." }, 400);
 	const text = String(body.text ?? "").trim().slice(0, MAX_NOTE);
 	if (!text) return json({ error: "The note is empty." }, 400);
-	const found = await loadLead(env, String(body.id ?? ""));
+	const found = await resolveLead(env, body);
 	if (!found || !canTouch(sess, found.lead)) return json({ error: "No such assigned lead." }, 404);
 	const notes = Array.isArray(found.lead.rep_notes) ? found.lead.rep_notes : [];
 	notes.push({ at: new Date().toISOString(), by: sess.user, text });
@@ -108,7 +141,7 @@ export async function handleRepFollowup(request: Request, env: Env, sess: Sessio
 	const kind = String(body.kind ?? "call");
 	if (!KINDS.has(kind)) return json({ error: "Unknown follow-up type." }, 400);
 	const note = String(body.note ?? "").trim().slice(0, MAX_FU_NOTE);
-	const found = await loadLead(env, String(body.id ?? ""));
+	const found = await resolveLead(env, body);
 	if (!found || !canTouch(sess, found.lead)) return json({ error: "No such assigned lead." }, 404);
 	const followups = Array.isArray(found.lead.followups) ? found.lead.followups : [];
 	followups.push({ fid: crypto.randomUUID(), due, kind, note, done: false, created_at: new Date().toISOString() });
@@ -121,7 +154,7 @@ export async function handleRepFollowup(request: Request, env: Env, sess: Sessio
 export async function handleRepFollowupDone(request: Request, env: Env, sess: Session): Promise<Response> {
 	const body = await readBody(request);
 	if (!body) return json({ error: "Body must be JSON." }, 400);
-	const found = await loadLead(env, String(body.id ?? ""));
+	const found = await resolveLead(env, body);
 	if (!found || !canTouch(sess, found.lead)) return json({ error: "No such assigned lead." }, 404);
 	const fid = String(body.fid ?? "");
 	const fu = (found.lead.followups ?? []).find((f) => f.fid === fid);
@@ -137,7 +170,7 @@ export async function handleRepAssign(request: Request, env: Env): Promise<Respo
 	if (!body) return json({ error: "Body must be JSON." }, 400);
 	const rep = String(body.rep ?? "");
 	if (rep !== "" && !(await repRoster(env)).includes(rep)) return json({ error: "Unknown rep." }, 400);
-	const found = await loadLead(env, String(body.id ?? ""));
+	const found = await resolveLead(env, body);
 	if (!found) return json({ error: "No such lead." }, 404);
 	found.lead.assigned_rep = rep;
 	await saveLead(env, found.row.id, found.lead);
