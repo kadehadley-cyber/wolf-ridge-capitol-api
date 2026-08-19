@@ -311,3 +311,4 @@
 }
 .crm-assign-select:focus { outline: none; border-color: rgba(125,211,64,.55); }
 .crm-assign-status { font-size: 12px; color: var(--muted, #6a7a90); }
+.crm-assign-save { flex-shrink: 0; }
