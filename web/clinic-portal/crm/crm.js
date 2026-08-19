@@ -1031,6 +1031,26 @@
         toolStatus.setAttribute('aria-live', 'polite');
         detailEl.appendChild(toolStatus);
 
+        /* ── Notes on this account (shared with the rep workspace) ── */
+        if (Array.isArray(lead.rep_notes) && lead.rep_notes.length) {
+            detailEl.appendChild(sectionTitle('Notes'));
+            var noteWrap = document.createElement('div');
+            noteWrap.className = 'crm-notes';
+            lead.rep_notes.slice(-20).forEach(function (n) {
+                var item = document.createElement('div');
+                item.className = 'crm-note-item';
+                var body = document.createElement('div');
+                body.textContent = n.text || '';
+                var meta = document.createElement('div');
+                meta.className = 'crm-note-meta';
+                var when = new Date(n.at);
+                meta.textContent = (n.by || '') + (isNaN(when.getTime()) ? '' : ' · ' + when.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }));
+                item.append(body, meta);
+                noteWrap.appendChild(item);
+            });
+            detailEl.appendChild(noteWrap);
+        }
+
         // Note + follow-up actions (the captured crmNoteInput / crmFollowupDate / crmDispNote).
         // Static markup (no lead-derived values) so innerHTML is safe here.
         var actions = document.createElement('div');
@@ -1042,7 +1062,7 @@
                 '<input type="date" id="crmFollowupDate"></div>' +
               '<button type="button" class="btn sm primary" data-action="save-note">Save Note</button>' +
             '</div>' +
-            '<textarea id="crmDispNote" placeholder="Add a note about this call (optional)..." data-no-log></textarea>';
+            '<div class="crm-note-status muted" id="crmNoteStatus" aria-live="polite"></div>';
         detailEl.appendChild(actions);
     }
 
@@ -1053,11 +1073,70 @@
     }
 
     function openLead(id) {
+        // Ids are UUID strings for server leads and numbers for local imports —
+        // match as strings so both open.
         activeId = id;
-        var lead = LEADS.filter(function (l) { return l.id === id; })[0];
+        var lead = LEADS.filter(function (l) { return String(l.id) === String(id); })[0];
         if (lead) renderDetail(lead);
         Array.prototype.forEach.call(listEl.querySelectorAll('.crm-list-item'), function (el) {
-            el.classList.toggle('active', Number(el.dataset.id) === id);
+            el.classList.toggle('active', String(el.dataset.id) === String(id));
+        });
+    }
+
+    /* Save the typed note (and optional follow-up date) to the server; notes
+     * land on the lead and show in the assigned rep's workspace too. */
+    function saveLeadNote() {
+        var lead = LEADS.filter(function (l) { return String(l.id) === String(activeId); })[0];
+        var status = $('crmNoteStatus');
+        var say = function (m) { if (status) status.textContent = m; };
+        if (!lead) return;
+        if (!(typeof lead.id === 'string' && lead.id.indexOf('-') !== -1)) {
+            say('This list isn’t synced with the portal yet — refresh the page, then save notes.');
+            return;
+        }
+        var text = ($('crmNoteInput') && $('crmNoteInput').value || '').trim();
+        var due = $('crmFollowupDate') && $('crmFollowupDate').value;
+        if (!text && !due) { say('Type a note or pick a follow-up date first.'); return; }
+        say('Saving…');
+        var steps = Promise.resolve();
+        if (text) {
+            steps = steps.then(function () {
+                return fetch('/portal/api/rep/note', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ id: lead.id, text: text })
+                }).then(function (r) {
+                    return r.json().then(function (d) {
+                        if (!r.ok) throw new Error(d.error || 'Note failed');
+                        lead.rep_notes = d.rep_notes || lead.rep_notes;
+                    });
+                });
+            });
+        }
+        if (due) {
+            steps = steps.then(function () {
+                return fetch('/portal/api/rep/followup', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ id: lead.id, due: due, kind: 'call', note: text.slice(0, 120) })
+                }).then(function (r) {
+                    return r.json().then(function (d) {
+                        if (!r.ok) throw new Error(d.error || 'Follow-up failed');
+                        lead.followups = d.followups || lead.followups;
+                        lead.next_followup = due;
+                    });
+                });
+            });
+        }
+        steps.then(function () {
+            renderDetail(lead);
+            var s2 = $('crmNoteStatus');
+            if (s2) s2.textContent = due && text ? 'Saved — note added and follow-up set.'
+                : due ? 'Saved — follow-up set for ' + due + '.' : 'Saved.';
+        }).catch(function (e) {
+            var msg = e && e.message ? e.message : 'Save failed';
+            if (msg.indexOf('No such') !== -1) msg = 'Lead is out of sync — refresh the page and try again.';
+            say(msg);
         });
     }
 
@@ -1485,7 +1564,7 @@
 
         if (!el) return;
         switch (action) {
-            case 'open-lead':   openLead(Number(el.dataset.id)); break;
+            case 'open-lead':   openLead(el.dataset.id); break;
             case 'tab':         showTab(el.dataset.tab); break;
             case 'import-leads': $('crmImportFile').click(); break;
             case 'export-pdf':  exportPdf(); break;
@@ -1501,10 +1580,7 @@
                         applyLeads(PLACEHOLDER_LEADS, 'placeholder', '');
                     });
                 break;
-            case 'save-note':
-                cModal.alert('Not wired', 'In production this posts the note to the CRM endpoint. '
-                    + 'This static build does not send anything.');
-                break;
+            case 'save-note': saveLeadNote(); break;
             case 'build-queue': buildQueue(); break;
             case 'run-intel':      runTool('Scanning website & ads, regen mentions, services, ad presence…', 'website/ads intelligence'); break;
             case 'tool-reviews':   runTool('Pulling reviews & rating, volume, recency, sentiment…', 'reviews / reputation'); break;
