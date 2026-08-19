@@ -829,50 +829,70 @@
             detailEl.appendChild(tier);
         }
 
-        /* ── Assign to rep (admin + manager; database-backed leads only) ── */
-        if (lead.id) {
-            var assignBox = document.createElement('div');
-            assignBox.className = 'crm-assign';
-            detailEl.appendChild(assignBox);
-            repRoster().then(function (reps) {
-                if (!reps) return;
-                var lab = document.createElement('span');
-                lab.className = 'crm-assign-label';
-                lab.textContent = 'Assigned rep';
-                var sel = document.createElement('select');
-                sel.className = 'crm-assign-select';
-                var none = document.createElement('option');
-                none.value = ''; none.textContent = '— unassigned —';
-                sel.appendChild(none);
-                reps.forEach(function (r) {
-                    var o = document.createElement('option');
-                    o.value = r; o.textContent = r;
-                    if ((lead.assigned_rep || '') === r) o.selected = true;
-                    sel.appendChild(o);
-                });
-                var status = document.createElement('span');
-                status.className = 'crm-assign-status';
-                sel.addEventListener('change', function () {
-                    sel.disabled = true;
-                    status.textContent = 'Saving…';
-                    fetch('/portal/api/rep/assign', {
-                        method: 'POST', credentials: 'same-origin',
-                        headers: { 'content-type': 'application/json' },
-                        body: JSON.stringify({ id: lead.id, rep: sel.value })
-                    }).then(function (r) {
-                        return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Assign failed'); });
-                    }).then(function () {
-                        lead.assigned_rep = sel.value;
-                        status.textContent = sel.value ? 'Assigned to ' + sel.value : 'Unassigned';
-                    }).catch(function (e) {
-                        status.textContent = e && e.message ? e.message : 'Assign failed';
-                    }).then(function () { sel.disabled = false; });
-                });
-                assignBox.appendChild(lab);
-                assignBox.appendChild(sel);
-                assignBox.appendChild(status);
+        /* ── Assign to rep (admin + manager) ──
+         * Explicit save: pick a rep, click Save. Only server-backed leads
+         * (UUID row ids) can be assigned; a locally-held list gets a clear
+         * hint instead of a failing call. */
+        var assignBox = document.createElement('div');
+        assignBox.className = 'crm-assign';
+        detailEl.appendChild(assignBox);
+        repRoster().then(function (reps) {
+            if (!reps) return;
+            var serverBacked = typeof lead.id === 'string' && lead.id.indexOf('-') !== -1;
+            var lab = document.createElement('span');
+            lab.className = 'crm-assign-label';
+            lab.textContent = 'Assigned rep';
+            assignBox.appendChild(lab);
+            if (!serverBacked) {
+                var hint = document.createElement('span');
+                hint.className = 'crm-assign-status';
+                hint.textContent = 'This list isn’t synced with the portal yet — refresh the page, then assign.';
+                assignBox.appendChild(hint);
+                return;
+            }
+            var sel = document.createElement('select');
+            sel.className = 'crm-assign-select';
+            var none = document.createElement('option');
+            none.value = ''; none.textContent = '— unassigned —';
+            sel.appendChild(none);
+            reps.forEach(function (r) {
+                var o = document.createElement('option');
+                o.value = r; o.textContent = r;
+                if ((lead.assigned_rep || '') === r) o.selected = true;
+                sel.appendChild(o);
             });
-        }
+            var save = document.createElement('button');
+            save.type = 'button';
+            save.className = 'btn sm primary crm-assign-save';
+            save.textContent = 'Save';
+            var status = document.createElement('span');
+            status.className = 'crm-assign-status';
+            sel.addEventListener('change', function () {
+                status.textContent = sel.value === (lead.assigned_rep || '')
+                    ? '' : 'Not saved yet — click Save.';
+            });
+            save.addEventListener('click', function () {
+                sel.disabled = true; save.disabled = true;
+                status.textContent = 'Saving…';
+                fetch('/portal/api/rep/assign', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ id: lead.id, rep: sel.value })
+                }).then(function (r) {
+                    return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Assign failed'); });
+                }).then(function () {
+                    lead.assigned_rep = sel.value;
+                    status.textContent = sel.value ? 'Saved — assigned to ' + sel.value + '.' : 'Saved — unassigned.';
+                }).catch(function (e) {
+                    var msg = e && e.message ? e.message : 'Assign failed';
+                    if (msg.indexOf('No such') !== -1) msg = 'Lead is out of sync — refresh the page and save again.';
+                    status.textContent = msg;
+                }).then(function () { sel.disabled = false; save.disabled = false; });
+            });
+            assignBox.appendChild(sel);
+            assignBox.appendChild(save);
+            assignBox.appendChild(status);
+        });
 
         /* ── AI screening scores: priority + buy propensity + switch likelihood ──
          * Wrapped so a data quirk in one lead can never silently remove the AI
