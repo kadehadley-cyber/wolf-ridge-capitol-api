@@ -299,7 +299,10 @@
         (arr || []).forEach(function (r, i) {
             if (!r || typeof r !== 'object') return;
             var l = {
-                id: toNum(r.id) || (i + 1),
+                // Server leads carry a UUID row id — keep it verbatim so the
+                // rep-assignment API can address the lead. Only demo/import
+                // rows fall back to a positional id.
+                id: (typeof r.id === 'string' && r.id) ? r.id : (toNum(r.id) || (i + 1)),
                 name: String(r.name || r.clinic || r.clinic_name || '').trim(),
                 stage: String(r.stage || 'new').trim().toLowerCase().replace(/\s+/g, '_'),
                 tier: String(r.tier || 'standard'),
@@ -335,6 +338,12 @@
                 else if (k === 'contract_status' || k === 'engagement') l[k] = String(r[k]).trim().toLowerCase().replace(/\s+/g, '_');
                 else l[k] = toNum(r[k]);
             });
+            // Rep-workspace data rides along untouched so assignment, notes,
+            // and follow-ups survive normalization and re-uploads.
+            l.assigned_rep = String(r.assigned_rep || '');
+            l.rep_notes = Array.isArray(r.rep_notes) ? r.rep_notes : [];
+            l.followups = Array.isArray(r.followups) ? r.followups : [];
+            if (r.enriched_by) l.enriched_by = String(r.enriched_by);
             if (l.name) out.push(l);
         });
         return out;
