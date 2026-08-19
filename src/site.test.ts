@@ -295,6 +295,12 @@ describe("cellunovabiologics.com site routing", () => {
 		expect((await call("/portal/api/rep/assign", manager, "POST", { id: "lead-2", rep: "" })).status).toBe(200);
 		expect(JSON.parse(db.leads.get("lead-2")!.data).assigned_rep).toBe("");
 		expect((await call("/portal/api/rep/note", manager, "POST", { id: "lead-1", text: "nope" })).status).toBe(403);
+		// A device-local list has no row id — the server matches by NPI instead.
+		db.leads.set("lead-3", { id: "lead-3", data: JSON.stringify({ name: "NPI Clinic", npi: "1234567890", phone: "555-111-2222" }) });
+		expect(
+			(await call("/portal/api/rep/assign", admin, "POST", { id: 7, npi: "1234567890", name: "NPI Clinic", phone: "555-111-2222", rep: "Rep1" })).status,
+		).toBe(200);
+		expect(JSON.parse(db.leads.get("lead-3")!.data).assigned_rep).toBe("Rep1");
 	});
 
 	it("keeps reps inside their workspace pages", async () => {
