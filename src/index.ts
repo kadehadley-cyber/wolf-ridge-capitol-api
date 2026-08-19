@@ -31,6 +31,7 @@ import { handleAccountsApi } from "./accounts";
 import { handleMarketingGenerate, handleMarketingReports } from "./marketing";
 import { handleApprove, handleSignup } from "./signup";
 import { handleRepApply } from "./rep-apply";
+import { handleCallBook, handleCallBookingsList, handleCallSlots } from "./call-schedule";
 import { composeBriefing } from "./briefing";
 import { runScheduled } from "./cron";
 import { handleInbound, verifyWebhook } from "./whatsapp";
@@ -246,6 +247,30 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		url.search = "";
 		url.hash = "";
 		return Response.redirect(url.toString() + "#clinic-signup", 302);
+	}
+
+	// ── MD-call scheduling (public page at /schedule-a-call) ──
+	if (p === "/api/call-slots" && request.method === "GET") {
+		return handleCallSlots(request, env);
+	}
+	if (p === "/api/call-book" && request.method === "POST") {
+		return handleCallBook(request, env);
+	}
+	if (p === "/portal/api/call-bookings") {
+		const sess = await getSession(env, request);
+		if (!sess) {
+			return new Response(JSON.stringify({ error: "Sign in required." }), {
+				status: 401,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+		if (sess.role !== "admin" && sess.role !== "manager") {
+			return new Response(JSON.stringify({ error: "Admin access required." }), {
+				status: 403,
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+		return handleCallBookingsList(env);
 	}
 
 	// ── Rep application (public page at /become-a-rep posts here) ──
