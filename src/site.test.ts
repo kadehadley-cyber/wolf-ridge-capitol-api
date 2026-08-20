@@ -184,7 +184,7 @@ describe("cellunovabiologics.com site routing", () => {
 		expect(res.headers.get("set-cookie")).toContain("HttpOnly");
 	});
 
-	it("signs in the manager account with view-only access", async () => {
+	it("signs in the manager account: full CRM, no ordering or approvals", async () => {
 		const { res, cookie } = await login("Admin", "NOVAto200M");
 		expect(res.status).toBe(303);
 		expect(cookie).toContain(".manager.");
@@ -195,15 +195,22 @@ describe("cellunovabiologics.com site routing", () => {
 		expect((await hit("/portal/marketing/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual([
 			"/clinic-portal/marketing/",
 		]);
-		// …and can read the CRM list…
+		// …and uses the CRM fully: reads and imports both work.
 		const read = await hit("/portal/api/leads", "www.cellunovabiologics.com", "GET", cookie);
 		expect(read.res.status).not.toBe(403);
 		expect(read.res.status).not.toBe(401);
-		// …but every write path refuses:
-		const scan = await hit("/portal/api/leads/scan", "www.cellunovabiologics.com", "POST", cookie);
-		expect(scan.res.status).toBe(403);
-		const importLeads = await hit("/portal/api/leads", "www.cellunovabiologics.com", "POST", cookie);
-		expect(importLeads.res.status).toBe(403);
+		const { env } = makeEnv();
+		const importLeads = await worker.fetch!(
+			new Request("https://www.cellunovabiologics.com/portal/api/leads", {
+				method: "POST",
+				headers: { cookie, "content-type": "application/json" },
+				body: JSON.stringify({ leads: [{ name: "Manager Imported Clinic" }] }),
+			}) as never,
+			env,
+			ctx,
+		);
+		expect(importLeads.status).toBe(200);
+		// Ordering, payment recording, and approvals stay off-limits:
 		const checkout = await hit("/portal/api/checkout", "www.cellunovabiologics.com", "POST", cookie);
 		expect(checkout.res.status).toBe(403);
 		const confirm = await hit("/portal/api/checkout/confirm?session_id=cs_x", "www.cellunovabiologics.com", "GET", cookie);
@@ -285,8 +292,7 @@ describe("cellunovabiologics.com site routing", () => {
 		expect(saved.followups[0].kind).toBe("call");
 		// …but not on an unassigned lead.
 		expect((await call("/portal/api/rep/note", rep, "POST", { id: "lead-2", text: "nope" })).status).toBe(404);
-		// Admin and manager can assign; a rep cannot, and a manager still
-		// cannot write notes.
+		// Admin and manager can assign; a rep cannot.
 		const admin = (await login()).cookie;
 		expect((await call("/portal/api/rep/assign", admin, "POST", { id: "lead-2", rep: "Rep1" })).status).toBe(200);
 		expect(JSON.parse(db.leads.get("lead-2")!.data).assigned_rep).toBe("Rep1");
@@ -294,7 +300,11 @@ describe("cellunovabiologics.com site routing", () => {
 		const manager = (await login("Admin", "NOVAto200M")).cookie;
 		expect((await call("/portal/api/rep/assign", manager, "POST", { id: "lead-2", rep: "" })).status).toBe(200);
 		expect(JSON.parse(db.leads.get("lead-2")!.data).assigned_rep).toBe("");
-		expect((await call("/portal/api/rep/note", manager, "POST", { id: "lead-1", text: "nope" })).status).toBe(403);
+		// Managers use the CRM fully — notes included.
+		expect((await call("/portal/api/rep/note", manager, "POST", { id: "lead-1", text: "manager note" })).status).toBe(200);
+		expect(JSON.parse(db.leads.get("lead-1")!.data).rep_notes.some(
+			(n: { by: string; text: string }) => n.by === "Admin" && n.text === "manager note",
+		)).toBe(true);
 		// A device-local list has no row id — the server matches by NPI instead.
 		db.leads.set("lead-3", { id: "lead-3", data: JSON.stringify({ name: "NPI Clinic", npi: "1234567890", phone: "555-111-2222" }) });
 		expect(

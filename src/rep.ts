@@ -81,9 +81,10 @@ async function saveLead(env: Env, id: string, lead: Lead): Promise<void> {
 	await env.DB.prepare(`UPDATE crm_leads SET data = ?1 WHERE id = ?2`).bind(JSON.stringify(lead), id).run();
 }
 
-/** May this session act on this lead? Reps only touch their own assignments. */
+/** May this session act on this lead? Admins and managers touch any lead;
+ *  reps only their own assignments. */
 function canTouch(sess: Session, lead: Lead): boolean {
-	if (sess.role === "admin") return true;
+	if (sess.role === "admin" || sess.role === "manager") return true;
 	return sess.role === "rep" && (lead.assigned_rep ?? "") === sess.user;
 }
 

@@ -281,8 +281,8 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		return Response.redirect(url.toString(), 302);
 	}
 
-	// ── CRM leads API (JSON; admin session required, 401/403 not a redirect;
-	//    a manager may read the list but never scan or import) ──
+	// ── CRM leads API (JSON; 401/403 not a redirect). Admins and managers get
+	//    the full CRM — list, scan, and import; everyone else is refused. ──
 	if (p === "/portal/api/leads" || p === "/portal/api/leads/scan") {
 		const role = await sessionRole(env, request);
 		if (!role) {
@@ -291,9 +291,8 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 				headers: { "content-type": "application/json; charset=utf-8" },
 			});
 		}
-		const managerRead = role === "manager" && request.method === "GET" && p === "/portal/api/leads";
-		if (role !== "admin" && !managerRead) {
-			return new Response(JSON.stringify({ error: role === "manager" ? "Manager accounts are view-only." : "Admin access required." }), {
+		if (role !== "admin" && role !== "manager") {
+			return new Response(JSON.stringify({ error: "Admin or manager access required." }), {
 				status: 403,
 				headers: { "content-type": "application/json; charset=utf-8" },
 			});
@@ -417,14 +416,13 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		if (sess.role === "clinic") return deny("Not available to clinic accounts.");
 		if (p === "/portal/api/rep/leads" && request.method === "GET") return handleRepLeads(env, sess);
 		if (request.method !== "POST") return deny("Method not allowed.", 405);
-		// Assignment is the one write managers may make — routing leads to reps
-		// is management work; everything else stays view-only for them.
+		// Managers run the CRM fully: assignment, notes, and follow-ups all
+		// work for them (reps still only touch their own assigned leads).
 		if (p === "/portal/api/rep/assign") {
 			return sess.role === "admin" || sess.role === "manager"
 				? handleRepAssign(request, env)
 				: deny("Admin or manager access required.");
 		}
-		if (sess.role === "manager") return deny("Manager accounts are view-only.");
 		if (p === "/portal/api/rep/note") return handleRepNote(request, env, sess);
 		if (p === "/portal/api/rep/followup") return handleRepFollowup(request, env, sess);
 		if (p === "/portal/api/rep/followup-done") return handleRepFollowupDone(request, env, sess);
