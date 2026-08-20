@@ -20,10 +20,10 @@ export const DEFAULT_ADMIN_PASS_HASH =
 	"pbkdf2$100000$6e78f2a513948a981ea29c9781e038f4$74967a333a458f5886f25d2822e532ee6163c4c6d4b76fbed5c7f820cb71d4ce";
 
 /** Signed-in roles. The admin (DrHadley) sees and edits everything; a manager
- *  sees everything the admin sees but read-only (no scans, imports, orders,
- *  or approvals); clinic accounts get only the clinic-facing pages; rep
- *  accounts get their assigned leads, the marketing materials, and one
- *  sample protocol. */
+ *  sees everything and runs the CRM fully (scans, imports, assignments,
+ *  notes) but cannot order, approve applications, or manage accounts; clinic
+ *  accounts get only the clinic-facing pages; rep accounts get their assigned
+ *  leads, the marketing materials, and one sample protocol. */
 export type Role = "admin" | "manager" | "clinic" | "rep";
 
 /** What a signed session asserts: who signed in and at which level. When the
