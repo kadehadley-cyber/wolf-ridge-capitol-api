@@ -61,3 +61,22 @@
 
 .rep-empty { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 14px;
     border: 1px dashed var(--line2); border-radius: var(--radius); }
+
+/* ── Scan intelligence panel ── */
+.rep-band {
+    font-size: 11px; font-weight: 800; letter-spacing: .08em;
+    padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line2);
+}
+.rep-band-hot  { color: #7dd340; border-color: rgba(125,211,64,.55); background: rgba(125,211,64,.08); }
+.rep-band-warm { color: var(--accent, #d4af37); border-color: rgba(212,175,55,.55); background: rgba(212,175,55,.08); }
+.rep-band-cold { color: var(--muted, #6a7a90); }
+
+.rep-intel { padding: 4px 18px 14px; }
+.rep-intel-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.rep-intel-grid {
+    display: grid; gap: 8px 18px;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+.rep-intel-kv { min-width: 0; }
+.rep-intel-k { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim, #5a6878); }
+.rep-intel-v { font-size: 13.5px; color: var(--text); overflow-wrap: break-word; }

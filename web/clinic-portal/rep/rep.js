@@ -109,11 +109,20 @@
         });
     }
 
+    /* Hot/Warm/Cold from the scan score, matching the CRM's bands. */
+    function scanBand(l) {
+        var s = Number(l.scan_score != null ? l.scan_score : l.score) || 0;
+        if (!s) return null;
+        return { score: s, band: s >= 58 ? 'hot' : s >= 40 ? 'warm' : 'cold' };
+    }
+
     function buildCard(l) {
         var card = el('article', 'rep-card');
 
         var head = el('div', 'rep-card-head');
         head.appendChild(el('span', 'rep-card-name', l.name || l.practice_name || 'Unnamed lead'));
+        var band = scanBand(l);
+        if (band) head.appendChild(el('span', 'rep-band rep-band-' + band.band, band.band.toUpperCase() + ' · ' + band.score));
         var locBits = [l.city, l.state].filter(Boolean).join(', ');
         if (locBits) head.appendChild(el('span', 'rep-card-sub', locBits));
         if (l.specialty) head.appendChild(el('span', 'rep-card-sub', String(l.specialty)));
@@ -160,6 +169,46 @@
                 assign.appendChild(el('strong', '', l.assigned_rep || 'unassigned'));
             }
             card.appendChild(assign);
+        }
+
+        /* ── Scan intelligence: everything the CRM knows about this lead ── */
+        var intelPairs = [];
+        var pushKv = function (label, v) { if (v !== undefined && v !== null && v !== '' && v !== 0) intelPairs.push([label, String(v)]); };
+        pushKv('Specialty', l.specialty);
+        pushKv('NPI', l.npi);
+        pushKv('Address', [l.address, l.city, l.state].filter(Boolean).join(', '));
+        pushKv('Scan score', band ? band.score + '/100' : null);
+        pushKv('Patients/day', l.patients_per_day);
+        pushKv('Est. volume', l.est_monthly_cc ? l.est_monthly_cc + ' cc/mo' : null);
+        pushKv('Current supplier', l.current_supplier);
+        pushKv('Their price/cc', l.price_per_cc_current ? '$' + l.price_per_cc_current : null);
+        pushKv('Contract', l.contract_status ? String(l.contract_status).replace(/_/g, ' ') : null);
+        pushKv('Engagement', l.engagement ? String(l.engagement).replace(/_/g, ' ') : null);
+        pushKv('Owner/doctor', l.owner_name || l.doctor_name);
+        pushKv('Source', l.source);
+        var offerChips = [];
+        if (l.offers_prp) offerChips.push('PRP');
+        if (l.offers_exosomes) offerChips.push('Exosomes');
+        if (l.offers_stem_cells) offerChips.push('Stem cells');
+        if (l.regen_specialty) offerChips.push('Regen specialty');
+        if (l.decision_maker_is_owner) offerChips.push('Owner decides');
+        if (intelPairs.length || offerChips.length) {
+            var intel = el('div', 'rep-intel');
+            intel.appendChild(el('h3', 'rep-sec-title', 'Scan Intelligence'));
+            if (offerChips.length) {
+                var chips = el('div', 'rep-intel-chips');
+                offerChips.forEach(function (c) { chips.appendChild(el('span', 'rep-pill', c)); });
+                intel.appendChild(chips);
+            }
+            var grid = el('div', 'rep-intel-grid');
+            intelPairs.forEach(function (p) {
+                var cell = el('div', 'rep-intel-kv');
+                cell.appendChild(el('div', 'rep-intel-k', p[0]));
+                cell.appendChild(el('div', 'rep-intel-v', p[1]));
+                grid.appendChild(cell);
+            });
+            intel.appendChild(grid);
+            card.appendChild(intel);
         }
 
         var body = el('div', 'rep-card-body');
