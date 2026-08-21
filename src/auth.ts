@@ -57,7 +57,12 @@ export function ensureAccountsTable(env: Env): Promise<unknown> {
 				disabled INTEGER NOT NULL DEFAULT 0,
 				created_at TEXT NOT NULL
 			)`,
-		).run();
+		)
+			.run()
+			// A rep row may point at the manager who runs that rep. Older
+			// databases predate the column; adding it twice just errors.
+			.then(() => env.DB.prepare(`ALTER TABLE portal_accounts ADD COLUMN manager TEXT`).run())
+			.catch(() => undefined);
 		ACCOUNT_TABLE_ENSURED.set(env.DB, p);
 	}
 	return p;
@@ -69,13 +74,14 @@ export interface DbAccountRow {
 	role: string;
 	disabled: number;
 	created_at: string;
+	manager?: string | null;
 }
 
 const DB_ROLES = new Set<string>(["manager", "rep", "clinic"]);
 
 export async function listDbAccounts(env: Env): Promise<DbAccountRow[]> {
 	await ensureAccountsTable(env);
-	const rows = await env.DB.prepare(`SELECT user, hash, role, disabled, created_at FROM portal_accounts ORDER BY created_at`).all<DbAccountRow>();
+	const rows = await env.DB.prepare(`SELECT user, hash, role, disabled, created_at, manager FROM portal_accounts ORDER BY created_at`).all<DbAccountRow>();
 	return rows.results ?? [];
 }
 
@@ -202,6 +208,29 @@ export async function repRoster(env: Env): Promise<string[]> {
 	const names = new Set(REP_USERS);
 	for (const acc of await activeDbAccounts(env)) if (acc.role === "rep") names.add(acc.user);
 	return [...names];
+}
+
+/** Manager usernames a rep can report to: built-in + active database managers. */
+export async function managerRoster(env: Env): Promise<string[]> {
+	const names = new Set([MANAGER_ACCOUNT.user]);
+	for (const acc of await activeDbAccounts(env)) if (acc.role === "manager") names.add(acc.user);
+	return [...names];
+}
+
+/** The reps this session may see and assign leads to. The admin runs every
+ *  rep; a manager runs only the reps pointed at them (set from the admin's
+ *  Accounts page); everyone else runs none. Built-in reps have no manager
+ *  row, so they stay admin-only. */
+export async function repRosterFor(env: Env, sess: Session): Promise<string[]> {
+	if (sess.role === "admin") return repRoster(env);
+	if (sess.role !== "manager") return [];
+	await ensureAccountsTable(env);
+	const out: string[] = [];
+	for (const row of await listDbAccounts(env)) {
+		if (row.disabled || row.role !== "rep") continue;
+		if ((row.manager ?? "") === sess.user) out.push(row.user);
+	}
+	return out;
 }
 
 export async function verifyCredentials(env: Env, username: string, password: string): Promise<Session | null> {

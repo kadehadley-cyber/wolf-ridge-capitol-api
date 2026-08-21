@@ -7,11 +7,13 @@
 //     reset   { user }          new password for a database account (returned once)
 //     disable { user } / enable { user }
 //     delete  { user }
+//     set-manager { user, manager }  point a rep at the manager who runs
+//                               them ("" clears it back to admin-only)
 //
 // Built-in accounts (the admin, Admin, Rep1, UnitedChiro) live in code and are
 // listed read-only here. A database row can never carry the admin role.
 
-import { builtinRoster, ensureAccountsTable, generatePassword, hashPassword, listDbAccounts } from "./auth";
+import { builtinRoster, ensureAccountsTable, generatePassword, hashPassword, listDbAccounts, managerRoster } from "./auth";
 import { listPendingRepApplications, setRepApplicationStatus } from "./rep-apply";
 
 const USERNAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$/;
@@ -34,6 +36,7 @@ export async function handleAccountsApi(request: Request, env: Env): Promise<Res
 			builtin: false,
 			disabled: !!r.disabled,
 			created_at: r.created_at,
+			manager: r.manager ?? "",
 		}));
 		return json({ accounts: [...builtin, ...db], applications: await listPendingRepApplications(env) });
 	}
@@ -102,6 +105,17 @@ export async function handleAccountsApi(request: Request, env: Env): Promise<Res
 	if (action === "delete") {
 		await env.DB.prepare(`DELETE FROM portal_accounts WHERE user = ?1`).bind(existing.user).run();
 		return json({ ok: true, user: existing.user, deleted: true });
+	}
+	if (action === "set-manager") {
+		if (existing.role !== "rep") return json({ error: "Only rep accounts report to a manager." }, 400);
+		const manager = String(body.manager ?? "").trim();
+		if (manager !== "" && !(await managerRoster(env)).includes(manager)) {
+			return json({ error: "No such manager account." }, 400);
+		}
+		await env.DB.prepare(`UPDATE portal_accounts SET manager = ?1 WHERE user = ?2`)
+			.bind(manager || null, existing.user)
+			.run();
+		return json({ ok: true, user: existing.user, manager });
 	}
 	return json({ error: "Unknown action." }, 400);
 }
