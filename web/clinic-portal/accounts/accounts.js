@@ -61,6 +61,38 @@
         return b;
     }
 
+    function managerNames() {
+        return accounts
+            .filter(function (a) { return a.role === 'manager' && !a.disabled; })
+            .map(function (a) { return a.user; });
+    }
+
+    /* Which manager runs this rep. Built-in reps are managed in code and stay
+     * admin-only; database reps get a dropdown that saves on change. */
+    function managerCell(a) {
+        var td = el('td');
+        if (a.role !== 'rep' || a.builtin) { td.textContent = '—'; return td; }
+        var sel = el('select', 'acct-mgr-select');
+        var none = el('option', '', 'DrHadley only');
+        none.value = '';
+        sel.appendChild(none);
+        managerNames().forEach(function (m) {
+            var o = el('option', '', m);
+            o.value = m;
+            if ((a.manager || '') === m) o.selected = true;
+            sel.appendChild(o);
+        });
+        sel.addEventListener('change', function () {
+            sel.disabled = true;
+            api({ action: 'set-manager', user: a.user, manager: sel.value })
+                .then(function (d) { a.manager = d.manager; })
+                .catch(function (e) { alert(e.message); sel.value = a.manager || ''; })
+                .then(function () { sel.disabled = false; });
+        });
+        td.appendChild(sel);
+        return td;
+    }
+
     function render() {
         var tbody = $('acctRows');
         tbody.textContent = '';
@@ -70,6 +102,7 @@
             var roleTd = el('td');
             roleTd.appendChild(el('span', 'acct-role ' + a.role, a.role));
             tr.appendChild(roleTd);
+            tr.appendChild(managerCell(a));
             tr.appendChild(el('td', 'acct-status ' + (a.builtin ? 'builtin' : a.disabled ? 'disabled' : 'active'),
                 a.builtin ? 'built-in' : a.disabled ? 'disabled' : 'active'));
             tr.appendChild(el('td', '', a.builtin ? '—' : fmtDate(a.created_at)));
@@ -145,7 +178,8 @@
         var wrap = $('viewasButtons');
         wrap.textContent = '';
         var reps = accounts.filter(function (a) { return a.role === 'rep' && !a.disabled; });
-        var options = [{ label: 'Manager view', role: 'manager', user: '' }];
+        var options = [];
+        managerNames().forEach(function (m) { options.push({ label: 'Manager view: ' + m, role: 'manager', user: m }); });
         reps.forEach(function (r) { options.push({ label: 'Rep view: ' + r.user, role: 'rep', user: r.user }); });
         options.forEach(function (o) {
             var b = el('button', 'acct-btn ghost', o.label);

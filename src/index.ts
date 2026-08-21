@@ -19,6 +19,7 @@ import {
 	getSession,
 	hasValidSession,
 	loginPage,
+	managerRoster,
 	repRoster,
 	sessionRole,
 	verifyCredentials,
@@ -326,7 +327,15 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		}
 		let user = String(body.user ?? "");
 		if (role === "manager") {
-			user = "Admin";
+			// Preview a specific manager (scoping differs per manager); the
+			// built-in manager account is the default.
+			if (user === "") user = "Admin";
+			if (!(await managerRoster(env)).includes(user)) {
+				return new Response(JSON.stringify({ error: "Unknown manager." }), {
+					status: 400,
+					headers: { "content-type": "application/json; charset=utf-8" },
+				});
+			}
 		} else if (role === "rep") {
 			if (!(await repRoster(env)).includes(user)) {
 				return new Response(JSON.stringify({ error: "Unknown rep." }), {
@@ -416,11 +425,12 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 		if (sess.role === "clinic") return deny("Not available to clinic accounts.");
 		if (p === "/portal/api/rep/leads" && request.method === "GET") return handleRepLeads(env, sess);
 		if (request.method !== "POST") return deny("Method not allowed.", 405);
-		// Managers run the CRM fully: assignment, notes, and follow-ups all
-		// work for them (reps still only touch their own assigned leads).
+		// Managers run the CRM for their own team: assignment, notes, and
+		// follow-ups work for them, scoped to the reps they manage (reps
+		// still only touch their own assigned leads).
 		if (p === "/portal/api/rep/assign") {
 			return sess.role === "admin" || sess.role === "manager"
-				? handleRepAssign(request, env)
+				? handleRepAssign(request, env, sess)
 				: deny("Admin or manager access required.");
 		}
 		if (p === "/portal/api/rep/note") return handleRepNote(request, env, sess);

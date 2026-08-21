@@ -46,6 +46,9 @@ function makeDb() {
 			} else if (s.startsWith("UPDATE portal_accounts SET disabled")) {
 				const row = accounts.get(String(args[1]));
 				if (row) row.disabled = args[0];
+			} else if (s.startsWith("UPDATE portal_accounts SET manager")) {
+				const row = accounts.get(String(args[1]));
+				if (row) row.manager = args[0];
 			} else if (s.startsWith("DELETE FROM portal_accounts")) {
 				accounts.delete(String(args[0]));
 			} else if (s.startsWith("INSERT INTO marketing_reports")) {
@@ -292,17 +295,20 @@ describe("cellunovabiologics.com site routing", () => {
 		expect(saved.followups[0].kind).toBe("call");
 		// …but not on an unassigned lead.
 		expect((await call("/portal/api/rep/note", rep, "POST", { id: "lead-2", text: "nope" })).status).toBe(404);
-		// Admin and manager can assign; a rep cannot.
+		// Admin can assign; a rep cannot.
 		const admin = (await login()).cookie;
 		expect((await call("/portal/api/rep/assign", admin, "POST", { id: "lead-2", rep: "Rep1" })).status).toBe(200);
 		expect(JSON.parse(db.leads.get("lead-2")!.data).assigned_rep).toBe("Rep1");
 		expect((await call("/portal/api/rep/assign", rep, "POST", { id: "lead-2", rep: "" })).status).toBe(403);
+		// The built-in manager runs no reps, so Rep1's leads are off-limits to
+		// it now — only the admin (or Rep1's own manager) touches them.
 		const manager = (await login("Admin", "NOVAto200M")).cookie;
-		expect((await call("/portal/api/rep/assign", manager, "POST", { id: "lead-2", rep: "" })).status).toBe(200);
-		expect(JSON.parse(db.leads.get("lead-2")!.data).assigned_rep).toBe("");
-		// Managers use the CRM fully — notes included.
-		expect((await call("/portal/api/rep/note", manager, "POST", { id: "lead-1", text: "manager note" })).status).toBe(200);
-		expect(JSON.parse(db.leads.get("lead-1")!.data).rep_notes.some(
+		expect((await call("/portal/api/rep/assign", manager, "POST", { id: "lead-2", rep: "" })).status).toBe(403);
+		expect((await call("/portal/api/rep/note", manager, "POST", { id: "lead-1", text: "manager note" })).status).toBe(404);
+		// Managers still work unassigned leads — notes included.
+		db.leads.set("lead-4", { id: "lead-4", data: JSON.stringify({ name: "Fresh Clinic", assigned_rep: "" }) });
+		expect((await call("/portal/api/rep/note", manager, "POST", { id: "lead-4", text: "manager note" })).status).toBe(200);
+		expect(JSON.parse(db.leads.get("lead-4")!.data).rep_notes.some(
 			(n: { by: string; text: string }) => n.by === "Admin" && n.text === "manager note",
 		)).toBe(true);
 		// A device-local list has no row id — the server matches by NPI instead.
@@ -311,6 +317,74 @@ describe("cellunovabiologics.com site routing", () => {
 			(await call("/portal/api/rep/assign", admin, "POST", { id: 7, npi: "1234567890", name: "NPI Clinic", phone: "555-111-2222", rep: "Rep1" })).status,
 		).toBe(200);
 		expect(JSON.parse(db.leads.get("lead-3")!.data).assigned_rep).toBe("Rep1");
+	});
+
+	it("scopes each manager to the reps assigned to them", async () => {
+		const { env, db } = makeEnv();
+		db.leads.set("lead-a", { id: "lead-a", data: JSON.stringify({ name: "Team Clinic", assigned_rep: "" }) });
+		const call = async (path: string, cookie: string, method = "GET", body?: unknown) =>
+			worker.fetch!(
+				new Request("https://www.cellunovabiologics.com" + path, {
+					method,
+					headers: { cookie, ...(body ? { "content-type": "application/json" } : {}) },
+					...(body ? { body: JSON.stringify(body) } : {}),
+				}) as never,
+				env,
+				ctx,
+			);
+		const loginEnv = async (username: string, password: string) => {
+			const form = new FormData();
+			form.set("username", username);
+			form.set("password", password);
+			const res = await worker.fetch!(
+				new Request("https://www.cellunovabiologics.com/login", { method: "POST", body: form }) as never,
+				env,
+				ctx,
+			);
+			return (res.headers.get("set-cookie") ?? "").split(";")[0];
+		};
+		const admin = (await login()).cookie;
+		const acct = async (body: unknown) =>
+			(await (await call("/portal/api/accounts", admin, "POST", body)).json()) as Record<string, string>;
+
+		// Two managers and one rep, with the rep pointed at KCollins.
+		const kcPw = (await acct({ action: "create", user: "KCollins", role: "manager" })).password;
+		const jgPw = (await acct({ action: "create", user: "JGomez", role: "manager" })).password;
+		const ctPw = (await acct({ action: "create", user: "CTaylor", role: "rep" })).password;
+		expect((await call("/portal/api/accounts", admin, "POST", { action: "set-manager", user: "CTaylor", manager: "KCollins" })).status).toBe(200);
+		// Only reps report to a manager, and the manager must exist.
+		expect((await call("/portal/api/accounts", admin, "POST", { action: "set-manager", user: "JGomez", manager: "KCollins" })).status).toBe(400);
+		expect((await call("/portal/api/accounts", admin, "POST", { action: "set-manager", user: "CTaylor", manager: "Nobody" })).status).toBe(400);
+		const list = (await (await call("/portal/api/accounts", admin)).json()) as { accounts: Array<{ user: string; manager?: string }> };
+		expect(list.accounts.find((a) => a.user === "CTaylor")?.manager).toBe("KCollins");
+
+		// Each manager's roster is their own reps — nothing more.
+		const kc = await loginEnv("KCollins", kcPw);
+		const jg = await loginEnv("JGomez", jgPw);
+		const kcLeads = (await (await call("/portal/api/rep/leads", kc)).json()) as { reps: string[]; leads: unknown[] };
+		const jgLeads = (await (await call("/portal/api/rep/leads", jg)).json()) as { reps: string[]; leads: unknown[] };
+		expect(kcLeads.reps).toEqual(["CTaylor"]);
+		expect(jgLeads.reps).toEqual([]);
+
+		// KCollins assigns to their rep; JGomez can neither assign to CTaylor
+		// nor touch a lead that belongs to KCollins's team.
+		expect((await call("/portal/api/rep/assign", kc, "POST", { id: "lead-a", rep: "CTaylor" })).status).toBe(200);
+		expect(JSON.parse(db.leads.get("lead-a")!.data).assigned_rep).toBe("CTaylor");
+		expect((await call("/portal/api/rep/assign", jg, "POST", { id: "lead-a", rep: "CTaylor" })).status).toBe(400);
+		expect((await call("/portal/api/rep/assign", jg, "POST", { id: "lead-a", rep: "" })).status).toBe(403);
+		expect((await call("/portal/api/rep/note", jg, "POST", { id: "lead-a", text: "not my team" })).status).toBe(404);
+		expect((await call("/portal/api/rep/note", kc, "POST", { id: "lead-a", text: "my team" })).status).toBe(200);
+
+		// The team pipeline shows on the manager's rep page; the other
+		// manager's stays empty. The rep signs in and sees the lead too.
+		expect(((await (await call("/portal/api/rep/leads", kc)).json()) as { leads: unknown[] }).leads).toHaveLength(1);
+		expect(((await (await call("/portal/api/rep/leads", jg)).json()) as { leads: unknown[] }).leads).toHaveLength(0);
+		const ct = await loginEnv("CTaylor", ctPw);
+		expect(((await (await call("/portal/api/rep/leads", ct)).json()) as { leads: unknown[] }).leads).toHaveLength(1);
+
+		// The admin can preview a specific manager; unknown names refuse.
+		expect((await call("/portal/api/preview", admin, "POST", { role: "manager", user: "KCollins" })).status).toBe(200);
+		expect((await call("/portal/api/preview", admin, "POST", { role: "manager", user: "Nobody" })).status).toBe(400);
 	});
 
 	it("keeps reps inside their workspace pages", async () => {

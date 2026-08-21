@@ -6,12 +6,12 @@
 //   POST /portal/api/rep/note           { id, text }            append a note
 //   POST /portal/api/rep/followup       { id, due, kind, note } schedule one
 //   POST /portal/api/rep/followup-done  { id, fid, done }       toggle done
-//   POST /portal/api/rep/assign         { id, rep }             admin only
+//   POST /portal/api/rep/assign         { id, rep }             admin/manager (own reps)
 //
 // Notes and follow-ups live inside the lead's JSON blob (rep_notes[] and
 // followups[]), so they survive CRM re-imports that round-trip lead objects.
 
-import { repRoster, type Session } from "./auth";
+import { repRosterFor, type Session } from "./auth";
 
 const KINDS = new Set(["call", "email", "visit", "other"]);
 const MAX_NOTE = 2000;
@@ -81,21 +81,31 @@ async function saveLead(env: Env, id: string, lead: Lead): Promise<void> {
 	await env.DB.prepare(`UPDATE crm_leads SET data = ?1 WHERE id = ?2`).bind(JSON.stringify(lead), id).run();
 }
 
-/** May this session act on this lead? Admins and managers touch any lead;
- *  reps only their own assignments. */
-function canTouch(sess: Session, lead: Lead): boolean {
-	if (sess.role === "admin" || sess.role === "manager") return true;
-	return sess.role === "rep" && (lead.assigned_rep ?? "") === sess.user;
+/** May this session act on this lead? The admin touches any lead; a manager
+ *  touches unassigned leads and leads assigned to a rep they run; a rep only
+ *  their own assignments. `managed` is the manager's rep roster. */
+function canTouch(sess: Session, lead: Lead, managed: Set<string>): boolean {
+	if (sess.role === "admin") return true;
+	const assigned = String(lead.assigned_rep ?? "");
+	if (sess.role === "manager") return assigned === "" || managed.has(assigned);
+	return sess.role === "rep" && assigned === sess.user;
+}
+
+async function managedReps(env: Env, sess: Session): Promise<Set<string>> {
+	return sess.role === "manager" ? new Set(await repRosterFor(env, sess)) : new Set();
 }
 
 export async function handleRepLeads(env: Env, sess: Session): Promise<Response> {
 	const rows = await env.DB.prepare(`SELECT id, data FROM crm_leads ORDER BY created_at DESC`).all<LeadRow>();
+	const managed = await managedReps(env, sess);
 	const leads: Array<Record<string, unknown>> = [];
 	for (const row of rows.results ?? []) {
 		try {
 			const lead = JSON.parse(row.data) as Lead;
-			const mine = (lead.assigned_rep ?? "") === sess.user;
-			if (sess.role === "rep" && !mine) continue;
+			const assigned = String(lead.assigned_rep ?? "");
+			if (sess.role === "rep" && assigned !== sess.user) continue;
+			// A manager's workspace is their team's pipeline, not every lead.
+			if (sess.role === "manager" && !(assigned && managed.has(assigned))) continue;
 			leads.push({ ...lead, id: row.id });
 		} catch {
 			// Skip unparsable rows.
@@ -105,7 +115,7 @@ export async function handleRepLeads(env: Env, sess: Session): Promise<Response>
 		role: sess.role,
 		user: sess.user,
 		leads,
-		...(sess.role === "admin" || sess.role === "manager" ? { reps: await repRoster(env) } : {}),
+		...(sess.role === "admin" || sess.role === "manager" ? { reps: await repRosterFor(env, sess) } : {}),
 	});
 }
 
@@ -124,7 +134,7 @@ export async function handleRepNote(request: Request, env: Env, sess: Session): 
 	const text = String(body.text ?? "").trim().slice(0, MAX_NOTE);
 	if (!text) return json({ error: "The note is empty." }, 400);
 	const found = await resolveLead(env, body);
-	if (!found || !canTouch(sess, found.lead)) return json({ error: "No such assigned lead." }, 404);
+	if (!found || !canTouch(sess, found.lead, await managedReps(env, sess))) return json({ error: "No such assigned lead." }, 404);
 	const notes = Array.isArray(found.lead.rep_notes) ? found.lead.rep_notes : [];
 	notes.push({ at: new Date().toISOString(), by: sess.user, text });
 	found.lead.rep_notes = notes.slice(-MAX_NOTES);
@@ -143,7 +153,7 @@ export async function handleRepFollowup(request: Request, env: Env, sess: Sessio
 	if (!KINDS.has(kind)) return json({ error: "Unknown follow-up type." }, 400);
 	const note = String(body.note ?? "").trim().slice(0, MAX_FU_NOTE);
 	const found = await resolveLead(env, body);
-	if (!found || !canTouch(sess, found.lead)) return json({ error: "No such assigned lead." }, 404);
+	if (!found || !canTouch(sess, found.lead, await managedReps(env, sess))) return json({ error: "No such assigned lead." }, 404);
 	const followups = Array.isArray(found.lead.followups) ? found.lead.followups : [];
 	followups.push({ fid: crypto.randomUUID(), due, kind, note, done: false, created_at: new Date().toISOString() });
 	followups.sort((a, b) => String(a.due).localeCompare(String(b.due)));
@@ -156,7 +166,7 @@ export async function handleRepFollowupDone(request: Request, env: Env, sess: Se
 	const body = await readBody(request);
 	if (!body) return json({ error: "Body must be JSON." }, 400);
 	const found = await resolveLead(env, body);
-	if (!found || !canTouch(sess, found.lead)) return json({ error: "No such assigned lead." }, 404);
+	if (!found || !canTouch(sess, found.lead, await managedReps(env, sess))) return json({ error: "No such assigned lead." }, 404);
 	const fid = String(body.fid ?? "");
 	const fu = (found.lead.followups ?? []).find((f) => f.fid === fid);
 	if (!fu) return json({ error: "No such follow-up." }, 404);
@@ -165,14 +175,20 @@ export async function handleRepFollowupDone(request: Request, env: Env, sess: Se
 	return json({ ok: true, followups: found.lead.followups });
 }
 
-/** Admin only (enforced by the router): point a lead at a rep, or "" to clear. */
-export async function handleRepAssign(request: Request, env: Env): Promise<Response> {
+/** Admin or manager (enforced by the router): point a lead at a rep, or ""
+ *  to clear. A manager can only assign to their own reps, and cannot move a
+ *  lead that already belongs to another manager's rep. */
+export async function handleRepAssign(request: Request, env: Env, sess: Session): Promise<Response> {
 	const body = await readBody(request);
 	if (!body) return json({ error: "Body must be JSON." }, 400);
 	const rep = String(body.rep ?? "");
-	if (rep !== "" && !(await repRoster(env)).includes(rep)) return json({ error: "Unknown rep." }, 400);
+	const roster = await repRosterFor(env, sess);
+	if (rep !== "" && !roster.includes(rep)) return json({ error: "Unknown rep." }, 400);
 	const found = await resolveLead(env, body);
 	if (!found) return json({ error: "No such lead." }, 404);
+	if (!canTouch(sess, found.lead, new Set(roster))) {
+		return json({ error: "This lead belongs to another manager's rep." }, 403);
+	}
 	found.lead.assigned_rep = rep;
 	await saveLead(env, found.row.id, found.lead);
 	return json({ ok: true, id: found.row.id, assigned_rep: rep });
