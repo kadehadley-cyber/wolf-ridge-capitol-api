@@ -229,3 +229,15 @@ p { margin: 0; }
     .orb-ring.r2 { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Mobile-only menu items: the nav-actions buttons (Become a Rep, Clinic
+ * Signup) are hidden on phones, so the burger menu carries them instead. */
+.nav-mobile-only { display: none; }
+body.nav-open .nav-menu .nav-mobile-only { display: block; }
+
+/* Sub-pages (become-a-rep, grow-your-clinic, schedule-a-call) have a short
+ * nav and no burger — keep their menu visible and compact on phones. */
+@media (max-width: 860px) {
+    .nav-menu.nav-simple { display: flex; flex-wrap: wrap; gap: 14px 18px; margin-left: auto; }
+    .nav-menu.nav-simple a { font-size: 11.5px; letter-spacing: .08em; }
+}
