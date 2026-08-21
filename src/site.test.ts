@@ -389,18 +389,25 @@ describe("cellunovabiologics.com site routing", () => {
 
 	it("keeps reps inside their workspace pages", async () => {
 		const { cookie } = await login("Rep1", "Rep-sA5xnHPHNMckBR");
-		// Allowed: the workspace, marketing, and the one sample protocol.
+		// Allowed: the workspace, marketing, and the clinic-facing material
+		// (protocols and templates — reps sell with what clinics get).
 		expect((await hit("/portal/rep/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual([
 			"/clinic-portal/rep/",
 		]);
 		expect((await hit("/portal/marketing/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual([
 			"/clinic-portal/marketing/",
 		]);
+		expect((await hit("/portal/templates/", "www.cellunovabiologics.com", "GET", cookie)).calls).toEqual([
+			"/clinic-portal/templates/",
+		]);
 		expect(
 			(await hit("/portal/protocols/library/shoulder-im.pdf", "www.cellunovabiologics.com", "GET", cookie)).calls,
 		).toEqual(["/clinic-portal/protocols/library/shoulder-im.pdf"]);
+		expect(
+			(await hit("/portal/templates/rebrand/new-service-flyer.pdf", "www.cellunovabiologics.com", "GET", cookie)).calls,
+		).toEqual(["/clinic-portal/templates/rebrand/new-service-flyer.pdf"]);
 		// Everything else bounces to the workspace.
-		for (const blocked of ["/portal/", "/portal/crm/", "/portal/pricing/", "/portal/orders/", "/portal/templates/", "/portal/protocols/library/knee.html"]) {
+		for (const blocked of ["/portal/", "/portal/crm/", "/portal/pricing/", "/portal/orders/", "/portal/accounts/"]) {
 			const { res, calls } = await hit(blocked, "www.cellunovabiologics.com", "GET", cookie);
 			expect(res.status).toBe(302);
 			expect(res.headers.get("location")).toBe("https://www.cellunovabiologics.com/portal/rep/");
