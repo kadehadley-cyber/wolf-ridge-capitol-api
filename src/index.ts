@@ -150,7 +150,8 @@ function isAdminOnlyPath(p: string): boolean {
 }
 
 /** Portal paths a rep session may reach: its own workspace, the marketing
- *  materials, the one sample protocol (Shoulder IM), and shared styling. */
+ *  materials, the clinic-facing material (protocols and templates — reps
+ *  pitch with what clinics get), and shared styling. */
 function isRepAllowedPath(p: string): boolean {
 	return (
 		p === "/portal/rep" ||
@@ -158,7 +159,10 @@ function isRepAllowedPath(p: string): boolean {
 		p === "/portal/marketing" ||
 		p.startsWith("/portal/marketing/") ||
 		p === "/portal/marketing-resources" ||
-		p === "/portal/protocols/library/shoulder-im.pdf" ||
+		p === "/portal/protocols" ||
+		p.startsWith("/portal/protocols/") ||
+		p === "/portal/templates" ||
+		p.startsWith("/portal/templates/") ||
 		p.startsWith("/portal/styles/") ||
 		p.startsWith("/portal/js/")
 	);
@@ -174,7 +178,7 @@ function stripNavFor(role: string, res: Response): Response {
 		role === "clinic"
 			? ["/portal/crm", "/portal/marketing", "/portal/support", "/portal/treatment-schedule", "/portal/rep", "/portal/accounts"]
 			: role === "rep"
-				? ["/portal/crm", "/portal/protocols", "/portal/templates", "/portal/pricing", "/portal/orders", "/portal/support", "/portal/treatment-schedule", "/portal/accounts"]
+				? ["/portal/crm", "/portal/pricing", "/portal/orders", "/portal/support", "/portal/treatment-schedule", "/portal/accounts"]
 				: role === "manager"
 					? ["/portal/accounts"]
 					: [];
@@ -502,7 +506,7 @@ async function serveCelluNova(request: Request, env: Env, url: URL): Promise<Res
 			return Response.redirect(url.toString(), 302);
 		}
 		// Reps live in their workspace: assigned leads, the marketing
-		// materials, and the sample protocol — nothing else.
+		// materials, and the clinic-facing material — nothing else.
 		if (role === "rep" && !isRepAllowedPath(p)) {
 			url.pathname = "/portal/rep/";
 			url.search = "";
